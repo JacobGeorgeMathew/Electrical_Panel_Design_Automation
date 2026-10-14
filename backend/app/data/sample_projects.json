@@ -1,0 +1,19 @@
+[
+  {
+    "id": "PROJ_DB_DEMO_001",
+    "name": "Main Distribution Panel DB-01",
+    "archetype": "DB",
+    "status": "REQUIREMENTS_CONFIRMED",
+    "created_at": "2026-09-17T00:00:00Z",
+    "requirements": {
+      "supply_voltage": 415,
+      "phases": 3,
+      "frequency": 50,
+      "incomer_rating": 250,
+      "num_feeders": 12,
+      "ip_rating": "IP54",
+      "spare_capacity_pct": 20,
+      "neutral_required": true
+    }
+  }
+]

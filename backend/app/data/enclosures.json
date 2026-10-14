@@ -1,0 +1,90 @@
+[
+  {
+    "id": "ENC_600_800_250",
+    "name": "Standard DB Enclosure 600x800x250 IP54",
+    "width": 600,
+    "height": 800,
+    "depth": 250,
+    "ip_rating": "IP54",
+    "mounting_plate_width": 540,
+    "mounting_plate_height": 740,
+    "mounting_plate_offset_x": 30,
+    "mounting_plate_offset_y": 30,
+    "mounting_plate_offset_z": 25,
+    "max_thermal_dissipation": 180,
+    "zones": [
+      {"name": "INCOMING", "x_min": 30, "x_max": 570, "y_min": 600, "y_max": 770},
+      {"name": "PROTECTION", "x_min": 30, "x_max": 570, "y_min": 450, "y_max": 600},
+      {"name": "BUSBAR", "x_min": 30, "x_max": 570, "y_min": 380, "y_max": 450},
+      {"name": "DISTRIBUTION", "x_min": 30, "x_max": 570, "y_min": 180, "y_max": 380},
+      {"name": "TERMINAL", "x_min": 30, "x_max": 570, "y_min": 60, "y_max": 180},
+      {"name": "CABLE_ENTRY", "x_min": 30, "x_max": 570, "y_min": 30, "y_max": 60}
+    ]
+  },
+  {
+    "id": "ENC_800_1000_300",
+    "name": "Medium DB Enclosure 800x1000x300 IP54",
+    "width": 800,
+    "height": 1000,
+    "depth": 300,
+    "ip_rating": "IP54",
+    "mounting_plate_width": 730,
+    "mounting_plate_height": 930,
+    "mounting_plate_offset_x": 35,
+    "mounting_plate_offset_y": 35,
+    "mounting_plate_offset_z": 30,
+    "max_thermal_dissipation": 320,
+    "zones": [
+      {"name": "INCOMING", "x_min": 35, "x_max": 765, "y_min": 750, "y_max": 965},
+      {"name": "PROTECTION", "x_min": 35, "x_max": 765, "y_min": 580, "y_max": 750},
+      {"name": "BUSBAR", "x_min": 35, "x_max": 765, "y_min": 490, "y_max": 580},
+      {"name": "DISTRIBUTION", "x_min": 35, "x_max": 765, "y_min": 220, "y_max": 490},
+      {"name": "TERMINAL", "x_min": 35, "x_max": 765, "y_min": 70, "y_max": 220},
+      {"name": "CABLE_ENTRY", "x_min": 35, "x_max": 765, "y_min": 35, "y_max": 70}
+    ]
+  },
+  {
+    "id": "ENC_800_1200_300",
+    "name": "Large DB Enclosure 800x1200x300 IP54",
+    "width": 800,
+    "height": 1200,
+    "depth": 300,
+    "ip_rating": "IP54",
+    "mounting_plate_width": 730,
+    "mounting_plate_height": 1130,
+    "mounting_plate_offset_x": 35,
+    "mounting_plate_offset_y": 35,
+    "mounting_plate_offset_z": 30,
+    "max_thermal_dissipation": 450,
+    "zones": [
+      {"name": "INCOMING", "x_min": 35, "x_max": 765, "y_min": 900, "y_max": 1165},
+      {"name": "PROTECTION", "x_min": 35, "x_max": 765, "y_min": 700, "y_max": 900},
+      {"name": "BUSBAR", "x_min": 35, "x_max": 765, "y_min": 600, "y_max": 700},
+      {"name": "DISTRIBUTION", "x_min": 35, "x_max": 765, "y_min": 260, "y_max": 600},
+      {"name": "TERMINAL", "x_min": 35, "x_max": 765, "y_min": 80, "y_max": 260},
+      {"name": "CABLE_ENTRY", "x_min": 35, "x_max": 765, "y_min": 35, "y_max": 80}
+    ]
+  },
+  {
+    "id": "ENC_1000_1200_300",
+    "name": "Extra Large DB Enclosure 1000x1200x300 IP65",
+    "width": 1000,
+    "height": 1200,
+    "depth": 300,
+    "ip_rating": "IP65",
+    "mounting_plate_width": 920,
+    "mounting_plate_height": 1120,
+    "mounting_plate_offset_x": 40,
+    "mounting_plate_offset_y": 40,
+    "mounting_plate_offset_z": 35,
+    "max_thermal_dissipation": 600,
+    "zones": [
+      {"name": "INCOMING", "x_min": 40, "x_max": 960, "y_min": 900, "y_max": 1160},
+      {"name": "PROTECTION", "x_min": 40, "x_max": 960, "y_min": 700, "y_max": 900},
+      {"name": "BUSBAR", "x_min": 40, "x_max": 960, "y_min": 600, "y_max": 700},
+      {"name": "DISTRIBUTION", "x_min": 40, "x_max": 960, "y_min": 260, "y_max": 600},
+      {"name": "TERMINAL", "x_min": 40, "x_max": 960, "y_min": 80, "y_max": 260},
+      {"name": "CABLE_ENTRY", "x_min": 40, "x_max": 960, "y_min": 40, "y_max": 80}
+    ]
+  }
+]

@@ -1,0 +1,33 @@
+[
+  {
+    "id": "RULE_CLEARANCE_INCOMER",
+    "name": "Incomer Clearance Margin",
+    "category": "CLEARANCE",
+    "target_category": "MCCB",
+    "min_top_clearance_mm": 40,
+    "min_bottom_clearance_mm": 40,
+    "min_side_clearance_mm": 20,
+    "description": "MCCB incomers require minimum clearance margins for arc gas venting and thermal dissipation."
+  },
+  {
+    "id": "RULE_VOLTAGE_DROP_MAX",
+    "name": "Maximum Allowable Voltage Drop",
+    "category": "ELECTRICAL",
+    "max_voltage_drop_percent": 3.0,
+    "description": "Standard feeder voltage drop must not exceed 3.0% under full load design current."
+  },
+  {
+    "id": "RULE_BUSBAR_MARGIN",
+    "name": "Busbar Rating Safety Margin",
+    "category": "ELECTRICAL",
+    "min_rating_multiplier": 1.25,
+    "description": "Busbar continuous current rating must be at least 125% of the incomer rated current."
+  },
+  {
+    "id": "RULE_THERMAL_DENSITY_LIMIT",
+    "name": "Maximum Zone Heat Density",
+    "category": "THERMAL",
+    "max_watts_per_liter": 0.45,
+    "description": "Zone heat loss density should not exceed 0.45 W/L without active forced ventilation."
+  }
+]
