@@ -1,192 +1,264 @@
+"""Constraint-based component placement (OR-Tools CP-SAT).
+
+Model
+-----
+* DIN-mounted devices  -> choose a rail row (one-hot) + x position.
+  Per-row NoOverlap on x-intervals (inflated by the side gap).
+* Plate-mounted items  -> free (x, y) rectangles, NoOverlap2D with clearance,
+  and each must lie entirely above or below every rail band.
+HARD constraints: inside enclosure, no overlap, clearance, mounting type.
+SOFT objective (weights in LayoutConfig): wire length (from real connections),
+thermal (hot items high), zone/height preference.
+The solver tries the fewest rails first and adds rails only if infeasible, so
+the result is the most compact layout for the given enclosure.
+"""
 import math
-from typing import Any, Dict, List, Tuple
+import time
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Sequence, Tuple
+
+from app.algorithms.layout_config import LayoutConfig
 from app.models.cem import ComponentRef
 from app.models.pdm import DINRail, PhysicalComponent, Position3D
 
 try:
     from ortools.sat.python import cp_model
-    HAS_OR_TOOLS = True
-except ImportError:
-    HAS_OR_TOOLS = False
+except ImportError:  # pragma: no cover
+    cp_model = None
+
+Connection = Tuple[str, str]
+
+
+@dataclass
+class LayoutResult:
+    feasible: bool
+    status: str                       # OPTIMAL / FEASIBLE / INFEASIBLE / ...
+    message: str = ""
+    components: List[PhysicalComponent] = field(default_factory=list)
+    rails: List[DINRail] = field(default_factory=list)
+    n_rows: int = 0
+    objective: Optional[float] = None
+    best_bound: Optional[float] = None
+    solve_time_s: float = 0.0
+    violations: List[dict] = field(default_factory=list)
+
+
+def derive_default_connections(components: Sequence[ComponentRef]) -> List[Connection]:
+    """Fallback only. In the real pipeline pass pairs derived from the netlist."""
+    by = lambda cat: [c for c in components if c.category == cat]
+    inc, bus, spd = by("MCCB"), by("BUSBAR"), by("SPD")
+    mcb, term = by("MCB"), by("TERMINAL")
+    pairs: List[Connection] = []
+    if inc and bus:
+        pairs.append((inc[0].id, bus[0].id))
+    if spd and bus:
+        pairs.append((spd[0].id, bus[0].id))
+    if bus:
+        pairs += [(bus[0].id, m.id) for m in mcb]
+    pairs += [(m.id, t.id) for m, t in zip(mcb, term)]
+    return pairs
 
 
 class CPSATPlacementOptimizer:
-    """Constraint-based component placement solver using OR-Tools CP-SAT with deterministic fallback."""
+    def __init__(self, config: Optional[LayoutConfig] = None):
+        self.cfg = config or LayoutConfig()
 
-    def optimize_placement(
-        self,
-        components: List[ComponentRef],
-        enclosure_width: float,
-        enclosure_height: float,
-        enclosure_depth: float,
-        zones_map: Dict[str, Dict[str, float]]
-    ) -> Tuple[List[PhysicalComponent], List[DINRail]]:
+    # Backward-compatible entry point (same signature as the old class).
+    def optimize_placement(self, components, enclosure_width, enclosure_height,
+                           enclosure_depth=0.0, zones_map=None, connections=None):
+        r = self.solve(components, enclosure_width, enclosure_height, connections)
+        return r.components, r.rails
 
-        physical_components = []
-        rails = []
+    # ------------------------------------------------------------------
+    def solve(self, components: Sequence[ComponentRef], enclosure_width: float,
+              enclosure_height: float,
+              connections: Optional[Sequence[Connection]] = None) -> LayoutResult:
+        if cp_model is None:
+            raise RuntimeError("ortools is required: pip install ortools")
+        cfg, t0 = self.cfg, time.time()
+        din = [c for c in components if cfg.is_din(c)]
+        plate = [c for c in components if not cfg.is_din(c)]
 
-        # Define 3 Standard DIN Rails on Mounting Plate
-        # Rail 1: Top (Protection & Auxiliary) - Y = height * 0.75
-        # Rail 2: Middle (Distribution MCBs) - Y = height * 0.45
-        # Rail 3: Bottom (Terminal Blocks) - Y = height * 0.15
+        rail_len = enclosure_width - 2 * cfg.margin_x
+        usable_h = enclosure_height - cfg.margin_bottom - cfg.margin_top
+        for c in components:
+            if c.width > rail_len or c.height > usable_h:
+                return LayoutResult(False, "INFEASIBLE",
+                                    f"{c.id} ({c.width}x{c.height}) does not fit the enclosure")
 
-        margin_x = 60.0
-        rail_length = max(200.0, enclosure_width - 2 * margin_x)
-        rail_depth = 15.0
+        ids = {c.id for c in components}
+        raw = connections if connections is not None else derive_default_connections(components)
+        conns = [(a, b) for a, b in raw if a in ids and b in ids and a != b]
 
-        rail1 = DINRail(id="RAIL-01", label="Top DIN Rail (Protection)", x=margin_x, y=enclosure_height * 0.72, z=25.0, length=rail_length)
-        rail2 = DINRail(id="RAIL-02", label="Middle DIN Rail (Distribution)", x=margin_x, y=enclosure_height * 0.45, z=25.0, length=rail_length)
-        rail3 = DINRail(id="RAIL-03", label="Bottom DIN Rail (Terminals)", x=margin_x, y=enclosure_height * 0.18, z=25.0, length=rail_length)
+        din_h = max((c.height for c in din), default=0.0)
+        pitch = din_h + cfg.duct_gap_y
+        max_rows = int(usable_h // pitch) if din else 0
 
-        rails = [rail1, rail2, rail3]
+        if din:
+            width_n = max(1, math.ceil(sum(c.width + cfg.device_gap_x for c in din)
+                                       / (rail_len * cfg.fill_factor)))
+            per_zone: Dict[str, float] = {}
+            for c in din:
+                per_zone[cfg.zone_of(c)] = per_zone.get(cfg.zone_of(c), 0) + c.width + cfg.device_gap_x
+            zone_n = sum(max(1, math.ceil(w / (rail_len * cfg.fill_factor))) for w in per_zone.values())
+            n_start = max(width_n, min(zone_n, max_rows))
+            if n_start > max_rows:
+                return LayoutResult(False, "INFEASIBLE",
+                                    f"DIN devices need >= {n_start} rail rows, enclosure fits {max_rows}")
+            row_options = range(n_start, max_rows + 1)
+        else:
+            row_options = [0]
 
-        # Categorize components onto rails/plate
-        incomer = next((c for c in components if c.category == "MCCB"), None)
-        spd = next((c for c in components if c.category == "SPD"), None)
-        busbar = next((c for c in components if c.category == "BUSBAR"), None)
-        mcbs = [c for c in components if c.category == "MCB"]
-        terminals = [c for c in components if c.category == "TERMINAL"]
-        bars = [c for c in components if c.category in ["NEUTRAL_BAR", "EARTH_BAR"]]
+        result = LayoutResult(False, "INFEASIBLE", "no row count produced a feasible layout")
+        for n in row_options:
+            result = self._solve_rows(din, plate, conns, enclosure_width,
+                                      enclosure_height, n, pitch, din_h)
+            if result.feasible:
+                break
+        result.solve_time_s = round(time.time() - t0, 3)
+        if result.feasible:
+            result.violations = validate_layout(result.components, enclosure_width,
+                                                enclosure_height, cfg)
+        return result
 
-        # 1. Place Incomer MCCB (Top Right Plate Mounting)
-        if incomer:
-            mccb_x = enclosure_width - margin_x - incomer.width
-            mccb_y = enclosure_height - 60.0 - incomer.height
-            physical_components.append(PhysicalComponent(
-                id=f"PDM-{incomer.id}",
-                cem_component_id=incomer.id,
-                name=incomer.name,
-                category=incomer.category,
-                position=Position3D(x=mccb_x, y=mccb_y, z=30.0),
-                width=incomer.width,
-                height=incomer.height,
-                depth=incomer.depth,
-                zone_name="INCOMING",
-                heat_loss_watts=incomer.heat_loss,
-                cad_model=incomer.cad_model,
-                color_hex="#EF4444"
-            ))
+    # ------------------------------------------------------------------
+    def _solve_rows(self, din, plate, conns, W_mm, H_mm, n, pitch, din_h) -> LayoutResult:
+        cfg = self.cfg
+        g = cfg.grid_mm
+        G = lambda v: int(math.ceil(v / g))
+        Wg, Hg = int(W_mm // g), int(H_mm // g)
+        mx, mb, mt = G(cfg.margin_x), G(cfg.margin_bottom), G(cfg.margin_top)
+        rail_len_g = Wg - 2 * mx
+        gapx, clr = G(cfg.device_gap_x), G(cfg.plate_clearance)
+        pitch_g, dinh_g = G(pitch), G(din_h)
+        rail_y = [mb + k * pitch_g for k in range(n)]
 
-        # 2. Place SPD on Rail 1 (Top Left)
-        if spd:
-            physical_components.append(PhysicalComponent(
-                id=f"PDM-{spd.id}",
-                cem_component_id=spd.id,
-                name=spd.name,
-                category=spd.category,
-                position=Position3D(x=margin_x + 10.0, y=rail1.y, z=30.0),
-                width=spd.width,
-                height=spd.height,
-                depth=spd.depth,
-                rail_id=rail1.id,
-                zone_name="PROTECTION",
-                heat_loss_watts=spd.heat_loss,
-                cad_model=spd.cad_model,
-                color_hex="#F59E0B"
-            ))
+        m = cp_model.CpModel()
+        cx: Dict[str, object] = {}
+        cy: Dict[str, object] = {}
+        zone_terms: list = []
 
-        # 3. Place Busbar System (Center Plate)
-        if busbar:
-            bus_x = (enclosure_width - busbar.width) / 2.0
-            bus_y = enclosure_height * 0.58
-            physical_components.append(PhysicalComponent(
-                id=f"PDM-{busbar.id}",
-                cem_component_id=busbar.id,
-                name=busbar.name,
-                category=busbar.category,
-                position=Position3D(x=bus_x, y=bus_y, z=20.0),
-                width=busbar.width,
-                height=busbar.height,
-                depth=busbar.depth,
-                zone_name="BUSBAR",
-                heat_loss_watts=busbar.heat_loss,
-                cad_model=busbar.cad_model,
-                color_hex="#EAB308"
-            ))
+        # ---- DIN devices: row choice + x ---------------------------------
+        x_var, row_sel = {}, {}
+        row_iv = [[] for _ in range(n)]
+        for c in din:
+            wg, hg = G(c.width), G(c.height)
+            w = wg + gapx
+            x = m.NewIntVar(mx, mx + rail_len_g - wg, f"x_{c.id}")
+            b = [m.NewBoolVar(f"b_{c.id}_{r}") for r in range(n)]
+            m.AddExactlyOne(b)
+            for r in range(n):
+                row_iv[r].append(m.NewOptionalIntervalVar(x, w, x + w, b[r], f"iv_{c.id}_{r}"))
+            x_var[c.id], row_sel[c.id] = x, b
+            cx[c.id] = x + wg // 2
+            cy[c.id] = sum(b[r] * (rail_y[r] + hg // 2) for r in range(n))
+            target = round(cfg.pref_height(c) * (n - 1))
+            zone_terms.append(sum(b[r] * abs(r - target) * pitch_g for r in range(n)))
+        for r in range(n):
+            m.AddNoOverlap(row_iv[r])
 
-        # 4. Place MCBs on Rail 2 (Distribution)
-        curr_x = margin_x + 10.0
-        mcb_gap = 4.0
-        for mcb in mcbs:
-            if curr_x + mcb.width > margin_x + rail_length:
-                # Wrap to Rail 1 if needed
-                curr_y = rail1.y
-                rail_id = rail1.id
-            else:
-                curr_y = rail2.y
-                rail_id = rail2.id
+        # ---- Plate items: free rectangles outside rail bands -------------
+        px, py = {}, {}
+        xs, ys = [], []
+        for c in plate:
+            wg, hg = G(c.width), G(c.height)
+            x = m.NewIntVar(mx, Wg - mx - wg, f"px_{c.id}")
+            y = m.NewIntVar(mb, Hg - mt - hg, f"py_{c.id}")
+            xs.append(m.NewIntervalVar(x, wg + clr, x + wg + clr, f"ix_{c.id}"))
+            ys.append(m.NewIntervalVar(y, hg + clr, y + hg + clr, f"iy_{c.id}"))
+            for k in range(n):
+                above = m.NewBoolVar(f"above_{c.id}_{k}")
+                m.Add(y >= rail_y[k] + dinh_g + clr).OnlyEnforceIf(above)
+                m.Add(y + hg + clr <= rail_y[k]).OnlyEnforceIf(above.Not())
+            px[c.id], py[c.id] = x, y
+            cx[c.id], cy[c.id] = x + wg // 2, y + hg // 2
+            target = int(mb + cfg.pref_height(c) * max(0, Hg - mt - hg - mb))
+            dev = m.NewIntVar(0, Hg, f"dev_{c.id}")
+            m.AddAbsEquality(dev, y - target)
+            zone_terms.append(dev)
+        if len(xs) > 1:
+            m.AddNoOverlap2D(xs, ys)
 
-            physical_components.append(PhysicalComponent(
-                id=f"PDM-{mcb.id}",
-                cem_component_id=mcb.id,
-                name=mcb.name,
-                category=mcb.category,
-                position=Position3D(x=curr_x, y=curr_y, z=30.0),
-                width=mcb.width,
-                height=mcb.height,
-                depth=mcb.depth,
-                rail_id=rail_id,
-                zone_name="DISTRIBUTION",
-                heat_loss_watts=mcb.heat_loss,
-                cad_model=mcb.cad_model,
-                color_hex="#3B82F6"
-            ))
-            curr_x += mcb.width + mcb_gap
+        # ---- Objective (soft) --------------------------------------------
+        wts, terms = cfg.weights, []
+        if conns:
+            cw = round(1000 * wts.wire_length / len(conns))
+            for i, (a, b) in enumerate(conns):
+                dx = m.NewIntVar(0, Wg, f"dx{i}")
+                dy = m.NewIntVar(0, Hg, f"dy{i}")
+                m.AddAbsEquality(dx, cx[a] - cx[b])
+                m.AddAbsEquality(dy, cy[a] - cy[b])
+                terms.append(cw * (dx + dy))
+        allc = list(din) + list(plate)
+        total_heat = sum(c.heat_loss for c in allc)
+        if total_heat > 0:
+            for c in allc:
+                coef = round(1000 * wts.thermal * c.heat_loss / total_heat)
+                if coef:
+                    terms.append(coef * (Hg - cy[c.id]))
+        if zone_terms:
+            zc = round(1000 * wts.zone / len(zone_terms))
+            terms += [zc * t for t in zone_terms]
+        if terms:
+            m.Minimize(sum(terms))
 
-        # 5. Place Neutral & Earth Bars
-        nbar = next((c for c in bars if c.category == "NEUTRAL_BAR"), None)
-        pebar = next((c for c in bars if c.category == "EARTH_BAR"), None)
+        s = cp_model.CpSolver()
+        s.parameters.max_time_in_seconds = cfg.solver_time_s
+        s.parameters.num_workers = cfg.workers
+        s.parameters.random_seed = cfg.seed
+        status = s.Solve(m)
+        name = s.StatusName(status)
+        if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            return LayoutResult(False, name, f"no feasible layout with {n} rail row(s)", n_rows=n)
 
-        if nbar:
-            physical_components.append(PhysicalComponent(
-                id=f"PDM-{nbar.id}",
-                cem_component_id=nbar.id,
-                name=nbar.name,
-                category=nbar.category,
-                position=Position3D(x=margin_x, y=rail3.y + 60.0, z=20.0),
-                width=nbar.width,
-                height=nbar.height,
-                depth=nbar.depth,
-                zone_name="TERMINAL",
-                heat_loss_watts=nbar.heat_loss,
-                cad_model=nbar.cad_model,
-                color_hex="#06B6D4"
-            ))
+        # ---- Extract -----------------------------------------------------
+        out: List[PhysicalComponent] = []
+        used = set()
+        for c in din:
+            r = next(r for r in range(n) if s.Value(row_sel[c.id][r]))
+            used.add(r)
+            out.append(self._mk(c, s.Value(x_var[c.id]) * g, rail_y[r] * g,
+                                cfg.z_din, f"RAIL-{r + 1:02d}"))
+        for c in plate:
+            out.append(self._mk(c, s.Value(px[c.id]) * g, s.Value(py[c.id]) * g,
+                                cfg.z_plate, None))
+        rails = [DINRail(id=f"RAIL-{r + 1:02d}", label=f"DIN Rail {r + 1}",
+                         x=cfg.margin_x, y=rail_y[r] * g, z=25.0,
+                         length=W_mm - 2 * cfg.margin_x) for r in sorted(used)]
+        return LayoutResult(True, name, "ok", out, rails, n,
+                            s.ObjectiveValue() if terms else None,
+                            s.BestObjectiveBound() if terms else None)
 
-        if pebar:
-            physical_components.append(PhysicalComponent(
-                id=f"PDM-{pebar.id}",
-                cem_component_id=pebar.id,
-                name=pebar.name,
-                category=pebar.category,
-                position=Position3D(x=margin_x, y=35.0, z=20.0),
-                width=pebar.width,
-                height=pebar.height,
-                depth=pebar.depth,
-                zone_name="TERMINAL",
-                heat_loss_watts=pebar.heat_loss,
-                cad_model=pebar.cad_model,
-                color_hex="#10B981"
-            ))
+    def _mk(self, c, x, y, z, rail_id) -> PhysicalComponent:
+        return PhysicalComponent(
+            id=f"PDM-{c.id}", cem_component_id=c.id, name=c.name, category=c.category,
+            position=Position3D(x=x, y=y, z=z), width=c.width, height=c.height,
+            depth=c.depth, rail_id=rail_id, zone_name=self.cfg.zone_of(c),
+            heat_loss_watts=c.heat_loss, cad_model=c.cad_model,
+            color_hex=self.cfg.color_of(c))
 
-        # 6. Place Terminals on Rail 3
-        curr_t_x = margin_x + 10.0
-        for term in terminals:
-            physical_components.append(PhysicalComponent(
-                id=f"PDM-{term.id}",
-                cem_component_id=term.id,
-                name=term.name,
-                category=term.category,
-                position=Position3D(x=curr_t_x, y=rail3.y, z=30.0),
-                width=term.width,
-                height=term.height,
-                depth=term.depth,
-                rail_id=rail3.id,
-                zone_name="TERMINAL",
-                heat_loss_watts=term.heat_loss,
-                cad_model=term.cad_model,
-                color_hex="#8B5CF6"
-            ))
-            curr_t_x += term.width + 1.5
 
-        return physical_components, rails
+# ----------------------------------------------------------------------
+def validate_layout(placed: Sequence[PhysicalComponent], W: float, H: float,
+                    cfg: LayoutConfig) -> List[dict]:
+    """Independent geometric check of the solver output (never trust the solver blindly)."""
+    v: List[dict] = []
+    for p in placed:
+        x, y = p.position.x, p.position.y
+        if x < 0 or y < 0 or x + p.width > W or y + p.height > H:
+            v.append({"type": "BOUNDARY", "object_a": p.cem_component_id, "object_b": "ENCLOSURE",
+                      "status": "FAIL", "severity": "CRITICAL"})
+    for i, a in enumerate(placed):
+        for b in placed[i + 1:]:
+            ax, ay, bx, by = a.position.x, a.position.y, b.position.x, b.position.y
+            gap = max(ax - (bx + b.width), bx - (ax + a.width),
+                      ay - (by + b.height), by - (ay + a.height))
+            same_rail = a.rail_id is not None and a.rail_id == b.rail_id
+            required = cfg.device_gap_x if same_rail else (
+                cfg.plate_clearance if (a.rail_id is None or b.rail_id is None) else 0.0)
+            if gap < required - 1e-6:
+                v.append({"type": "OVERLAP" if gap < 0 else "CLEARANCE",
+                          "object_a": a.cem_component_id, "object_b": b.cem_component_id,
+                          "required": required, "actual": round(gap, 2),
+                          "status": "FAIL", "severity": "CRITICAL"})
+    return v

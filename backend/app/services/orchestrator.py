@@ -120,18 +120,25 @@ class DesignOrchestrator:
         zones_map = {z.name: {"x_min": z.x_min, "x_max": z.x_max, "y_min": z.y_min, "y_max": z.y_max} for z in zones}
 
         # Step 9: CP-SAT Placement Optimization
-        physical_components, rails = self.placement_optimizer.optimize_placement(
+        placement_result = self.placement_optimizer.solve(
             components=components,
             enclosure_width=enclosure["width"],
             enclosure_height=enclosure["height"],
-            enclosure_depth=enclosure["depth"],
-            zones_map=zones_map
+            connections=[(a, b) for net in nets for a, b in [
+                (conn.from_component, conn.to_component) for conn in net.connections
+            ] if a != b]
         )
 
-        # Step 10: JPS-Theta* Wire Routing
-        wire_routes = self.routing_router.route_nets(
+        if not placement_result.feasible:
+            raise ValueError(f"Placement failed: {placement_result.message}")
+
+        physical_components = placement_result.components
+        rails = placement_result.rails
+
+        # Step 10: JPS-Theta* Wire Routing using the actual solver result.
+        wire_routes = self.routing_router.route_layout(
+            layout_result=placement_result,
             nets=nets,
-            components=physical_components,
             enclosure_w=enclosure["width"],
             enclosure_h=enclosure["height"],
             enclosure_d=enclosure["depth"]
