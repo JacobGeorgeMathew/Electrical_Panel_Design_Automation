@@ -18,6 +18,22 @@ class PhysicalZone(BaseModel):
     z_max: float = 300.0
 
 
+class EnclosureSpec(BaseModel):
+    id: str
+    name: str
+    width: float
+    height: float
+    depth: float
+    ip_rating: str
+    mounting_plate_width: float
+    mounting_plate_height: float
+    mounting_plate_offset_x: float
+    mounting_plate_offset_y: float
+    mounting_plate_offset_z: float
+    max_thermal_dissipation: float
+    zones: List[PhysicalZone] = Field(default_factory=list)
+
+
 class PhysicalComponent(BaseModel):
     id: str  # PDM component ID (e.g., PDM-QF001)
     cem_component_id: str  # References CEM component (e.g., QF001)
@@ -33,6 +49,7 @@ class PhysicalComponent(BaseModel):
     heat_loss_watts: float
     cad_model: str
     color_hex: str = "#3B82F6"
+    terminals: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class DINRail(BaseModel):
@@ -42,6 +59,8 @@ class DINRail(BaseModel):
     y: float
     z: float
     length: float
+    profile_height: float = 7.5
+    profile_depth: float = 35.0
     orientation: str = "HORIZONTAL"  # "HORIZONTAL", "VERTICAL"
 
 
@@ -120,6 +139,11 @@ class PhysicalDesignModel(BaseModel):
     enclosure_height: float
     enclosure_depth: float
     ip_rating: str
+    mounting_plate_x: float = 0.0
+    mounting_plate_y: float = 0.0
+    mounting_plate_z: float = 0.0
+    mounting_plate_width: Optional[float] = None
+    mounting_plate_height: Optional[float] = None
     
     zones: List[PhysicalZone] = Field(default_factory=list)
     components: List[PhysicalComponent] = Field(default_factory=list)

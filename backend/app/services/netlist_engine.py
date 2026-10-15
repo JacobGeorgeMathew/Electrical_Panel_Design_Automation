@@ -1,176 +1,104 @@
-from typing import List, Tuple
-from app.models.cem import ConnectionRef, NetRef
+from typing import Dict, List, Tuple
+from app.models.cem import ComponentRef, ConnectionRef, NetRef
 from app.models.electrical_graph import ElectricalGraphModel
+from app.services.design_errors import DesignError
 
 
 class NetlistEngine:
-    """Generates explicit netlists and performs connectivity validation."""
+    """Creates deterministic electrical nets from the DB graph and component terminals."""
 
-    def generate_netlist(self, graph: ElectricalGraphModel) -> List[NetRef]:
-        nets = []
-        net_counter = 1
+    def generate_netlist(self, graph: ElectricalGraphModel, components: List[ComponentRef],
+                         voltage: float = 415.0, phases: int = 3) -> List[NetRef]:
+        by_id = {component.id: component for component in components}
+        by_category = {category: next((c for c in components if c.category == category), None)
+                       for category in ("MCCB", "BUSBAR", "SPD", "NEUTRAL_BAR", "EARTH_BAR")}
+        incomer, busbar, spd = by_category["MCCB"], by_category["BUSBAR"], by_category["SPD"]
+        if not incomer or not busbar:
+            raise DesignError("INCOMPLETE_ELECTRICAL_GRAPH", "The DB graph requires an incomer and busbar.")
 
-        # 1. Main Feed Net (Incomer -> Busbar)
-        incomer_node = next((n for n in graph.nodes if n.category == "MCCB"), None)
-        busbar_node = next((n for n in graph.nodes if n.category == "BUSBAR"), None)
+        nets: List[NetRef] = []
 
-        if incomer_node and busbar_node:
-            net_id = f"NET-{net_counter:03d}"
-            net_counter += 1
-            nets.append(NetRef(
-                id=net_id,
-                name="Main Bus Feeder Net",
-                voltage_level=415.0,
-                wire_class="POWER",
-                connections=[
-                    ConnectionRef(
-                        id=f"CONN-{net_counter}-1",
-                        from_component=incomer_node.id,
-                        from_terminal="L1_OUT",
-                        to_component=busbar_node.id,
-                        to_terminal="IN_L1",
-                        net_id=net_id,
-                        wire_class="POWER"
-                    ),
-                    ConnectionRef(
-                        id=f"CONN-{net_counter}-2",
-                        from_component=incomer_node.id,
-                        from_terminal="L2_OUT",
-                        to_component=busbar_node.id,
-                        to_terminal="IN_L2",
-                        net_id=net_id,
-                        wire_class="POWER"
-                    ),
-                    ConnectionRef(
-                        id=f"CONN-{net_counter}-3",
-                        from_component=incomer_node.id,
-                        from_terminal="L3_OUT",
-                        to_component=busbar_node.id,
-                        to_terminal="IN_L3",
-                        net_id=net_id,
-                        wire_class="POWER"
-                    )
-                ]
-            ))
+        def add_net(net_id: str, name: str, level: float, wire_class: str,
+                    endpoints: List[Tuple[str, str, str, str]]) -> None:
+            connections = []
+            for index, (src, src_terminal, dst, dst_terminal) in enumerate(endpoints, 1):
+                connections.append(ConnectionRef(
+                    id=f"{net_id}-C{index:02d}", from_component=src, from_terminal=src_terminal,
+                    to_component=dst, to_terminal=dst_terminal, net_id=net_id, wire_class=wire_class))
+            nets.append(NetRef(id=net_id, name=name, voltage_level=level, wire_class=wire_class,
+                               connections=connections))
 
-        # 2. SPD Net
-        spd_node = next((n for n in graph.nodes if n.category == "SPD"), None)
-        if busbar_node and spd_node:
-            net_id = f"NET-{net_counter:03d}"
-            net_counter += 1
-            nets.append(NetRef(
-                id=net_id,
-                name="Surge Protection Net",
-                voltage_level=415.0,
-                wire_class="POWER",
-                connections=[
-                    ConnectionRef(
-                        id=f"CONN-SPD-1",
-                        from_component=busbar_node.id,
-                        from_terminal="IN_L1",
-                        to_component=spd_node.id,
-                        to_terminal="L1",
-                        net_id=net_id,
-                        wire_class="POWER"
-                    )
-                ]
-            ))
+        # Each phase is an independent net with a stable identity.
+        for phase in range(1, phases + 1):
+            label = f"L{phase}"
+            add_net(f"NET-MAIN-{label}", f"Main {label} Feed", voltage, "POWER",
+                    [(incomer.id, f"{label}_OUT", busbar.id, f"IN_{label}")])
 
-        # 3. Branch Feeder Nets (Busbar -> MCB -> Terminals)
-        mcbs = [n for n in graph.nodes if n.category == "MCB"]
-        for idx, mcb in enumerate(mcbs):
-            term_id = f"X{idx+1:03d}"
-            net_id = f"NET-{net_counter:03d}"
-            net_counter += 1
+        if spd:
+            for phase in range(1, phases + 1):
+                label = f"L{phase}"
+                add_net(f"NET-SPD-{label}", f"Surge Protection {label}", voltage, "POWER",
+                        [(busbar.id, f"IN_{label}", spd.id, label)])
 
-            # Distribute 1P MCBs across L1, L2, L3 phases for phase balancing
-            phase_bus_term = f"IN_L{(idx % 3) + 1}"
+        feeders = sorted((c for c in components if c.category == "MCB"), key=lambda c: c.id)
+        terminals = sorted((c for c in components if c.category == "TERMINAL"), key=lambda c: c.id)
+        terminal_by_id = {c.id: c for c in terminals}
+        for index, mcb in enumerate(feeders):
+            terminal_id = f"X{index + 1:03d}"
+            if terminal_id not in terminal_by_id:
+                raise DesignError("INCOMPLETE_COMPONENT_SET", f"Feeder {mcb.id} has no paired terminal block.",
+                                  {"component_id": mcb.id, "terminal_id": terminal_id})
+            phase_count = max(1, min(phases, mcb.poles))
+            phase = (index % phases) + 1
+            if phase_count == 1:
+                endpoints = [(busbar.id, f"IN_L{phase}", mcb.id, "IN"),
+                             (mcb.id, "OUT", terminal_id, "LEFT")]
+                branch_voltage = voltage / (3 ** 0.5) if phases == 3 else voltage
+            else:
+                # The current catalog exposes three pole terminals as L1/L2/L3.
+                endpoints = [(busbar.id, f"IN_L{p}", mcb.id, f"L{p}_IN")
+                             for p in range(1, min(phase_count, phases) + 1)]
+                endpoints += [(mcb.id, f"L{p}_OUT", terminal_id, "LEFT")
+                              for p in range(1, min(phase_count, phases) + 1)]
+                branch_voltage = voltage
+            add_net(f"NET-BRANCH-{mcb.id}", f"Branch Circuit {mcb.id} to {terminal_id}",
+                    branch_voltage, "POWER", endpoints)
 
-            conns = [
-                ConnectionRef(
-                    id=f"CONN-FEED-{idx+1}-A",
-                    from_component=busbar_node.id if busbar_node else "BUS001",
-                    from_terminal=phase_bus_term,
-                    to_component=mcb.id,
-                    to_terminal="IN" if "1P" in mcb.name or "16A" in mcb.name or "20A" in mcb.name or "32A" in mcb.name else "L1_IN",
-                    net_id=net_id,
-                    wire_class="POWER"
-                ),
-                ConnectionRef(
-                    id=f"CONN-FEED-{idx+1}-B",
-                    from_component=mcb.id,
-                    from_terminal="OUT" if "1P" in mcb.name or "16A" in mcb.name or "20A" in mcb.name or "32A" in mcb.name else "L1_OUT",
-                    to_component=term_id,
-                    to_terminal="LEFT",
-                    net_id=net_id,
-                    wire_class="POWER"
-                )
-            ]
-
-            nets.append(NetRef(
-                id=net_id,
-                name=f"Branch Circuit Net {mcb.id} -> {term_id}",
-                voltage_level=230.0 if "1P" in mcb.name or "16A" in mcb.name or "20A" in mcb.name or "32A" in mcb.name else 415.0,
-                wire_class="POWER",
-                connections=conns
-            ))
-
-        # 4. Neutral & PE Bus Nets
-        nbar = next((n for n in graph.nodes if n.category == "NEUTRAL_BAR"), None)
-        pebar = next((n for n in graph.nodes if n.category == "EARTH_BAR"), None)
-
+        nbar = by_category["NEUTRAL_BAR"]
         if nbar:
-            net_id = f"NET-{net_counter:03d}"
-            net_counter += 1
-            nets.append(NetRef(
-                id=net_id,
-                name="Main Neutral Trunk",
-                voltage_level=0.0,
-                wire_class="NEUTRAL",
-                connections=[
-                    ConnectionRef(
-                        id="CONN-N-1",
-                        from_component=busbar_node.id if busbar_node else "BUS001",
-                        from_terminal="IN_N",
-                        to_component=nbar.id,
-                        to_terminal="MAIN_N",
-                        net_id=net_id,
-                        wire_class="NEUTRAL"
-                    )
-                ]
-            ))
+            add_net("NET-NEUTRAL-MAIN", "Main Neutral Trunk", 0.0, "NEUTRAL",
+                    [(busbar.id, "IN_N", nbar.id, "MAIN_N")])
 
+        pebar = by_category["EARTH_BAR"]
         if pebar:
-            net_id = f"NET-{net_counter:03d}"
-            net_counter += 1
-            nets.append(NetRef(
-                id=net_id,
-                name="Main Protective Earth (PE) Bus",
-                voltage_level=0.0,
-                wire_class="PE",
-                connections=[
-                    ConnectionRef(
-                        id="CONN-PE-1",
-                        from_component="PANEL_ROOT",
-                        from_terminal="EARTH_STUD",
-                        to_component=pebar.id,
-                        to_terminal="MAIN_PE",
-                        net_id=net_id,
-                        wire_class="PE"
-                    )
-                ]
-            ))
+            add_net("NET-PE-MAIN", "Main Protective Earth Bus", 0.0, "PE",
+                    [("PANEL_ROOT", "EARTH_STUD", pebar.id, "MAIN_PE")])
 
         return nets
 
-    def validate_netlist(self, nets: List[NetRef]) -> Tuple[bool, List[str]]:
-        errors = []
-        if not nets:
-            errors.append("Netlist is empty.")
-            return False, errors
-
+    def validate_netlist(self, nets: List[NetRef], components: List[ComponentRef]) -> Tuple[bool, List[str]]:
+        errors: List[str] = []
+        ids = {component.id for component in components} | {"PANEL_ROOT"}
+        seen_net_ids = set()
+        seen_conn_ids = set()
         for net in nets:
+            if net.id in seen_net_ids:
+                errors.append(f"Duplicate net ID '{net.id}'.")
+            seen_net_ids.add(net.id)
             if not net.connections:
-                errors.append(f"Net '{net.name}' ({net.id}) has no connections (floating net).")
-
+                errors.append(f"Net '{net.name}' ({net.id}) has no connections.")
+            for conn in net.connections:
+                if conn.net_id != net.id:
+                    errors.append(f"Connection '{conn.id}' references net '{conn.net_id}', expected '{net.id}'.")
+                if conn.id in seen_conn_ids:
+                    errors.append(f"Duplicate connection ID '{conn.id}'.")
+                seen_conn_ids.add(conn.id)
+                for endpoint, terminal in ((conn.from_component, conn.from_terminal),
+                                          (conn.to_component, conn.to_terminal)):
+                    if endpoint not in ids:
+                        errors.append(f"Connection '{conn.id}' references unknown component '{endpoint}'.")
+                    elif endpoint != "PANEL_ROOT":
+                        component = next(c for c in components if c.id == endpoint)
+                        if terminal not in {t.get("id") for t in component.terminals}:
+                            errors.append(f"Connection '{conn.id}' references unknown terminal '{terminal}' on '{endpoint}'.")
         return len(errors) == 0, errors

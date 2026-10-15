@@ -1,13 +1,14 @@
 from typing import Any, Dict, List
-from app.models.cem import ComponentRef, NetRef
+from app.models.cem import CanonicalEngineeringModel
 
 
 class SchematicEngine:
     """Generates structured SVG schematic layout representations."""
 
-    def generate_schematic_data(self, components: List[ComponentRef], nets: List[NetRef]) -> Dict[str, Any]:
+    def generate_schematic_data(self, cem: CanonicalEngineeringModel) -> Dict[str, Any]:
         symbols = []
         wires = []
+        components, nets = cem.components, cem.nets
 
         # 1. Sugiyama/Hierarchical Grouping into Vertical Layers
         # Layer 1 (y=50): Panel Incomer MCCB
@@ -25,6 +26,10 @@ class SchematicEngine:
 
         canvas_width = 1200
         canvas_height = 700
+
+        symbols.append({"id": "PANEL_ROOT", "name": cem.panel_id, "category": "PANEL", "type": "PANEL",
+                        "x": 20, "y": 20, "width": 40, "height": 30, "label": cem.panel_id,
+                        "terminals": [{"id": "EARTH_STUD", "x": 40, "y": 35}]})
 
         if incomer:
             symbols.append({
@@ -61,11 +66,17 @@ class SchematicEngine:
                 "terminals": [
                     {"id": "IN_L1", "x": canvas_width / 2 - 30, "y": 180},
                     {"id": "IN_L2", "x": canvas_width / 2, "y": 180},
-                    {"id": "IN_L3", "x": canvas_width / 2 + 30, "y": 180}
+                    {"id": "IN_L3", "x": canvas_width / 2 + 30, "y": 180},
+                    {"id": "IN_N", "x": canvas_width / 2 + 60, "y": 180}
                 ]
             })
 
         if spd:
+            spd_terminals = []
+            for terminal in spd.terminals:
+                spd_terminals.append({"id": terminal["id"],
+                                      "x": 80 + 80 * float(terminal.get("x", spd.width / 2)) / max(1, spd.width),
+                                      "y": 180 if float(terminal.get("y", 0)) > spd.height / 2 else 240})
             symbols.append({
                 "id": spd.id,
                 "name": spd.name,
@@ -76,13 +87,14 @@ class SchematicEngine:
                 "width": 80,
                 "height": 60,
                 "label": "SPD Type 2",
-                "terminals": [{"id": "L1", "x": 120, "y": 180}]
+                "terminals": spd_terminals
             })
 
         # MCBs in Layer 3 (y=320)
         mcbs = [c for c in components if c.category == "MCB"]
         mcb_start_x = 100
-        mcb_spacing = max(50, (canvas_width - 200) / max(1, len(mcbs)))
+        mcb_spacing = (canvas_width - 200) / max(1, len(mcbs))
+        mcb_symbol_width = min(36, max(12, mcb_spacing * 0.75))
 
         for i, mcb in enumerate(mcbs):
             m_x = mcb_start_x + i * mcb_spacing
@@ -93,17 +105,20 @@ class SchematicEngine:
                 "type": "MCB",
                 "x": m_x,
                 "y": 320,
-                "width": 36,
+                "width": mcb_symbol_width,
                 "height": 60,
                 "label": f"{mcb.id}\n{mcb.current_rating}A",
-                "terminals": [
-                    {"id": "IN", "x": m_x + 18, "y": 320},
-                    {"id": "OUT", "x": m_x + 18, "y": 380}
-                ]
+                "terminals": ([{"id": f"L{p}_IN", "x": m_x + mcb_symbol_width * p / 4, "y": 320}
+                               for p in range(1, min(3, mcb.poles) + 1)] +
+                              [{"id": f"L{p}_OUT", "x": m_x + mcb_symbol_width * p / 4, "y": 380}
+                               for p in range(1, min(3, mcb.poles) + 1)] if mcb.poles > 1 else [
+                                  {"id": "IN", "x": m_x + mcb_symbol_width / 2, "y": 320},
+                                  {"id": "OUT", "x": m_x + mcb_symbol_width / 2, "y": 380}])
             })
 
         # Terminals in Layer 5 (y=560)
         terms = [c for c in components if c.category == "TERMINAL"]
+        terminal_symbol_width = min(30, max(8, mcb_spacing * 0.75))
         for i, term in enumerate(terms):
             t_x = mcb_start_x + i * mcb_spacing
             symbols.append({
@@ -113,12 +128,12 @@ class SchematicEngine:
                 "type": "TERMINAL",
                 "x": t_x,
                 "y": 540,
-                "width": 30,
+                "width": terminal_symbol_width,
                 "height": 40,
                 "label": term.id,
                 "terminals": [
-                    {"id": "LEFT", "x": t_x + 15, "y": 540},
-                    {"id": "RIGHT", "x": t_x + 15, "y": 580}
+                    {"id": "LEFT", "x": t_x + terminal_symbol_width / 2, "y": 540},
+                    {"id": "RIGHT", "x": t_x + terminal_symbol_width / 2, "y": 580}
                 ]
             })
 
@@ -160,10 +175,12 @@ class SchematicEngine:
 
                 if from_sym and to_sym:
                     # Compute orthogonal path coordinates
-                    x1 = from_sym["x"] + from_sym["width"] / 2
-                    y1 = from_sym["y"] + from_sym["height"]
-                    x2 = to_sym["x"] + to_sym["width"] / 2
-                    y2 = to_sym["y"]
+                    from_terminal = next((t for t in from_sym["terminals"] if t["id"] == conn.from_terminal), None)
+                    to_terminal = next((t for t in to_sym["terminals"] if t["id"] == conn.to_terminal), None)
+                    if from_terminal is None or to_terminal is None:
+                        continue
+                    x1, y1 = from_terminal["x"], from_terminal["y"]
+                    x2, y2 = to_terminal["x"], to_terminal["y"]
 
                     # Orthogonal routing: M x1 y1 -> V (y1+y2)/2 -> H x2 -> V y2
                     mid_y = (y1 + y2) / 2
@@ -174,7 +191,9 @@ class SchematicEngine:
                         "net_id": net.id,
                         "net_name": net.name,
                         "from": conn.from_component,
+                        "from_terminal": conn.from_terminal,
                         "to": conn.to_component,
+                        "to_terminal": conn.to_terminal,
                         "wire_class": conn.wire_class,
                         "svg_path": svg_path,
                         "color": "#EF4444" if conn.wire_class == "POWER" else ("#3B82F6" if conn.wire_class == "NEUTRAL" else "#10B981")

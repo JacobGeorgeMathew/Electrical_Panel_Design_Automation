@@ -4,7 +4,7 @@ import { fetchFreeCADScript } from '../../api/client';
 import { FileSpreadsheet, Download, Code, ExternalLink, CheckCircle } from 'lucide-react';
 
 export const BOMTable: React.FC = () => {
-  const { cem, projectId, selectObject, setActiveTab, selectedObjectId } = useProjectStore();
+  const { cem, pdm, projectId, selectObject, setActiveTab, selectedObjectId } = useProjectStore();
 
   if (!cem || !cem.components) {
     return (
@@ -66,6 +66,7 @@ export const BOMTable: React.FC = () => {
                 <th className="p-4">Rating</th>
                 <th className="p-4">Dimensions (WxHxD mm)</th>
                 <th className="p-4">Heat Loss</th>
+                <th className="p-4">Physical ID / Position (mm)</th>
                 <th className="p-4 text-center">Action</th>
               </tr>
             </thead>
@@ -93,6 +94,12 @@ export const BOMTable: React.FC = () => {
                       {comp.width} x {comp.height} x {comp.depth}
                     </td>
                     <td className="p-4 text-amber-400">{comp.heat_loss} W</td>
+                    <td className="p-4 text-slate-400">
+                      {(() => {
+                        const placed = pdm?.components.find((item) => item.cem_component_id === comp.id);
+                        return placed ? `${placed.id} · (${placed.position.x}, ${placed.position.y}, ${placed.position.z})` : 'Not placed';
+                      })()}
+                    </td>
                     <td className="p-4 text-center">
                       <button
                         onClick={(e) => {

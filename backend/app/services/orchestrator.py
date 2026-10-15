@@ -1,7 +1,9 @@
+from dataclasses import replace
 from typing import Any, Dict, Optional
 from app.algorithms.cp_sat_placement import CPSATPlacementOptimizer
-from app.algorithms.jps_theta_star import JPSThetaStarRouter
-from app.models.cem import CEMState, CanonicalEngineeringModel
+from app.algorithms.jps_theta_star import JPSThetaStarRouter, RoutePlanningError
+from app.algorithms.layout_config import LayoutConfig
+from app.models.cem import CEMState, CanonicalEngineeringModel, FunctionalModule
 from app.models.pdm import PhysicalDesignModel
 from app.repositories.component_repository import ComponentRepository
 from app.repositories.enclosure_repository import EnclosureRepository
@@ -10,30 +12,38 @@ from app.services.cad_engine import CADEngine
 from app.services.calculation_engine import CalculationEngine
 from app.services.change_propagation import ChangePropagationEngine
 from app.services.component_selector import ComponentSelector
+from app.services.design_errors import DesignError
 from app.services.enclosure_engine import EnclosureEngine
 from app.services.graph_engine import GraphEngine
 from app.services.netlist_engine import NetlistEngine
 from app.services.requirement_engine import RequirementEngine
 from app.services.schematic_engine import SchematicEngine
 from app.services.validation_engine import ValidationEngine
-from app.services.zoning_engine import ZoningEngine
+
+
+DEFAULT_PROJECT = {
+    "id": "",
+    "name": "Distribution Board",
+    "archetype": "DB",
+    "requirements": {"supply_voltage": 415, "phases": 3, "frequency": 50,
+                     "incomer_rating": 250, "num_feeders": 12, "ip_rating": "IP54",
+                     "spare_capacity_pct": 20, "neutral_required": True},
+}
 
 
 class DesignOrchestrator:
-    """Central pipeline orchestrator executing full engineering panel generation."""
+    """Coordinates typed CEM and PDM contracts for deterministic DB generation."""
 
     def __init__(self):
         self.project_repo = ProjectRepository()
         self.comp_repo = ComponentRepository()
         self.enclosure_repo = EnclosureRepository()
-
         self.req_engine = RequirementEngine()
         self.calc_engine = CalculationEngine()
         self.comp_selector = ComponentSelector(self.comp_repo)
         self.graph_engine = GraphEngine()
         self.netlist_engine = NetlistEngine()
         self.schematic_engine = SchematicEngine()
-        self.zoning_engine = ZoningEngine()
         self.enclosure_engine = EnclosureEngine(self.enclosure_repo)
         self.placement_optimizer = CPSATPlacementOptimizer()
         self.routing_router = JPSThetaStarRouter()
@@ -41,141 +51,148 @@ class DesignOrchestrator:
         self.cad_engine = CADEngine()
         self.change_prop_engine = ChangePropagationEngine()
 
-    def generate_design(self, project_id: str, requirement_overrides: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def generate_design(self, project_id: str, requirement_overrides: Optional[Dict[str, Any]] = None,
+                        persist_requirements: bool = True) -> Dict[str, Any]:
         project = self.project_repo.get_by_id(project_id)
+        project_existed = project is not None
         if not project:
-            # Create default project if missing
-            project = {
-                "id": project_id,
-                "name": f"Panel Project {project_id}",
-                "archetype": "DB",
-                "requirements": {
-                    "supply_voltage": 415,
-                    "phases": 3,
-                    "frequency": 50,
-                    "incomer_rating": 250,
-                    "num_feeders": 12,
-                    "ip_rating": "IP54",
-                    "spare_capacity_pct": 20,
-                    "neutral_required": True
-                }
-            }
+            project = {**DEFAULT_PROJECT, "id": project_id, "name": f"Panel Project {project_id}"}
+        if project.get("archetype", "DB") != "DB":
+            raise DesignError("UNSUPPORTED_ARCHETYPE", "This workflow currently supports DB projects only.",
+                              {"archetype": project.get("archetype")})
 
-        req_values = project.get("requirements", {})
+        req_values = dict(project.get("requirements", {}))
         if requirement_overrides:
             req_values.update(requirement_overrides)
-            project["requirements"] = req_values
-            self.project_repo.save(project)
-
-        # Step 1: Validate Requirements
         req_set = self.req_engine.validate_requirements(project_id, "DB", req_values)
+        if not req_set.is_valid:
+            raise DesignError("INVALID_REQUIREMENTS", "Requirements must be corrected before design generation.",
+                              {"project_id": project_id, "validation_errors": req_set.validation_errors,
+                               "validation_warnings": req_set.validation_warnings}, req_set.validation_errors)
+        values = {item.id: item.value for item in req_set.items if item.value is not None}
 
-        # Step 2: Build Base CEM
         cem = CanonicalEngineeringModel(
-            project_id=project_id,
-            panel_id=f"DB-{project_id}",
-            panel_type="DB",
-            state=CEMState.REQUIREMENTS_VALIDATED,
-            requirements=req_set.items
+            project_id=project_id, panel_id=f"DB-{project_id}", panel_type="DB",
+            state=CEMState.REQUIREMENTS_VALIDATED, requirements=req_set.items,
+            modules=[FunctionalModule(id=f"MOD-{m['name']}", name=m["name"], category=m["category"],
+                                     required=(m.get("required", True) and
+                                               (m["category"] != "NEUTRAL_BAR" or
+                                                values.get("neutral_required", values["phases"] == 3))))
+                     for m in self.req_engine.get_template("DB").get("modules", [])],
         )
 
-        # Step 3: Run Engineering Calculations
-        calc_results = self.calc_engine.calculate_db_parameters(req_values)
-        cem.calculations = calc_results
+        cem.calculations = self.calc_engine.calculate_db_parameters(values)
         cem.state = CEMState.ENGINEERING_CALCULATED
-
-        # Step 4: Select Components
-        incomer_rating = req_values.get("incomer_rating", 250)
-        num_feeders = req_values.get("num_feeders", 12)
-        phases = req_values.get("phases", 3)
-
-        components = self.comp_selector.select_components(incomer_rating, num_feeders, phases)
+        busbar_calc = next(result for result in cem.calculations if result.type == "busbar_rating")
+        components = self.comp_selector.select_components(
+            incomer_rating=values["incomer_rating"], num_feeders=values["num_feeders"],
+            phases=values["phases"], neutral_required=values.get("neutral_required", values["phases"] == 3),
+            busbar_rating=busbar_calc.value)
         cem.components = components
+        for module in cem.modules:
+            candidate = next((c for c in components if c.category == module.category), None)
+            module.assigned_component_id = candidate.id if candidate else None
         cem.state = CEMState.COMPONENTS_SELECTED
 
-        # Step 5: Build Electrical Graph
         graph = self.graph_engine.build_electrical_graph(project_id, components)
-
-        # Step 6: Generate Netlist & Validate
-        nets = self.netlist_engine.generate_netlist(graph)
-        is_net_valid, net_errors = self.netlist_engine.validate_netlist(nets)
+        cem.electrical_graph = graph
+        nets = self.netlist_engine.generate_netlist(graph, components,
+                                                    voltage=values["supply_voltage"], phases=values["phases"])
+        valid_netlist, errors = self.netlist_engine.validate_netlist(nets, components)
+        if not valid_netlist:
+            raise DesignError("INVALID_NETLIST", "The selected components do not form a complete electrical netlist.",
+                              {"errors": errors}, errors)
         cem.nets = nets
+        cem.connections = [connection for net in nets for connection in net.connections]
+        net_ids_by_pair: Dict[tuple, set] = {}
+        for net in nets:
+            for connection in net.connections:
+                pair = (connection.from_component, connection.to_component)
+                net_ids_by_pair.setdefault(pair, set()).add(net.id)
+        for edge in graph.edges:
+            edge.properties["net_ids"] = sorted(net_ids_by_pair.get((edge.source, edge.target), set()))
+        cem.electrical_graph = graph
         cem.state = CEMState.NETLIST_VALIDATED
-
-        # Step 7: Generate Schematic SVG Layout Model
-        schematic_data = self.schematic_engine.generate_schematic_data(components, nets)
+        schematic_data = self.schematic_engine.generate_schematic_data(cem)
         cem.state = CEMState.SCHEMATIC_GENERATED
 
-        # Step 8: Select Enclosure & Zoning
-        total_comp_width = sum(c.width for c in components if c.category in ["MCCB", "MCB", "SPD", "BUSBAR"])
+        total_comp_width = sum(c.width for c in components if c.category in {"MCCB", "MCB", "SPD", "BUSBAR"})
         total_heat_loss = sum(c.heat_loss for c in components)
-
         enclosure = self.enclosure_engine.select_enclosure(
-            total_components_width=total_comp_width,
-            total_heat_loss=total_heat_loss,
-            ip_rating=req_values.get("ip_rating", "IP54")
+            total_components_width=total_comp_width, total_heat_loss=total_heat_loss,
+            ip_rating=values["ip_rating"])
+        if not enclosure:
+            raise DesignError("NO_FEASIBLE_ENCLOSURE", "No catalog enclosure satisfies the selected components, heat load, and IP rating.",
+                              {"minimum_component_width_mm": total_comp_width,
+                               "total_heat_loss_w": total_heat_loss, "ip_rating": values["ip_rating"]})
+
+        connections = [(conn.from_component, conn.to_component) for net in nets for conn in net.connections
+                       if conn.from_component != "PANEL_ROOT" and conn.to_component != "PANEL_ROOT"]
+        plate_cfg = replace(
+            LayoutConfig(),
+            margin_x=max(20.0, enclosure.mounting_plate_offset_x + 20.0),
+            margin_bottom=max(20.0, enclosure.mounting_plate_offset_y + 10.0),
+            margin_top=max(20.0, enclosure.mounting_plate_offset_y + 10.0),
         )
+        try:
+            placement = CPSATPlacementOptimizer(plate_cfg).solve(
+                components, enclosure.width, enclosure.height, connections)
+        except RuntimeError as exc:
+            raise DesignError("PLACEMENT_ENGINE_UNAVAILABLE", "The placement solver is unavailable.",
+                              {"reason": str(exc)}) from exc
+        if not placement.feasible:
+            raise DesignError("PLACEMENT_INFEASIBLE", "Selected components cannot be placed in the selected enclosure.",
+                              {"enclosure_id": enclosure.id, "solver_status": placement.status,
+                               "reason": placement.message})
+        if placement.violations:
+            raise DesignError("PLACEMENT_INVALID", "The placement solver returned geometry that fails its independent checks.",
+                              {"violations": placement.violations})
 
-        zones = self.zoning_engine.get_default_zones(enclosure["width"], enclosure["height"])
-        zones_map = {z.name: {"x_min": z.x_min, "x_max": z.x_max, "y_min": z.y_min, "y_max": z.y_max} for z in zones}
+        try:
+            routes = JPSThetaStarRouter(plate_cfg).route_layout(
+                placement, nets, enclosure.width, enclosure.height, enclosure.depth)
+        except RoutePlanningError as exc:
+            raise DesignError("ROUTING_INFEASIBLE", "An electrical connection could not be routed.",
+                              {"connection_id": exc.connection_id, "net_id": exc.net_id,
+                               "reason": exc.reason}) from exc
+        expected_routes = sum(len(net.connections) for net in nets)
+        if len(routes) != expected_routes:
+            routed = {route.id.removeprefix("ROUTE-") for route in routes}
+            missing = [conn.id for net in nets for conn in net.connections
+                       if conn.id not in routed]
+            raise DesignError("ROUTING_INFEASIBLE", "One or more electrical connections could not be routed: " + ", ".join(missing),
+                              {"missing_connection_ids": missing})
 
-        # Step 9: CP-SAT Placement Optimization
-        placement_result = self.placement_optimizer.solve(
-            components=components,
-            enclosure_width=enclosure["width"],
-            enclosure_height=enclosure["height"],
-            connections=[(a, b) for net in nets for a, b in [
-                (conn.from_component, conn.to_component) for conn in net.connections
-            ] if a != b]
-        )
-
-        if not placement_result.feasible:
-            raise ValueError(f"Placement failed: {placement_result.message}")
-
-        physical_components = placement_result.components
-        rails = placement_result.rails
-
-        # Step 10: JPS-Theta* Wire Routing using the actual solver result.
-        wire_routes = self.routing_router.route_layout(
-            layout_result=placement_result,
-            nets=nets,
-            enclosure_w=enclosure["width"],
-            enclosure_h=enclosure["height"],
-            enclosure_d=enclosure["depth"]
-        )
-
-        # Step 11: Build Physical Design Model (PDM)
         pdm = PhysicalDesignModel(
-            id=f"PDM-{project_id}",
-            project_id=project_id,
-            panel_id=f"DB-{project_id}",
-            enclosure_id=enclosure["id"],
-            enclosure_width=enclosure["width"],
-            enclosure_height=enclosure["height"],
-            enclosure_depth=enclosure["depth"],
-            ip_rating=enclosure["ip_rating"],
-            zones=zones,
-            components=physical_components,
-            rails=rails,
-            routes=wire_routes,
-            total_heat_loss_watts=total_heat_loss
+            id=f"PDM-{project_id}", project_id=project_id, panel_id=cem.panel_id,
+            enclosure_id=enclosure.id, enclosure_width=enclosure.width,
+            enclosure_height=enclosure.height, enclosure_depth=enclosure.depth,
+            ip_rating=enclosure.ip_rating,
+            mounting_plate_x=enclosure.mounting_plate_offset_x,
+            mounting_plate_y=enclosure.mounting_plate_offset_y,
+            mounting_plate_z=enclosure.mounting_plate_offset_z,
+            mounting_plate_width=enclosure.mounting_plate_width,
+            mounting_plate_height=enclosure.mounting_plate_height,
+            zones=enclosure.zones,
+            components=placement.components, rails=placement.rails, routes=routes,
+            total_heat_loss_watts=total_heat_loss,
         )
-
-        # Step 12: Validate Physical Design & Thermal
-        violations = self.validation_engine.validate_pdm(pdm)
+        violations = self.validation_engine.validate_pdm(pdm, cem, plate_cfg)
         pdm.validation_results = violations
-
+        critical = [v for v in violations if v.severity == "CRITICAL"]
+        if critical:
+            raise DesignError("PHYSICAL_VALIDATION_FAILED", "The generated physical design has critical validation violations.",
+                              {"violations": [v.model_dump() for v in critical]})
         cem.physical_design_id = pdm.id
         cem.state = CEMState.FINAL_VALIDATED
-
-        # Step 13: Generate CAD Primitives
         cad_data = self.cad_engine.generate_parametric_geometry(pdm)
+        bom = [{"component_id": c.id, "catalog_id": c.catalog_id, "name": c.name,
+                "category": c.category, "quantity": c.quantity, "current_rating_a": c.current_rating,
+                "breaking_capacity_ka": c.breaking_capacity, "heat_loss_w": c.heat_loss}
+               for c in cem.components]
 
-        # Return full design package
-        return {
-            "cem": cem.model_dump(),
-            "pdm": pdm.model_dump(),
-            "schematic": schematic_data,
-            "cad": cad_data,
-            "validation_errors": [v.model_dump() for v in violations]
-        }
+        if requirement_overrides and persist_requirements and project_existed:
+            updated = {**project, "requirements": req_values}
+            self.project_repo.save(updated)
+        return {"cem": cem.model_dump(), "pdm": pdm.model_dump(), "schematic": schematic_data,
+                "cad": cad_data, "bom": bom, "validation_errors": [v.model_dump() for v in violations]}

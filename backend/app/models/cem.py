@@ -2,6 +2,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 from app.models.requirements import RequirementItem
+from app.models.electrical_graph import ElectricalGraphModel
 
 
 class CEMState(str, Enum):
@@ -109,6 +110,7 @@ class CanonicalEngineeringModel(BaseModel):
     modules: List[FunctionalModule] = Field(default_factory=list)
     loads: List[LoadItem] = Field(default_factory=list)
     components: List[ComponentRef] = Field(default_factory=list)
+    electrical_graph: Optional[ElectricalGraphModel] = None
     connections: List[ConnectionRef] = Field(default_factory=list)
     nets: List[NetRef] = Field(default_factory=list)
     calculations: List[CalculationResult] = Field(default_factory=list)

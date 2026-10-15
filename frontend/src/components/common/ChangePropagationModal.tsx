@@ -18,7 +18,7 @@ export const ChangePropagationModal: React.FC = () => {
             <div>
               <h3 className="text-lg font-bold text-slate-100">Incremental Change Propagation Report</h3>
               <p className="text-xs text-slate-400">
-                DAG dependency graph modified node output comparison
+                Changed requirement: {diffReport.modified_field || 'unknown'}
               </p>
             </div>
           </div>
@@ -29,6 +29,10 @@ export const ChangePropagationModal: React.FC = () => {
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {diffReport.affected_stages?.length > 0 && (
+          <p className="mb-4 text-[11px] text-slate-400">Affected stages: {diffReport.affected_stages.join(', ')}</p>
+        )}
 
         <div className="space-y-3 mb-6">
           {diffReport.diffs.map((item: any, idx: number) => (

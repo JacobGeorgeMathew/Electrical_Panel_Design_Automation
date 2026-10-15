@@ -1,202 +1,174 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  addEdge, Background, BaseEdge, Controls, EdgeLabelRenderer, getBezierPath,
+  Handle, MiniMap, Position, ReactFlow, ReactFlowProvider, useEdgesState, useNodesState,
+  type Connection, type EdgeProps, type NodeProps, type NodeTypes, type EdgeTypes,
+} from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
+import { GitBranch, Plus, TriangleAlert, X } from 'lucide-react';
 import { useProjectStore } from '../../stores/projectStore';
-import { GitBranch, ZoomIn, ZoomOut, RotateCcw, Filter, Eye } from 'lucide-react';
+import { buildSchematicGraph, validateSchematicGraph, type SchematicEdge, type SchematicGraphData,
+  type SchematicNode, type SchematicEdgeData, type WireClass } from './schematicGraph';
 
-export const SchematicViewer: React.FC = () => {
-  const {
-    schematicData,
-    selectedObjectId,
-    selectObject,
-    hoveredObjectId,
-    hoverObject
-  } = useProjectStore();
+const SymbolNode: React.FC<NodeProps<SchematicNode>> = ({ data, selected }) => {
+  const top = data.terminals.filter((terminal) => terminal.y <= data.height / 2);
+  const bottom = data.terminals.filter((terminal) => terminal.y > data.height / 2);
+  const handles = (terminals: typeof data.terminals, position: Position, kind: 'source' | 'target') =>
+    terminals.map((terminal) => {
+      const xPct = data.width ? (terminal.x / data.width) * 100 : 50;
+      const yPct = data.height ? (terminal.y / data.height) * 100 : 50;
+      const vertical = position === Position.Top || position === Position.Bottom;
+      return <Handle key={`${kind}:${terminal.id}`} id={`${kind}:${terminal.id}`} type={kind} position={position}
+        title={`${terminal.id} ${kind}`} style={vertical ? { left: `${xPct}%` } : { top: `${yPct}%` }} />;
+    });
+  const lines = data.label.split('\n');
+  return <div className={`relative flex h-full w-full flex-col items-center justify-center rounded-md border bg-slate-900 px-2 text-center shadow-lg ${selected ? 'border-blue-400 ring-2 ring-blue-500/40' : 'border-slate-600'}`}
+    style={{ minWidth: Math.max(72, Math.min(data.width, 190)), minHeight: Math.max(46, Math.min(data.height, 110)) }}>
+    {handles(top, Position.Top, 'target')}{handles(top, Position.Top, 'source')}
+    {handles(bottom, Position.Bottom, 'target')}{handles(bottom, Position.Bottom, 'source')}
+    <span className="text-[11px] font-bold text-slate-100">{lines[0]}</span>
+    {lines[1] && <span className="text-[9px] text-slate-400">{lines[1]}</span>}
+    <span className="mt-1 text-[8px] uppercase tracking-wide text-slate-500">{data.symbolType}</span>
+  </div>;
+};
 
-  const [zoom, setZoom] = useState<number>(1);
-  const [wireFilter, setWireFilter] = useState<'ALL' | 'POWER' | 'NEUTRAL' | 'PE'>('ALL');
-  const [activeHoverNet, setActiveHoverNet] = useState<string | null>(null);
+const JunctionNode: React.FC<NodeProps<SchematicNode>> = ({ data, selected }) => <div className="relative flex h-4 w-4 items-center justify-center rounded-full border border-amber-300 bg-amber-400 shadow-[0_0_10px_#fbbf24]"
+  title={`Junction · ${data.netId || data.label}`}>
+  <Handle id="target:net" type="target" position={Position.Top} />
+  <Handle id="source:net" type="source" position={Position.Bottom} />
+  {selected && <span className="absolute left-5 whitespace-nowrap text-[10px] text-amber-200">{data.label}</span>}
+</div>;
 
-  if (!schematicData) {
-    return (
-      <div className="p-12 text-center text-slate-500 font-mono text-sm">
-        No schematic data loaded. Click "Generate Design" to build the schematic diagram.
-      </div>
-    );
-  }
+const WireEdge: React.FC<EdgeProps<SchematicEdge>> = ({ id, sourceX, sourceY, targetX, targetY, sourcePosition,
+  targetPosition, data, selected }) => {
+  const [path, labelX, labelY] = getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition });
+  return <>
+    <BaseEdge id={id} path={path} style={{ stroke: selected ? '#F8FAFC' : data?.color || '#64748B', strokeWidth: selected ? 3 : 2 }} />
+    <EdgeLabelRenderer><div className="nodrag nopan absolute rounded bg-slate-950/90 px-1.5 py-0.5 font-mono text-[9px] text-slate-200"
+      style={{ transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`, pointerEvents: 'all' }}>
+      {data?.net_name || 'Unlabelled'} <span className="text-slate-500">{data?.wire_class || ''}</span>
+    </div></EdgeLabelRenderer>
+  </>;
+};
 
-  const { width, height, symbols, wires } = schematicData;
+const nodeTypes: NodeTypes = { symbol: SymbolNode as React.ComponentType<NodeProps>, junction: JunctionNode as React.ComponentType<NodeProps> };
+const edgeTypes = { wire: WireEdge } as unknown as EdgeTypes;
+const wireClasses: WireClass[] = ['POWER', 'CONTROL', 'SIGNAL', 'NEUTRAL', 'PE'];
+const colors: Record<WireClass, string> = { POWER: '#EF4444', CONTROL: '#A78BFA', SIGNAL: '#F59E0B', NEUTRAL: '#3B82F6', PE: '#22C55E' };
 
-  const filteredWires = wires.filter((w: any) => {
-    if (wireFilter === 'ALL') return true;
-    return w.wire_class === wireFilter;
-  });
+const SchematicCanvas: React.FC<{ data: SchematicGraphData }> = ({ data }) => {
+  const { selectObject } = useProjectStore();
+  const initial = useMemo(() => buildSchematicGraph(data), [data]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<SchematicNode>(initial.nodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<SchematicEdge>(initial.edges);
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const [wireFilter, setWireFilter] = useState<'ALL' | WireClass>('ALL');
+  const draftSequence = useRef(0);
 
-  return (
-    <div className="flex flex-col h-full bg-slate-950 p-6 space-y-4">
-      {/* Schematic Toolbar */}
-      <div className="flex items-center justify-between bg-slate-900 border border-slate-800 p-4 rounded-2xl">
-        <div className="flex items-center space-x-3">
-          <div className="p-2 bg-blue-500/10 text-blue-400 rounded-xl">
-            <GitBranch className="w-5 h-5" />
-          </div>
-          <div>
-            <h3 className="text-sm font-bold text-slate-200">Interactive SVG Electrical Schematic</h3>
-            <p className="text-xs text-slate-400">Sugiyama hierarchical layout & orthogonal wire net topology</p>
-          </div>
-        </div>
+  useEffect(() => {
+    const graph = buildSchematicGraph(data);
+    setNodes(graph.nodes);
+    setEdges(graph.edges);
+    setSelectedEdgeId(null);
+  }, [data, setNodes, setEdges]);
 
-        <div className="flex items-center space-x-3">
-          {/* Wire Class Filters */}
-          <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
-            {(['ALL', 'POWER', 'NEUTRAL', 'PE'] as const).map((filter) => (
-              <button
-                key={filter}
-                onClick={() => setWireFilter(filter)}
-                className={`px-3 py-1 rounded-lg transition-all ${
-                  wireFilter === filter
-                    ? 'bg-blue-600 text-white font-semibold'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                {filter}
-              </button>
-            ))}
-          </div>
+  const violations = useMemo(() => validateSchematicGraph(nodes, edges), [nodes, edges]);
+  const selectedNode = nodes.find((node) => node.selected) || null;
+  const selectedEdge = edges.find((edge) => edge.id === selectedEdgeId) || null;
+  const visibleEdges = edges.filter((edge) => wireFilter === 'ALL' || edge.data?.wire_class === wireFilter);
 
-          {/* Zoom controls */}
-          <div className="flex items-center space-x-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
-            <button
-              onClick={() => setZoom((z) => Math.min(2, z + 0.15))}
-              className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-900"
-            >
-              <ZoomIn className="w-4 h-4" />
-            </button>
-            <span className="text-xs font-mono text-slate-300 px-2">{Math.round(zoom * 100)}%</span>
-            <button
-              onClick={() => setZoom((z) => Math.max(0.5, z - 0.15))}
-              className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-900"
-            >
-              <ZoomOut className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setZoom(1)}
-              className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-900"
-            >
-              <RotateCcw className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      </div>
+  const onConnect = useCallback((connection: Connection) => {
+    if (!connection.source || !connection.target || !connection.sourceHandle || !connection.targetHandle) return;
+    draftSequence.current += 1;
+    const suffix = String(draftSequence.current).padStart(3, '0');
+    const wireClass: WireClass = wireFilter === 'ALL' ? 'POWER' : wireFilter;
+    setEdges((current) => addEdge({ ...connection, id: `DRAFT-CONN-${suffix}`, type: 'wire',
+      data: { net_id: `NET-DRAFT-${suffix}`, net_name: `Draft net ${suffix}`, wire_class: wireClass,
+        color: colors[wireClass], draft: true } }, current) as SchematicEdge[]);
+  }, [setEdges, wireFilter]);
 
-      {/* SVG Canvas Area */}
-      <div className="flex-1 bg-slate-900/60 border border-slate-800 rounded-2xl overflow-auto p-6 flex justify-center items-center relative">
-        <div style={{ transform: `scale(${zoom})`, transformOrigin: 'top center', transition: 'transform 0.15s ease-out' }}>
-          <svg
-            width={width}
-            height={height}
-            viewBox={`0 0 ${width} ${height}`}
-            className="select-none font-sans"
-          >
-            {/* Grid Pattern background */}
-            <defs>
-              <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(51, 65, 85, 0.2)" strokeWidth="1" />
-              </pattern>
-            </defs>
-            <rect width={width} height={height} fill="url(#grid)" />
+  const addJunction = () => {
+    draftSequence.current += 1;
+    const suffix = String(draftSequence.current).padStart(3, '0');
+    const id = `DRAFT-JUNCTION-${suffix}`;
+    setNodes((current) => [...current, { id, type: 'junction', position: { x: data.width / 2, y: data.height / 2 },
+      data: { symbolId: id, label: `Draft junction ${suffix}`, name: 'Draft junction', symbolType: 'JUNCTION',
+        category: 'JUNCTION', width: 12, height: 12, terminals: [], properties: { draft: true }, junction: true, netId: `NET-DRAFT-${suffix}` } }]);
+  };
 
-            {/* Render Wires */}
-            {filteredWires.map((w: any) => {
-              const isSelected = selectedObjectId === w.from || selectedObjectId === w.to;
-              const isHovered = activeHoverNet === w.net_id || hoveredObjectId === w.from || hoveredObjectId === w.to;
+  const updateSelectedEdge = (patch: Partial<SchematicEdgeData>) => {
+    if (!selectedEdgeId) return;
+    setEdges((current) => current.map((edge) => edge.id === selectedEdgeId ? {
+      ...edge, data: { ...(edge.data || { net_id: '', net_name: '', wire_class: 'POWER', color: colors.POWER }), ...patch,
+        color: patch.wire_class ? colors[patch.wire_class as WireClass] : (edge.data?.color || colors.POWER) },
+    } : edge));
+  };
 
-              return (
-                <g key={w.id}>
-                  <path
-                    d={w.svg_path}
-                    fill="none"
-                    stroke={isHovered || isSelected ? '#38BDF8' : w.color}
-                    strokeWidth={isHovered || isSelected ? 3.5 : 2}
-                    strokeDasharray={w.wire_class === 'NEUTRAL' ? '6,3' : 'none'}
-                    className="transition-all duration-150 cursor-pointer"
-                    onMouseEnter={() => setActiveHoverNet(w.net_id)}
-                    onMouseLeave={() => setActiveHoverNet(null)}
-                  />
-                  {/* Connection Node Dots */}
-                  <circle
-                    cx={Number(w.svg_path.split(' ')[1])}
-                    cy={Number(w.svg_path.split(' ')[2])}
-                    r={3}
-                    fill={w.color}
-                  />
-                </g>
-              );
-            })}
-
-            {/* Render Component Symbols */}
-            {symbols.map((sym: any) => {
-              const isSelected = selectedObjectId === sym.id;
-              const isHovered = hoveredObjectId === sym.id;
-
-              return (
-                <g
-                  key={sym.id}
-                  transform={`translate(${sym.x}, ${sym.y})`}
-                  onClick={() => selectObject(sym.id)}
-                  onMouseEnter={() => hoverObject(sym.id)}
-                  onMouseLeave={() => hoverObject(null)}
-                  className="cursor-pointer group"
-                >
-                  <rect
-                    width={sym.width}
-                    height={sym.height}
-                    rx={6}
-                    fill={isSelected ? '#1E3A8A' : isHovered ? '#1E293B' : '#0F172A'}
-                    stroke={isSelected ? '#3B82F6' : isHovered ? '#60A5FA' : '#334155'}
-                    strokeWidth={isSelected ? 2.5 : 1.5}
-                    className="transition-all shadow-lg"
-                  />
-                  <text
-                    x={sym.width / 2}
-                    y={sym.height / 2 + 4}
-                    textAnchor="middle"
-                    fill={isSelected ? '#60A5FA' : '#F8FAFC'}
-                    fontSize="11"
-                    fontWeight="600"
-                    fontFamily="JetBrains Mono"
-                  >
-                    {sym.label.split('\n')[0]}
-                  </text>
-                  {sym.label.split('\n')[1] && (
-                    <text
-                      x={sym.width / 2}
-                      y={sym.height / 2 + 18}
-                      textAnchor="middle"
-                      fill="#94A3B8"
-                      fontSize="9"
-                      fontFamily="JetBrains Mono"
-                    >
-                      {sym.label.split('\n')[1]}
-                    </text>
-                  )}
-
-                  {/* Terminal Pin Connectors */}
-                  {sym.terminals?.map((t: any) => (
-                    <circle
-                      key={t.id}
-                      cx={t.x - sym.x}
-                      cy={t.y - sym.y}
-                      r={3.5}
-                      fill="#3B82F6"
-                      stroke="#1E293B"
-                      strokeWidth={1}
-                    />
-                  ))}
-                </g>
-              );
-            })}
-          </svg>
-        </div>
+  return <div className="flex min-h-0 flex-1 flex-col gap-3">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-900 p-3">
+      <div className="flex items-center gap-3"><div className="rounded-xl bg-blue-500/10 p-2 text-blue-400"><GitBranch className="h-5 w-5" /></div>
+        <div><h3 className="text-sm font-bold text-slate-200">Interactive Electrical Schematic</h3>
+          <p className="text-xs text-slate-400">React Flow · CEM IDs · terminal-level nets · schematic edits are drafts</p></div></div>
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <select aria-label="Filter wire class" value={wireFilter} onChange={(event) => setWireFilter(event.target.value as 'ALL' | WireClass)}
+          className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-slate-200">
+          <option value="ALL">All wires</option>{wireClasses.map((wireClass) => <option key={wireClass} value={wireClass}>{wireClass}</option>)}
+        </select>
+        <button type="button" onClick={addJunction} className="flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 text-slate-200 hover:bg-slate-800"><Plus className="h-3.5 w-3.5" /> Junction</button>
       </div>
     </div>
-  );
+
+    <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(0,1fr)_260px]">
+      <div className="relative min-h-[420px] overflow-hidden rounded-2xl border border-slate-800 bg-slate-950">
+        <div className="absolute left-3 top-3 z-10 rounded-lg border border-amber-500/30 bg-slate-950/90 px-2.5 py-1.5 text-[10px] text-amber-200">Draft graph · CEM connections and exports are unchanged</div>
+        <ReactFlow nodes={nodes} edges={visibleEdges} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
+          onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect}
+          onNodeClick={(_, node) => { selectObject(node.id); setSelectedEdgeId(null); }}
+          onEdgeClick={(_, edge) => setSelectedEdgeId(edge.id)}
+          onPaneClick={() => { setSelectedEdgeId(null); selectObject(null); }}
+          onSelectionChange={({ nodes: chosenNodes, edges: chosenEdges }) => {
+            if (chosenNodes[0]) selectObject(chosenNodes[0].id);
+            setSelectedEdgeId(chosenEdges[0]?.id || null);
+          }}
+          fitView fitViewOptions={{ padding: 0.15 }} minZoom={0.2} maxZoom={2.5} nodesConnectable nodesDraggable
+          selectionOnDrag panOnDrag deleteKeyCode={['Backspace', 'Delete']}>
+          <Background color="#334155" gap={24} size={1} /><MiniMap nodeColor={(node) => node.type === 'junction' ? '#FBBF24' : '#334155'} />
+          <Controls showInteractive={false} />
+        </ReactFlow>
+      </div>
+
+      <aside className="flex min-h-[220px] flex-col gap-3 rounded-2xl border border-slate-800 bg-slate-900 p-4">
+        <div className="flex items-center justify-between"><h4 className="text-sm font-semibold text-slate-100">Electrical properties</h4>
+          {selectedEdge && <button aria-label="Delete selected wire" onClick={() => { setEdges((current) => current.filter((edge) => edge.id !== selectedEdgeId)); setSelectedEdgeId(null); }} className="text-slate-400 hover:text-red-300"><X className="h-4 w-4" /></button>}</div>
+        {selectedEdge ? <>
+          <div className="text-[10px] font-mono text-slate-500">{selectedEdge.id}</div>
+          <label className="text-xs text-slate-400">Net ID<input aria-label="Net ID" value={selectedEdge.data?.net_id || ''} onChange={(event) => updateSelectedEdge({ net_id: event.target.value })}
+            className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 font-mono text-sm text-slate-100" /></label>
+          <label className="text-xs text-slate-400">Wire label<input aria-label="Wire label" value={selectedEdge.data?.net_name || ''} onChange={(event) => updateSelectedEdge({ net_name: event.target.value })}
+            className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 text-sm text-slate-100" /></label>
+          <label className="text-xs text-slate-400">Electrical class<select aria-label="Electrical class" value={selectedEdge.data?.wire_class || 'POWER'} onChange={(event) => updateSelectedEdge({ wire_class: event.target.value })}
+            className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 text-sm text-slate-100">{wireClasses.map((item) => <option key={item}>{item}</option>)}</select></label>
+          <p className="break-all text-[10px] text-slate-500">{selectedEdge.source} ({selectedEdge.sourceHandle}) → {selectedEdge.target} ({selectedEdge.targetHandle})</p>
+        </> : selectedNode ? <>
+          <div className="text-[10px] font-mono text-slate-500">Stable object ID · {selectedNode.id}</div>
+          <div className="rounded-lg border border-slate-800 bg-slate-950 p-3"><div className="text-sm font-semibold text-slate-100">{selectedNode.data.name}</div>
+            <div className="mt-1 text-xs text-slate-400">{selectedNode.data.category} / {selectedNode.data.symbolType}</div></div>
+          <div className="text-xs font-semibold text-slate-300">Terminals</div>
+          <div className="max-h-40 space-y-1 overflow-auto">{selectedNode.data.terminals.map((terminal) => <div key={terminal.id} className="flex justify-between rounded bg-slate-950 px-2 py-1.5 text-[10px] font-mono text-slate-400"><span>{terminal.id}</span><span>{terminal.x}, {terminal.y}</span></div>)}
+            {!selectedNode.data.terminals.length && <div className="text-xs text-slate-500">Junction node</div>}</div>
+          <div className="text-[10px] text-slate-500">CEM electrical properties are read-only in this schematic draft.</div>
+        </> : <p className="text-xs leading-5 text-slate-400">Select a component or wire to inspect stable IDs, terminals, net labels, and electrical class.</p>}
+
+        <div className="mt-auto border-t border-slate-800 pt-3"><div className="mb-2 flex items-center gap-2 text-xs font-semibold text-slate-300"><TriangleAlert className="h-3.5 w-3.5 text-amber-400" />Draft rule checks <span className="ml-auto font-mono text-slate-500">{violations.length}</span></div>
+          <div className="max-h-36 space-y-1 overflow-auto">{violations.length ? violations.slice(0, 8).map((violation, index) => <div key={`${violation.objectId}-${violation.code}-${index}`} className={`rounded px-2 py-1.5 text-[10px] ${violation.severity === 'ERROR' ? 'bg-red-950/60 text-red-200' : 'bg-amber-950/50 text-amber-200'}`}>{violation.message}</div>) : <div className="text-[10px] text-emerald-300">No draft graph rule issues found.</div>}</div>
+        </div>
+      </aside>
+    </div>
+  </div>;
+};
+
+export const SchematicViewer: React.FC = () => {
+  const schematicData = useProjectStore((state) => state.schematicData) as SchematicGraphData | null;
+  if (!schematicData) return <div className="p-12 text-center text-slate-500 font-mono text-sm">No schematic data loaded. Click "Generate Design" to build the schematic diagram.</div>;
+  return <div className="flex h-full min-h-0 flex-col bg-slate-950 p-4 md:p-6"><ReactFlowProvider><SchematicCanvas data={schematicData} /></ReactFlowProvider></div>;
 };

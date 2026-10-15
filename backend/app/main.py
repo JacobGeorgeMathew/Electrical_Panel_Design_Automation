@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from app.api.routes_projects import router as projects_router
 from app.api.routes_requirements import router as requirements_router
 from app.api.routes_design import router as design_router
@@ -7,6 +8,7 @@ from app.api.routes_schematic import router as schematic_router
 from app.api.routes_layout import router as layout_router
 from app.api.routes_cad import router as cad_router
 from app.api.routes_validation import router as validation_router
+from app.services.design_errors import DesignError
 
 app = FastAPI(
     title="Automated Electrical Panel Design Platform API",
@@ -14,10 +16,16 @@ app = FastAPI(
     version="1.0.0"
 )
 
+
+@app.exception_handler(DesignError)
+async def design_error_handler(request, exc: DesignError):
+    return JSONResponse(status_code=422, content=exc.as_dict())
+
 # Enable CORS for React Frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000",     # vite dev (use 3000 if you're on CRA)
+        "http://127.0.0.1:3000",  # vite dev when bound to the IPv4 loopback address
         "tauri://localhost",         # macOS / Linux
         "http://tauri.localhost",    # Windows
         "https://tauri.localhost",],

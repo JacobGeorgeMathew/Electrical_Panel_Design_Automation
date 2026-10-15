@@ -37,3 +37,10 @@ code, pre {
   box-shadow: 0 0 15px rgba(59, 130, 246, 0.6);
   border-color: #3B82F6 !important;
 }
+.editor-tool {
+  @apply inline-flex items-center gap-1.5 rounded-lg border border-slate-700 px-2.5 py-1.5 text-slate-300 transition-colors hover:bg-slate-800;
+}
+
+.editor-tool-active {
+  @apply border-blue-500/60 bg-blue-600/20 text-blue-200;
+}

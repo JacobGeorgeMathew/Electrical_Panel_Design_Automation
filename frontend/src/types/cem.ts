@@ -23,6 +23,14 @@ export interface ComponentRef {
   heat_loss: number;
   cad_model: string;
   quantity: number;
+  terminals: { id: string; x: number; y: number; z: number; [key: string]: any }[];
+}
+
+export interface ElectricalNode {
+  id: string; name: string; type: string; category: string; properties: Record<string, any>;
+}
+export interface ElectricalEdge {
+  source: string; target: string; relation: string; wire_class: string; properties: Record<string, any>;
 }
 
 export interface ConnectionRef {
@@ -62,6 +70,8 @@ export interface CanonicalEngineeringModel {
   state: string;
   requirements: RequirementItem[];
   components: ComponentRef[];
+  electrical_graph?: { project_id: string; nodes: ElectricalNode[]; edges: ElectricalEdge[] };
+  connections: ConnectionRef[];
   nets: NetRef[];
   calculations: CalculationResult[];
   physical_design_id?: string;

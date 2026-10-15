@@ -98,7 +98,7 @@ class CalculationEngine:
             unit="%",
             formula_used="ΔV% = (√3 * I * L * R / V_nom) * 100",
             status="VALID" if v_drop_pct <= 3.0 else "WARNING",
-            notes="Complies with IEC 61439 <= 3.0% threshold"
+            notes="Simplified estimate only; this is not a standards compliance determination."
         ))
 
         # 7. Estimated Heat Loss Dissipation (Watts)

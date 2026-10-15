@@ -9,15 +9,19 @@ class ComponentSelector:
     def __init__(self, comp_repo: Optional[ComponentRepository] = None):
         self.comp_repo = comp_repo or ComponentRepository()
 
-    def select_components(self, incomer_rating: float, num_feeders: int, phases: int = 3) -> List[ComponentRef]:
+    def select_components(self, incomer_rating: float, num_feeders: int, phases: int = 3,
+                          neutral_required: bool = True, busbar_rating: Optional[float] = None) -> List[ComponentRef]:
         selected = []
+        if num_feeders > 24:
+            from app.services.design_errors import DesignError
+            raise DesignError("NO_FEASIBLE_COMPONENT", "The available neutral and earth bars are rated for at most 24 outgoing ways.",
+                              {"requested_feeders": num_feeders, "available_ways": 24})
 
         # 1. Select Incomer MCCB
         mccb_candidates = self.comp_repo.filter_candidates(
             category="MCCB", min_current=incomer_rating, min_breaking_capacity=25, poles=3 if phases == 3 else 1
         )
-        if not mccb_candidates:
-            mccb_candidates = self.comp_repo.filter_candidates(category="MCCB")
+        mccb_candidates.sort(key=lambda item: (item["current_rating"], item["width"], item["id"]))
         selected_mccb = mccb_candidates[0] if mccb_candidates else None
 
         if selected_mccb:
@@ -38,6 +42,10 @@ class ComponentSelector:
                 quantity=1,
                 terminals=selected_mccb.get("terminals", [])
             ))
+        else:
+            from app.services.design_errors import DesignError
+            raise DesignError("NO_FEASIBLE_COMPONENT", "No incomer MCCB satisfies the requested rating, pole count, and breaking capacity.",
+                              {"category": "MCCB", "minimum_current_a": incomer_rating, "poles": 3 if phases == 3 else 1, "minimum_breaking_capacity_ka": 25})
 
         # 2. Select Surge Protection Device (SPD)
         spd_candidates = self.comp_repo.filter_candidates(category="SPD")
@@ -60,11 +68,14 @@ class ComponentSelector:
                 quantity=1,
                 terminals=spd.get("terminals", [])
             ))
+        else:
+            from app.services.design_errors import DesignError
+            raise DesignError("CATALOG_INCOMPLETE", "The component catalog has no DB surge protection device.", {"category": "SPD"})
 
         # 3. Select Busbar System
-        busbar_candidates = self.comp_repo.filter_candidates(category="BUSBAR", min_current=incomer_rating)
-        if not busbar_candidates:
-            busbar_candidates = self.comp_repo.filter_candidates(category="BUSBAR")
+        required_busbar = busbar_rating if busbar_rating is not None else incomer_rating
+        busbar_candidates = self.comp_repo.filter_candidates(category="BUSBAR", min_current=required_busbar)
+        busbar_candidates.sort(key=lambda item: (item["current_rating"], item["width"], item["id"]))
         selected_busbar = busbar_candidates[0] if busbar_candidates else None
 
         if selected_busbar:
@@ -85,11 +96,19 @@ class ComponentSelector:
                 quantity=1,
                 terminals=selected_busbar.get("terminals", [])
             ))
+        else:
+            from app.services.design_errors import DesignError
+            raise DesignError("NO_FEASIBLE_COMPONENT", "No busbar satisfies the calculated minimum current rating.",
+                              {"category": "BUSBAR", "minimum_current_a": required_busbar})
 
         # 4. Select Outgoing Feeders (MCBs)
-        mcb_16a = self.comp_repo.get_by_id("MCB_16A_1P_10KA") or self.comp_repo.filter_candidates("MCB")[0]
-        mcb_32a = self.comp_repo.get_by_id("MCB_32A_1P_10KA") or mcb_16a
-        mcb_40a_3p = self.comp_repo.get_by_id("MCB_40A_3P_10KA") or mcb_16a
+        mcb_16a = self.comp_repo.get_by_id("MCB_16A_1P_10KA")
+        mcb_32a = self.comp_repo.get_by_id("MCB_32A_1P_10KA")
+        mcb_40a_3p = self.comp_repo.get_by_id("MCB_40A_3P_10KA")
+        if not all((mcb_16a, mcb_32a, mcb_40a_3p)):
+            from app.services.design_errors import DesignError
+            raise DesignError("CATALOG_INCOMPLETE", "The component catalog is missing a required DB feeder breaker.",
+                              {"required_catalog_ids": ["MCB_16A_1P_10KA", "MCB_32A_1P_10KA", "MCB_40A_3P_10KA"]})
 
         for i in range(1, num_feeders + 1):
             # Mix 1P and 3P MCBs realistically across feeders
@@ -119,7 +138,7 @@ class ComponentSelector:
             ))
 
         # 5. Select Neutral and Earth Bars
-        n_bar = self.comp_repo.get_by_id("NEUTRAL_BAR_24WAY")
+        n_bar = self.comp_repo.get_by_id("NEUTRAL_BAR_24WAY") if neutral_required else None
         if n_bar:
             selected.append(ComponentRef(
                 id="NBAR01",
@@ -138,6 +157,9 @@ class ComponentSelector:
                 quantity=1,
                 terminals=n_bar.get("terminals", [])
             ))
+        elif neutral_required:
+            from app.services.design_errors import DesignError
+            raise DesignError("CATALOG_INCOMPLETE", "A neutral bar is required but none is available in the component catalog.", {"category": "NEUTRAL_BAR"})
 
         pe_bar = self.comp_repo.get_by_id("EARTH_BAR_24WAY")
         if pe_bar:
@@ -158,9 +180,15 @@ class ComponentSelector:
                 quantity=1,
                 terminals=pe_bar.get("terminals", [])
             ))
+        else:
+            from app.services.design_errors import DesignError
+            raise DesignError("CATALOG_INCOMPLETE", "The component catalog has no protective earth bar.", {"category": "EARTH_BAR"})
 
         # 6. Select Terminal Blocks
-        term = self.comp_repo.get_by_id("TERMINAL_BLOCKS_6MM") or self.comp_repo.filter_candidates("TERMINAL")[0]
+        term = self.comp_repo.get_by_id("TERMINAL_BLOCK_6MM")
+        if term is None:
+            from app.services.design_errors import DesignError
+            raise DesignError("CATALOG_INCOMPLETE", "The component catalog has no DB outgoing terminal block.", {"category": "TERMINAL"})
         for i in range(1, num_feeders + 1):
             selected.append(ComponentRef(
                 id=f"X{i:03d}",

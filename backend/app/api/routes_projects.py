@@ -37,7 +37,20 @@ def get_project(project_id: str):
 
 @router.post("")
 def create_project(data: Dict[str, Any]):
+    if not isinstance(data.get("name"), str) or not data["name"].strip():
+        raise HTTPException(status_code=422, detail={"code": "INVALID_PROJECT", "message": "Project name is required."})
+    archetype = data.get("archetype", "DB")
+    if archetype != "DB":
+        raise HTTPException(status_code=422, detail={"code": "UNSUPPORTED_ARCHETYPE", "message": "Only DB projects are currently supported."})
+    if "requirements" in data and not isinstance(data["requirements"], dict):
+        raise HTTPException(status_code=422, detail={"code": "INVALID_PROJECT", "message": "Project requirements must be an object."})
     project_id = data.get("id", f"PROJ_{len(repo.get_all()) + 1:03d}")
+    if not isinstance(project_id, str) or not project_id.strip():
+        raise HTTPException(status_code=422, detail={"code": "INVALID_PROJECT", "message": "Project ID must be a non-empty string."})
+    if repo.get_by_id(project_id):
+        raise HTTPException(status_code=409, detail={"code": "PROJECT_EXISTS", "message": f"Project '{project_id}' already exists."})
     data["id"] = project_id
+    data["archetype"] = archetype
+    data.setdefault("requirements", {})
     saved = repo.save(data)
     return saved
