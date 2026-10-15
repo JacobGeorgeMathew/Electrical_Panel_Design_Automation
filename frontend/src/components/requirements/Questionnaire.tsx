@@ -3,6 +3,16 @@ import { useProjectStore } from '../../stores/projectStore';
 import { fetchQuestionnaire } from '../../api/client';
 import { Sliders, CheckCircle2, AlertTriangle, Zap, ArrowUpRight, Cpu } from 'lucide-react';
 
+const dependencyMatches = (dep: any, value: any) => {
+  switch (dep.operator) {
+    case 'equals': return value === dep.value;
+    case 'greater_than': return value !== undefined && value !== null && value > dep.value;
+    case 'less_than': return value !== undefined && value !== null && value < dep.value;
+    case 'in': return Array.isArray(dep.value) && dep.value.includes(value);
+    default: return false;
+  }
+};
+
 export const Questionnaire: React.FC = () => {
   const {
     projectId,
@@ -11,23 +21,28 @@ export const Questionnaire: React.FC = () => {
     runDesignPipeline,
     applyChangePropagation,
     cem,
-    isGenerating
+    isGenerating,
+    errorMessage,
+    validationErrors,
+    validationWarnings,
+    setError,
+    validateCurrentRequirements,
+    createNewProject
   } = useProjectStore();
 
   const [questions, setQuestions] = useState<any[]>([]);
+  const [projectName, setProjectName] = useState('New Distribution Board');
 
   useEffect(() => {
-    fetchQuestionnaire(projectId).then(setQuestions).catch(console.error);
-  }, [projectId]);
+    fetchQuestionnaire(projectId).then(setQuestions).catch((error) => {
+      setError(`Could not load DB requirements: ${error instanceof Error ? error.message : String(error)}`);
+    });
+  }, [projectId, setError]);
 
   // Evaluate visible questions
   const visibleQuestions = questions.filter((q) => {
     if (!q.depends_on || q.depends_on.length === 0) return true;
-    return q.depends_on.every((dep: any) => {
-      const val = requirementValues[dep.field];
-      if (dep.operator === 'equals') return val === dep.value;
-      return true;
-    });
+    return q.depends_on.every((dep: any) => dependencyMatches(dep, requirementValues[dep.field]));
   });
 
   const handleValueChange = (id: string, val: any) => {
@@ -38,8 +53,12 @@ export const Questionnaire: React.FC = () => {
     applyChangePropagation(id, val);
   };
 
+  const handleValidate = async () => {
+    if (await validateCurrentRequirements()) await runDesignPipeline();
+  };
+
   return (
-    <div className="max-w-5xl mx-auto p-6 space-y-6">
+    <div className="flex-1 min-h-0 overflow-y-auto max-w-5xl w-full mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl">
         <div className="space-y-1">
           <div className="flex items-center space-x-2">
@@ -66,7 +85,7 @@ export const Questionnaire: React.FC = () => {
             onClick={() => {
               setRequirementValue('incomer_rating', 400);
               setRequirementValue('num_feeders', 16);
-              applyChangePropagation('incomer_rating', 400);
+              runDesignPipeline({ incomer_rating: 400, num_feeders: 16 });
             }}
             className="px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 text-xs font-mono rounded-lg border border-blue-500/30"
           >
@@ -74,6 +93,31 @@ export const Questionnaire: React.FC = () => {
           </button>
         </div>
       </div>
+
+      <div className="flex flex-wrap items-center gap-3 bg-slate-900/70 border border-slate-800 p-4 rounded-xl">
+        <input value={projectName} onChange={(e) => setProjectName(e.target.value)} aria-label="New project name"
+          className="min-w-64 flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" />
+        <button onClick={() => createNewProject(projectName)} disabled={isGenerating || !projectName.trim()}
+          className="px-4 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 border border-slate-700 rounded-lg text-xs font-semibold">
+          Create DB Project
+        </button>
+        <button onClick={handleValidate} disabled={isGenerating}
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg text-xs font-semibold">
+          Validate & Generate
+        </button>
+      </div>
+
+      {(errorMessage || validationErrors.length > 0) && (
+        <div role="alert" className="bg-red-950/50 border border-red-800 rounded-xl p-4 text-sm text-red-200 space-y-1">
+          {errorMessage && <p>{errorMessage}</p>}
+          {validationErrors.map((error, index) => <p key={index}>• {error}</p>)}
+        </div>
+      )}
+      {validationWarnings.length > 0 && (
+        <div role="status" className="bg-amber-950/40 border border-amber-800 rounded-xl p-4 text-sm text-amber-200 space-y-1">
+          {validationWarnings.map((warning, index) => <p key={index}>• {warning}</p>)}
+        </div>
+      )}
 
       {/* Grid of Dynamic Questions */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -117,14 +161,6 @@ export const Questionnaire: React.FC = () => {
                       {q.unit}
                     </span>
                   )}
-                  {q.id === 'num_feeders' && (
-                    <button
-                      onClick={() => handleApplyChange('num_feeders', val)}
-                      className="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl whitespace-nowrap"
-                    >
-                      Propagate
-                    </button>
-                  )}
                 </div>
               )}
 
@@ -166,6 +202,13 @@ export const Questionnaire: React.FC = () => {
                   </label>
                 </div>
               )}
+
+              <div className="flex justify-end pt-1">
+                <button onClick={() => handleApplyChange(q.id, val)} disabled={isGenerating || !cem}
+                  className="px-3 py-1.5 bg-blue-600/80 hover:bg-blue-500 disabled:opacity-40 text-white text-[11px] font-semibold rounded-lg">
+                  Review & Apply Change
+                </button>
+              </div>
             </div>
           );
         })}
@@ -176,7 +219,7 @@ export const Questionnaire: React.FC = () => {
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl space-y-4">
           <div className="flex items-center space-x-2">
             <Cpu className="w-5 h-5 text-emerald-400" />
-            <h3 className="text-sm font-bold text-slate-200">Derived Engineering Calculations (IEC 61439 Engine)</h3>
+            <h3 className="text-sm font-bold text-slate-200">Simplified Engineering Estimates</h3>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

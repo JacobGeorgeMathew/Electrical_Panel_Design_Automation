@@ -34,7 +34,7 @@ export const ValidationPanel: React.FC = () => {
             <h2 className="text-xl font-bold text-slate-100">Physical & Thermal Design Validation</h2>
           </div>
           <p className="text-xs text-slate-400">
-            Automated Shapely computational geometry collision detection & IEC thermal dissipation audit
+            Simplified geometry, identity, and thermal-density checks for this prototype design
           </p>
         </div>
 
@@ -66,7 +66,7 @@ export const ValidationPanel: React.FC = () => {
             <div>
               <div className="font-semibold text-sm">All Design Constraints Passed Cleanly!</div>
               <div className="text-xs text-emerald-400/80">
-                Zero component overlaps, clearances meet IEC margins, boundary fully contained.
+                No critical component overlap or boundary issues were reported by the implemented checks.
               </div>
             </div>
           </div>

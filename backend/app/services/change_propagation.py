@@ -1,15 +1,19 @@
-from typing import Any, Dict, List, Set, Tuple
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Set
 
 
 class ChangePropagationEngine:
     """Manages design dependency DAG and evaluates affected downstream stages when requirements change."""
 
     DEPENDENCY_DAG = {
-        "supply_voltage": ["CALC_001", "CALC_006", "NETLIST", "SCHEMATIC"],
+        "supply_voltage": ["CALCULATIONS", "NETLIST", "SCHEMATIC", "ROUTING", "VALIDATION", "CAD"],
+        "frequency": ["REQUIREMENT_VALIDATION", "CALCULATIONS"],
         "incomer_rating": ["CALC_001", "CALC_002", "CALC_003", "CALC_004", "CALC_005", "CALC_006", "CALC_007", "COMPONENT_SELECTION", "NETLIST", "PDM_PLACEMENT", "ROUTING", "VALIDATION", "BOM"],
-        "num_feeders": ["CALC_004", "CALC_007", "COMPONENT_SELECTION", "NETLIST", "SCHEMATIC", "ENCLOSURE", "PDM_PLACEMENT", "ROUTING", "VALIDATION", "BOM"],
-        "phases": ["CALC_001", "CALC_006", "COMPONENT_SELECTION", "NETLIST", "SCHEMATIC", "PDM_PLACEMENT"],
-        "ip_rating": ["ENCLOSURE", "VALIDATION"]
+        "num_feeders": ["CALCULATIONS", "COMPONENT_SELECTION", "ELECTRICAL_GRAPH", "NETLIST", "SCHEMATIC", "ENCLOSURE", "PDM_PLACEMENT", "ROUTING", "VALIDATION", "BOM", "CAD"],
+        "phases": ["CALCULATIONS", "COMPONENT_SELECTION", "ELECTRICAL_GRAPH", "NETLIST", "SCHEMATIC", "ENCLOSURE", "PDM_PLACEMENT", "ROUTING", "VALIDATION", "BOM", "CAD"],
+        "ip_rating": ["ENCLOSURE", "PDM_PLACEMENT", "ROUTING", "VALIDATION", "CAD"],
+        "neutral_required": ["COMPONENT_SELECTION", "ELECTRICAL_GRAPH", "NETLIST", "SCHEMATIC", "PDM_PLACEMENT", "ROUTING", "VALIDATION", "BOM", "CAD"],
+        "spare_capacity_pct": ["CALCULATIONS"],
     }
 
     def identify_dirty_nodes(self, modified_field: str) -> Set[str]:
@@ -20,7 +24,9 @@ class ChangePropagationEngine:
             dirty.add(node)
         return dirty
 
-    def compute_diff(self, old_cem: Dict[str, Any], new_cem: Dict[str, Any], old_pdm: Dict[str, Any], new_pdm: Dict[str, Any]) -> Dict[str, Any]:
+    def compute_diff(self, old_cem: Dict[str, Any], new_cem: Dict[str, Any], old_pdm: Dict[str, Any],
+                     new_pdm: Dict[str, Any], modified_field: str = "",
+                     old_values: Dict[str, Any] = None, new_values: Dict[str, Any] = None) -> Dict[str, Any]:
         """Calculates structural BEFORE vs AFTER diffs for UI presentation."""
 
         old_feeders = len([c for c in old_cem.get("components", []) if c.get("category") == "MCB"])
@@ -32,7 +38,15 @@ class ChangePropagationEngine:
         old_enc = f"{old_pdm.get('enclosure_width')}x{old_pdm.get('enclosure_height')}x{old_pdm.get('enclosure_depth')}"
         new_enc = f"{new_pdm.get('enclosure_width')}x{new_pdm.get('enclosure_height')}x{new_pdm.get('enclosure_depth')}"
 
+        old_values = old_values or {}
+        new_values = new_values or {}
         diffs = [
+            {
+                "property": f"Requirement: {modified_field}",
+                "before": str(old_values.get(modified_field, "N/A")),
+                "after": str(new_values.get(modified_field, "N/A")),
+                "changed": old_values.get(modified_field) != new_values.get(modified_field)
+            },
             {
                 "property": "Feeder Breakers Count",
                 "before": f"{old_feeders} MCBs",
@@ -66,7 +80,8 @@ class ChangePropagationEngine:
         ]
 
         return {
-            "timestamp": "2026-09-17T00:00:00Z",
-            "modified_field": list(self.DEPENDENCY_DAG.keys())[0],
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "modified_field": modified_field,
+            "affected_stages": sorted(self.identify_dirty_nodes(modified_field)) if modified_field else [],
             "diffs": diffs
         }

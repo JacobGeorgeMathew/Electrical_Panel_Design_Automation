@@ -27,13 +27,20 @@ class EnclosureRepository:
         return None
 
     def find_best_fit(self, min_width: float, min_height: float, min_thermal_dissipation: float, ip_rating: str = "IP54") -> Optional[Dict[str, Any]]:
+        ip_order = {"IP31": 1, "IP42": 2, "IP54": 3, "IP65": 4}
+        required_ip = ip_order.get(ip_rating)
+        if required_ip is None:
+            return None
         feasible = []
         for enc in self._enclosures:
-            if enc["mounting_plate_width"] >= min_width and enc["mounting_plate_height"] >= min_height and enc.get("max_thermal_dissipation", 999) >= min_thermal_dissipation:
+            enclosure_ip = ip_order.get(enc.get("ip_rating"), 0)
+            if (enc["mounting_plate_width"] >= min_width
+                    and enc["mounting_plate_height"] >= min_height
+                    and enc.get("max_thermal_dissipation", 0) >= min_thermal_dissipation
+                    and enclosure_ip >= required_ip):
                 feasible.append(enc)
         if not feasible:
-            # Fallback to largest available
-            return max(self._enclosures, key=lambda e: e["width"] * e["height"]) if self._enclosures else None
+            return None
         # Sort by usable surface area ascending (smallest feasible enclosure)
         feasible.sort(key=lambda e: e["width"] * e["height"])
         return feasible[0]

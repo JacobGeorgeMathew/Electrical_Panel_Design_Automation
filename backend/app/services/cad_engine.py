@@ -25,8 +25,11 @@ class CADEngine:
             "id": "CAD-BACKPLATE",
             "type": "BOX",
             "name": "Galvanized Steel Mounting Plate",
-            "position": {"x": pdm.enclosure_width / 2.0, "y": pdm.enclosure_height / 2.0, "z": 10.0},
-            "dimensions": {"width": pdm.enclosure_width - 60, "height": pdm.enclosure_height - 60, "depth": 3.0},
+            "position": {"x": pdm.mounting_plate_x + (pdm.mounting_plate_width or pdm.enclosure_width - 60) / 2.0,
+                         "y": pdm.mounting_plate_y + (pdm.mounting_plate_height or pdm.enclosure_height - 60) / 2.0,
+                         "z": pdm.mounting_plate_z + 1.5},
+            "dimensions": {"width": pdm.mounting_plate_width or pdm.enclosure_width - 60,
+                           "height": pdm.mounting_plate_height or pdm.enclosure_height - 60, "depth": 3.0},
             "color": "#94A3B8",
             "opacity": 0.9,
             "wireframe": False
@@ -38,8 +41,8 @@ class CADEngine:
                 "id": f"CAD-{rail.id}",
                 "type": "BOX",
                 "name": rail.label,
-                "position": {"x": rail.x + rail.length / 2.0, "y": rail.y, "z": rail.z},
-                "dimensions": {"width": rail.length, "height": 35.0, "depth": 7.5},
+                "position": {"x": rail.x + rail.length / 2.0, "y": rail.y + rail.profile_height / 2.0, "z": rail.z + rail.profile_depth / 2.0},
+                "dimensions": {"width": rail.length, "height": rail.profile_height, "depth": rail.profile_depth},
                 "color": "#CBD5E1",
                 "opacity": 1.0,
                 "wireframe": False
@@ -61,6 +64,8 @@ class CADEngine:
                 "opacity": 0.95,
                 "wireframe": False,
                 "category": comp.category,
+                "pdm_component_id": comp.id,
+                "cem_component_id": comp.cem_component_id,
                 "heat_loss_watts": comp.heat_loss_watts
             })
 
@@ -71,6 +76,8 @@ class CADEngine:
                 "id": f"CAD-{route.id}",
                 "type": "TUBE",
                 "name": f"Wire {route.net_name}",
+                "route_id": route.id,
+                "net_id": route.net_id,
                 "points": points,
                 "radius": 3.0 if route.wire_class == "POWER" else 1.5,
                 "color": route.color_hex,
@@ -93,11 +100,33 @@ class CADEngine:
             f"box = Part.makeBox({pdm.enclosure_width}, {pdm.enclosure_height}, {pdm.enclosure_depth})",
             "doc.addObject('Part::Feature', 'Enclosure').Shape = box",
         ]
+        plate_w = pdm.mounting_plate_width or pdm.enclosure_width - 60
+        plate_h = pdm.mounting_plate_height or pdm.enclosure_height - 60
+        plate = f"Plate-{pdm.panel_id}".replace("-", "_")
+        script.extend([
+            f"plate = Part.makeBox({plate_w}, {plate_h}, 3)",
+            f"plate.translate(App.Vector({pdm.mounting_plate_x}, {pdm.mounting_plate_y}, {pdm.mounting_plate_z}))",
+            f"doc.addObject('Part::Feature', '{plate}').Shape = plate",
+        ])
+        for rail in pdm.rails:
+            name = f"Rail-{rail.id}".replace("-", "_")
+            script.append(f"rail = Part.makeBox({rail.length}, {rail.profile_height}, {rail.profile_depth})")
+            script.append(f"rail.translate(App.Vector({rail.x}, {rail.y}, {rail.z}))")
+            script.append(f"doc.addObject('Part::Feature', '{name}').Shape = rail")
         for comp in pdm.components:
             script.append(f"# Component: {comp.name}")
             script.append(f"comp_box = Part.makeBox({comp.width}, {comp.height}, {comp.depth})")
             script.append(f"comp_box.translate(App.Vector({comp.position.x}, {comp.position.y}, {comp.position.z}))")
-            script.append(f"doc.addObject('Part::Feature', '{comp.id}').Shape = comp_box")
+            safe_id = comp.id.replace("-", "_")
+            script.append(f"doc.addObject('Part::Feature', '{safe_id}').Shape = comp_box")
+
+        for route in pdm.routes:
+            safe_id = route.id.replace("-", "_")
+            if len(route.waypoints) >= 2:
+                points = ", ".join(f"App.Vector({p.x}, {p.y}, {p.z})" for p in route.waypoints)
+                script.append(f"route_points = [{points}]")
+                script.append("route_edges = [Part.makeLine(route_points[i], route_points[i + 1]) for i in range(len(route_points) - 1)]")
+                script.append(f"doc.addObject('Part::Feature', 'Wire_{safe_id}').Shape = Part.makeCompound(route_edges)")
 
         script.append("doc.recompute()")
         script.append("Part.export(doc.Objects, 'panel_model.step')")

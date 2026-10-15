@@ -26,11 +26,13 @@ class LayoutConfig:
     device_gap_x: float = 4.0        # side clearance between DIN devices
     duct_gap_y: float = 50.0         # wiring-duct space between DIN rows
     plate_clearance: float = 20.0    # clearance around plate-mounted items
+    wire_clearance: float = 5.0      # route obstacle buffer, independent of plate spacing
     fill_factor: float = 0.85        # max rail utilisation when sizing rows
     z_din: float = 30.0
     z_plate: float = 20.0
 
     solver_time_s: float = 5.0
+    solver_deterministic_time: float = 0.5
     workers: int = 1                 # 1 = reproducible; raise for speed
     seed: int = 0
 

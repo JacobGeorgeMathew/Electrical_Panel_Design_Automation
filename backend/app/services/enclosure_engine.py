@@ -1,5 +1,6 @@
 from typing import Any, Dict, List, Optional
 from app.repositories.enclosure_repository import EnclosureRepository
+from app.models.pdm import EnclosureSpec
 
 
 class EnclosureEngine:
@@ -8,7 +9,7 @@ class EnclosureEngine:
     def __init__(self, repo: Optional[EnclosureRepository] = None):
         self.repo = repo or EnclosureRepository()
 
-    def select_enclosure(self, total_components_width: float, total_heat_loss: float, ip_rating: str = "IP54") -> Dict[str, Any]:
+    def select_enclosure(self, total_components_width: float, total_heat_loss: float, ip_rating: str = "IP54") -> Optional[EnclosureSpec]:
         # Estimate required panel dimensions
         # Estimate total DIN rail length required: total width + 30% margin for ducts/end stops
         required_width = max(500, total_components_width * 0.45)
@@ -20,4 +21,4 @@ class EnclosureEngine:
             min_thermal_dissipation=total_heat_loss,
             ip_rating=ip_rating
         )
-        return enclosure
+        return EnclosureSpec(**enclosure) if enclosure else None

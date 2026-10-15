@@ -37,6 +37,8 @@ import heapq
 import math
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
+from shapely.geometry import LineString, box
+
 from app.algorithms.layout_config import LayoutConfig
 from app.models.cem import NetRef
 from app.models.pdm import (
@@ -50,6 +52,16 @@ from app.models.pdm import (
 GridPoint = Tuple[int, int]
 Point2D = Tuple[float, float]
 Point3D = Tuple[float, float, float]
+
+
+class RoutePlanningError(RuntimeError):
+    """A connection could not be routed from its declared terminal endpoints."""
+
+    def __init__(self, connection_id: str, net_id: str, reason: str):
+        super().__init__(reason)
+        self.connection_id = connection_id
+        self.net_id = net_id
+        self.reason = reason
 
 
 class JPSThetaStarRouter:
@@ -144,108 +156,64 @@ class JPSThetaStarRouter:
         }
 
         routes: List[WireRoute] = []
-        route_counter = 1
-
         for net in nets:
             for conn in net.connections:
-
                 src = comp_map.get(conn.from_component)
                 dst = comp_map.get(conn.to_component)
+                if (src is None and conn.from_component != "PANEL_ROOT") or (dst is None and conn.to_component != "PANEL_ROOT"):
+                    missing = conn.from_component if src is None and conn.from_component != "PANEL_ROOT" else conn.to_component
+                    raise RoutePlanningError(conn.id, net.id, f"Unknown route endpoint component '{missing}'.")
 
-                if src is None or dst is None:
-                    continue
+                try:
+                    source_terminal = self._component_terminal(src, conn.from_terminal) if src else (self.grid_size, self.grid_size, 0.0)
+                    target_terminal = self._component_terminal(dst, conn.to_terminal) if dst else (self.grid_size, self.grid_size, 0.0)
+                except ValueError as exc:
+                    raise RoutePlanningError(conn.id, net.id, str(exc)) from exc
 
-                start = self._component_terminal(
-                    src,
-                    conn.from_terminal,
-                    is_source=True,
-                )
+                blocked = self._build_obstacle_grid(components, enclosure_w, enclosure_h)
+                preferred = self._build_duct_grid(rails, enclosure_w, enclosure_h)
+                source_options = self._terminal_exit_options(src, source_terminal, components,
+                                                              enclosure_w, enclosure_h) if src else [(source_terminal, source_terminal)]
+                target_options = self._terminal_exit_options(dst, target_terminal, components,
+                                                              enclosure_w, enclosure_h) if dst else [(target_terminal, target_terminal)]
 
-                goal = self._component_terminal(
-                    dst,
-                    conn.to_terminal,
-                    is_source=False,
-                )
+                route_points = None
+                for source_terminal_point, source_anchor in source_options:
+                    for target_terminal_point, target_anchor in target_options:
+                        start_grid, goal_grid = self._to_grid(source_anchor), self._to_grid(target_anchor)
+                        raw_grid_path = self._jps_search(start_grid, goal_grid, blocked, preferred,
+                                                          enclosure_w, enclosure_h)
+                        if not raw_grid_path:
+                            raw_grid_path = self._jps_search(start_grid, goal_grid, blocked, set(),
+                                                              enclosure_w, enclosure_h)
+                        if not raw_grid_path:
+                            raw_grid_path = self._astar_search(start_grid, goal_grid, blocked, set(),
+                                                                enclosure_w, enclosure_h)
+                        if not raw_grid_path:
+                            continue
 
-                # ------------------------------------------------------
-                # Build occupancy grid from actual placement.
-                # ------------------------------------------------------
+                        smoothed = self._theta_star_smooth(raw_grid_path, blocked)
+                        grid_points = self._grid_path_to_3d(smoothed, source_anchor, target_anchor)
+                        points = ([source_terminal_point] if src else []) + grid_points + ([target_terminal_point] if dst else [])
+                        points = self._remove_duplicate_points(points)
+                        if self._route_is_clear(points, components, src, dst, enclosure_w, enclosure_h, enclosure_d):
+                            route_points = points
+                            break
+                    if route_points is not None:
+                        break
 
-                blocked = self._build_obstacle_grid(
-                    components=components,
-                    start_component=src,
-                    goal_component=dst,
-                    enclosure_w=enclosure_w,
-                    enclosure_h=enclosure_h,
-                )
+                if route_points is None:
+                    raise RoutePlanningError(conn.id, net.id,
+                                             "No collision-free path fits inside the selected enclosure.")
 
-                # ------------------------------------------------------
-                # Build preferred duct corridors from actual rails.
-                # ------------------------------------------------------
-
-                preferred = self._build_duct_grid(
-                    rails=rails,
-                    enclosure_w=enclosure_w,
-                    enclosure_h=enclosure_h,
-                )
-
-                # ------------------------------------------------------
-                # Find grid path.
-                # ------------------------------------------------------
-
-                raw_grid_path = self._jps_search(
-                    start=self._to_grid(start),
-                    goal=self._to_grid(goal),
-                    blocked=blocked,
-                    preferred=preferred,
-                    enclosure_w=enclosure_w,
-                    enclosure_h=enclosure_h,
-                )
-
-                # If the preferred-duct route cannot be found, retry
-                # without the preference. This is important because
-                # preference must never become a hard routing constraint.
-                if not raw_grid_path:
-                    raw_grid_path = self._jps_search(
-                        start=self._to_grid(start),
-                        goal=self._to_grid(goal),
-                        blocked=blocked,
-                        preferred=set(),
-                        enclosure_w=enclosure_w,
-                        enclosure_h=enclosure_h,
-                    )
-
-                if not raw_grid_path:
-                    # No valid path for this connection.
-                    continue
-
-                # ------------------------------------------------------
-                # Theta* smoothing.
-                # ------------------------------------------------------
-
-                smoothed_grid_path = self._theta_star_smooth(
-                    raw_grid_path,
-                    blocked,
-                )
-
-                # ------------------------------------------------------
-                # Convert to physical coordinates.
-                # ------------------------------------------------------
-
-                waypoints = self._grid_path_to_3d(
-                    smoothed_grid_path,
-                    start,
-                    goal,
-                    src,
-                    dst,
-                )
+                waypoints = route_points
 
                 length = self._path_length(waypoints)
                 bends = self._count_bends(waypoints)
 
                 routes.append(
                     WireRoute(
-                        id=f"ROUTE-{route_counter:03d}",
+                        id=f"ROUTE-{conn.id}",
                         net_id=net.id,
                         net_name=net.name,
                         from_component=conn.from_component,
@@ -269,8 +237,6 @@ class JPSThetaStarRouter:
                     )
                 )
 
-                route_counter += 1
-
         return routes
 
     # ==================================================================
@@ -281,92 +247,131 @@ class JPSThetaStarRouter:
         self,
         comp: PhysicalComponent,
         terminal_name: Optional[str],
-        is_source: bool,
     ) -> Point3D:
         """
         Convert a placed component into a physical routing point.
 
-        Since the current PhysicalComponent model does not expose
-        terminal coordinates, the router uses the component edge as
-        the connection point.
-
-        This can later be replaced with actual terminal geometry.
+        Terminal coordinates are catalog coordinates relative to the
+        component's lower-left-front corner, in millimetres.
         """
 
-        x = comp.position.x + comp.width / 2.0
+        terminal = next((t for t in comp.terminals if t.get("id") == terminal_name), None)
+        if terminal is None:
+            raise ValueError(f"Terminal '{terminal_name}' is missing on component {comp.cem_component_id}")
+        x = comp.position.x + float(terminal.get("x", comp.width / 2.0))
+        y = comp.position.y + float(terminal.get("y", comp.height / 2.0))
+        z = comp.position.z + float(terminal.get("z", comp.depth / 2.0))
 
-        if is_source:
-            y = comp.position.y
-        else:
-            y = comp.position.y + comp.height
-
-        # Keep the routing Z consistent with the mounting system.
-        if comp.rail_id:
-            z = self.cfg.z_din
-        else:
-            z = self.cfg.z_plate
-
+        # Keep the catalog terminal exactly. Grid snapping is only for search;
+        # the returned route must begin and end at this physical terminal.
         return (
-            self._snap(x),
-            self._snap(y),
-            self._snap(z),
+            x,
+            y,
+            z,
         )
+
+    def _terminal_exit_options(self, comp: PhysicalComponent, terminal: Point3D,
+                               components: Sequence[PhysicalComponent], enclosure_w: float,
+                               enclosure_h: float) -> List[Tuple[Point3D, Point3D]]:
+        """Return short lead-outs from a real terminal to free cells outside its device."""
+        clearance = max(float(self.cfg.wire_clearance), self.grid_size)
+        local_x, local_y = terminal[0] - comp.position.x, terminal[1] - comp.position.y
+        candidates = [
+            (local_x, (comp.position.x - clearance - self.grid_size * 2, terminal[1], terminal[2]), "left"),
+            (comp.width - local_x, (comp.position.x + comp.width + clearance + self.grid_size * 2, terminal[1], terminal[2]), "right"),
+            (local_y, (terminal[0], comp.position.y - clearance - self.grid_size * 2, terminal[2]), "bottom"),
+            (comp.height - local_y, (terminal[0], comp.position.y + comp.height + clearance + self.grid_size * 2, terminal[2]), "top"),
+        ]
+        candidates.sort(key=lambda item: item[0])
+        result: List[Tuple[Point3D, Point3D]] = []
+        max_x, max_y = math.floor(enclosure_w / self.grid_size), math.floor(enclosure_h / self.grid_size)
+        for _, raw_anchor, side in candidates:
+            ax, ay, az = raw_anchor
+            if side in ("left", "bottom"):
+                ax = math.floor(ax / self.grid_size) * self.grid_size if side == "left" else ax
+                ay = math.floor(ay / self.grid_size) * self.grid_size if side == "bottom" else ay
+            else:
+                ax = math.ceil(ax / self.grid_size) * self.grid_size if side == "right" else ax
+                ay = math.ceil(ay / self.grid_size) * self.grid_size if side == "top" else ay
+            anchor = (float(ax), float(ay), az)
+            if not (0 <= anchor[0] <= max_x * self.grid_size and 0 <= anchor[1] <= max_y * self.grid_size):
+                continue
+            lead = LineString([(terminal[0], terminal[1]), (anchor[0], anchor[1])])
+            collides = False
+            for other in components:
+                if other.cem_component_id == comp.cem_component_id:
+                    continue
+                obstacle = box(other.position.x - clearance, other.position.y - clearance,
+                               other.position.x + other.width + clearance,
+                               other.position.y + other.height + clearance)
+                if lead.intersects(obstacle):
+                    collides = True
+                    break
+            if not collides:
+                result.append((terminal, anchor))
+        return result
+
+    @staticmethod
+    def _remove_duplicate_points(points: Sequence[Point3D]) -> List[Point3D]:
+        result: List[Point3D] = []
+        for point in points:
+            if not result or any(abs(point[i] - result[-1][i]) > 1e-7 for i in range(3)):
+                result.append(point)
+        return result
+
+    def _route_is_clear(self, points: Sequence[Point3D], components: Sequence[PhysicalComponent],
+                        src: Optional[PhysicalComponent], dst: Optional[PhysicalComponent],
+                        enclosure_w: float, enclosure_h: float, enclosure_d: float) -> bool:
+        if len(points) < 2:
+            return False
+        if any(not (0 <= x <= enclosure_w and 0 <= y <= enclosure_h and 0 <= z <= enclosure_d)
+               for x, y, z in points):
+            return False
+        clearance = max(float(self.cfg.wire_clearance), self.grid_size)
+        last_segment = len(points) - 2
+        for index, (a, b) in enumerate(zip(points, points[1:])):
+            segment = LineString([(a[0], a[1]), (b[0], b[1])]).buffer(clearance, cap_style="square")
+            for comp in components:
+                # Only the first and last lead segments may enter their own
+                # endpoint device; every other segment is checked normally.
+                if index == 0 and comp is src:
+                    continue
+                if index == last_segment and comp is dst:
+                    continue
+                footprint = box(comp.position.x, comp.position.y,
+                                comp.position.x + comp.width, comp.position.y + comp.height)
+                if segment.intersects(footprint):
+                    return False
+        return True
 
     # ==================================================================
     # OBSTACLE GRID
     # ==================================================================
 
-    def _build_obstacle_grid(
-        self,
-        components: Sequence[PhysicalComponent],
-        start_component: PhysicalComponent,
-        goal_component: PhysicalComponent,
-        enclosure_w: float,
-        enclosure_h: float,
-    ) -> Set[GridPoint]:
+    def _build_obstacle_grid(self, components: Sequence[PhysicalComponent], enclosure_w: float,
+                             enclosure_h: float) -> Set[GridPoint]:
         """
         Convert actual placed components into blocked routing cells.
 
-        The source and destination components are deliberately excluded
-        because the route must be able to enter/exit them.
+        Endpoint devices remain obstacles. Their terminal lead-out points are
+        routed to free cells outside the component plus wire-clearance envelope.
         """
 
         blocked: Set[GridPoint] = set()
 
-        clearance = max(
-            self.cfg.plate_clearance,
-            self.cfg.grid_mm,
-        )
+        clearance = max(self.cfg.wire_clearance, self.cfg.grid_mm)
 
+        max_gx = math.floor(enclosure_w / self.grid_size)
+        max_gy = math.floor(enclosure_h / self.grid_size)
         for comp in components:
-
-            if comp is start_component or comp is goal_component:
-                continue
-
-            x0 = max(
-                0.0,
-                comp.position.x - clearance,
-            )
-
-            y0 = max(
-                0.0,
-                comp.position.y - clearance,
-            )
-
-            x1 = min(
-                enclosure_w,
-                comp.position.x + comp.width + clearance,
-            )
-
-            y1 = min(
-                enclosure_h,
-                comp.position.y + comp.height + clearance,
-            )
-
-            gx0 = self._discretize(x0)
-            gy0 = self._discretize(y0)
-            gx1 = self._discretize(x1)
-            gy1 = self._discretize(y1)
+            x0 = max(0.0, comp.position.x - clearance)
+            y0 = max(0.0, comp.position.y - clearance)
+            x1 = min(enclosure_w, comp.position.x + comp.width + clearance)
+            y1 = min(enclosure_h, comp.position.y + comp.height + clearance)
+            gx0 = max(0, math.floor(x0 / self.grid_size))
+            gy0 = max(0, math.floor(y0 / self.grid_size))
+            gx1 = min(max_gx, math.ceil(x1 / self.grid_size))
+            gy1 = min(max_gy, math.ceil(y1 / self.grid_size))
 
             for gx in range(gx0, gx1 + 1):
                 for gy in range(gy0, gy1 + 1):
@@ -583,8 +588,8 @@ class JPSThetaStarRouter:
         8-direction movement is supported.
         """
 
-        max_x = self._discretize(enclosure_w)
-        max_y = self._discretize(enclosure_h)
+        max_x = math.floor(enclosure_w / self.grid_size)
+        max_y = math.floor(enclosure_h / self.grid_size)
 
         if start in blocked:
             blocked = set(blocked)
@@ -703,6 +708,48 @@ class JPSThetaStarRouter:
                         ),
                     )
 
+        return []
+
+    def _astar_search(self, start: GridPoint, goal: GridPoint, blocked: Set[GridPoint],
+                      preferred: Set[GridPoint], enclosure_w: float,
+                      enclosure_h: float) -> List[GridPoint]:
+        """Complete grid-search fallback for routes the JPS pruning misses."""
+        max_x, max_y = math.floor(enclosure_w / self.grid_size), math.floor(enclosure_h / self.grid_size)
+        if not self._valid_cell(start, max_x, max_y) or not self._valid_cell(goal, max_x, max_y):
+            return []
+        blocked = set(blocked)
+        blocked.discard(start)
+        blocked.discard(goal)
+        directions = ((1, 0), (-1, 0), (0, 1), (0, -1),
+                      (1, 1), (1, -1), (-1, 1), (-1, -1))
+        counter = 0
+        scores = {start: 0.0}
+        parent: Dict[GridPoint, Optional[GridPoint]] = {start: None}
+        open_heap = [(self._heuristic(start, goal), counter, start)]
+        closed: Set[GridPoint] = set()
+        while open_heap:
+            _, _, current = heapq.heappop(open_heap)
+            if current in closed:
+                continue
+            if current == goal:
+                return self._reconstruct_path(parent, goal)
+            closed.add(current)
+            for dx, dy in directions:
+                nxt = (current[0] + dx, current[1] + dy)
+                if (not self._valid_cell(nxt, max_x, max_y) or nxt in blocked or nxt in closed):
+                    continue
+                if dx and dy and ((current[0] + dx, current[1]) in blocked or
+                                  (current[0], current[1] + dy) in blocked):
+                    continue
+                step = math.sqrt(2.0) if dx and dy else 1.0
+                if nxt in preferred:
+                    step *= 0.9
+                candidate = scores[current] + step
+                if candidate < scores.get(nxt, float("inf")):
+                    scores[nxt] = candidate
+                    parent[nxt] = current
+                    counter += 1
+                    heapq.heappush(open_heap, (candidate + self._heuristic(nxt, goal), counter, nxt))
         return []
 
     # ==================================================================
@@ -1042,32 +1089,30 @@ class JPSThetaStarRouter:
         x0, y0 = a
         x1, y1 = b
 
-        dx = x1 - x0
-        dy = y1 - y0
-
-        steps = max(
-            abs(dx),
-            abs(dy),
-        )
-
-        if steps == 0:
-            return True
-
-        for i in range(steps + 1):
-
-            t = i / steps
-
-            x = round(
-                x0 + dx * t
-            )
-
-            y = round(
-                y0 + dy * t
-            )
-
+        dx, dy = x1 - x0, y1 - y0
+        nx, ny = abs(dx), abs(dy)
+        sign_x = 0 if dx == 0 else (1 if dx > 0 else -1)
+        sign_y = 0 if dy == 0 else (1 if dy > 0 else -1)
+        x, y, ix, iy = x0, y0, 0, 0
+        if (x, y) in blocked:
+            return False
+        while ix < nx or iy < ny:
+            lhs, rhs = (1 + 2 * ix) * ny, (1 + 2 * iy) * nx
+            if lhs == rhs:
+                if (x + sign_x, y) in blocked or (x, y + sign_y) in blocked:
+                    return False
+                x += sign_x
+                y += sign_y
+                ix += 1
+                iy += 1
+            elif lhs < rhs:
+                x += sign_x
+                ix += 1
+            else:
+                y += sign_y
+                iy += 1
             if (x, y) in blocked:
                 return False
-
         return True
 
     # ==================================================================
@@ -1079,8 +1124,6 @@ class JPSThetaStarRouter:
         path: Sequence[GridPoint],
         start: Point3D,
         goal: Point3D,
-        src: PhysicalComponent,
-        dst: PhysicalComponent,
     ) -> List[Point3D]:
 
         if not path:
@@ -1117,7 +1160,8 @@ class JPSThetaStarRouter:
                 )
             )
 
-        # Preserve exact physical terminal coordinates.
+        # Preserve the physical search-anchor coordinates (which are already
+        # outside all buffered component obstacles).
         points[0] = start
         points[-1] = goal
 

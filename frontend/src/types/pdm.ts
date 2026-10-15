@@ -29,6 +29,7 @@ export interface PhysicalComponent {
   heat_loss_watts: number;
   cad_model: string;
   color_hex: string;
+  terminals: { id: string; x: number; y: number; z: number; [key: string]: any }[];
 }
 
 export interface DINRail {
@@ -38,6 +39,8 @@ export interface DINRail {
   y: number;
   z: number;
   length: number;
+  profile_height: number;
+  profile_depth: number;
   orientation?: string;
 }
 
@@ -82,6 +85,11 @@ export interface PhysicalDesignModel {
   enclosure_height: number;
   enclosure_depth: number;
   ip_rating: string;
+  mounting_plate_x: number;
+  mounting_plate_y: number;
+  mounting_plate_z: number;
+  mounting_plate_width?: number;
+  mounting_plate_height?: number;
   zones: PhysicalZone[];
   components: PhysicalComponent[];
   rails: DINRail[];

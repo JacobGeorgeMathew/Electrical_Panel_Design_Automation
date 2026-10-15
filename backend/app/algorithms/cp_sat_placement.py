@@ -203,7 +203,10 @@ class CPSATPlacementOptimizer:
             m.Minimize(sum(terms))
 
         s = cp_model.CpSolver()
+        # The fixed seed, single worker, and deterministic search budget make
+        # repeat regeneration stable while retaining the configured runtime cap.
         s.parameters.max_time_in_seconds = cfg.solver_time_s
+        s.parameters.max_deterministic_time = cfg.solver_deterministic_time
         s.parameters.num_workers = cfg.workers
         s.parameters.random_seed = cfg.seed
         status = s.Solve(m)
@@ -235,6 +238,7 @@ class CPSATPlacementOptimizer:
             position=Position3D(x=x, y=y, z=z), width=c.width, height=c.height,
             depth=c.depth, rail_id=rail_id, zone_name=self.cfg.zone_of(c),
             heat_loss_watts=c.heat_loss, cad_model=c.cad_model,
+            terminals=c.terminals,
             color_hex=self.cfg.color_of(c))
 
 

@@ -15,5 +15,20 @@
       "spare_capacity_pct": 20,
       "neutral_required": true
     }
+  },
+  {
+    "name": "New Distribution Board",
+    "archetype": "DB",
+    "requirements": {
+      "supply_voltage": 415,
+      "phases": 3,
+      "frequency": 50,
+      "incomer_rating": 250,
+      "num_feeders": 12,
+      "ip_rating": "IP54",
+      "spare_capacity_pct": 20,
+      "neutral_required": true
+    },
+    "id": "PROJ_002"
   }
 ]
