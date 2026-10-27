@@ -21,7 +21,7 @@ export const Header: React.FC = () => {
     isGenerating,
     runDesignPipeline,
     cem,
-    selectedObjectId
+    selectedObjectId, projectId, isSaving, isLoadingProject
   } = useProjectStore();
 
   const tabs: { id: ViewTab; label: string; icon: React.ReactNode }[] = [
@@ -31,11 +31,12 @@ export const Header: React.FC = () => {
     { id: 'threeD', label: '3D Panel (R3F)', icon: <Box className="w-4 h-4" /> },
     { id: 'validation', label: 'Validation', icon: <ShieldCheck className="w-4 h-4" /> },
     { id: 'bom', label: 'BOM & Traceability', icon: <FileSpreadsheet className="w-4 h-4" /> },
+    { id: 'catalog', label: 'Catalog', icon: <Box className="w-4 h-4" /> },
   ];
 
   return (
     <header className="bg-slate-900/90 backdrop-blur border-b border-slate-800 sticky top-0 z-50 px-6 py-3">
-      <div className="max-w-7xl mx-auto flex items-center justify-between">
+      <div className="max-w-7xl mx-auto flex flex-wrap gap-3 items-center justify-between">
         {/* Left branding */}
         <div className="flex items-center space-x-4">
           <div className="p-2 bg-gradient-to-tr from-blue-600 to-cyan-500 rounded-xl shadow-lg shadow-blue-500/20 text-white">
@@ -60,7 +61,7 @@ export const Header: React.FC = () => {
         </div>
 
         {/* Center Tab Navigation */}
-        <nav className="flex items-center space-x-1 bg-slate-950 p-1.5 rounded-xl border border-slate-800">
+        <nav className="flex flex-wrap items-center gap-1 bg-slate-950 p-1.5 rounded-xl border border-slate-800">
           {tabs.map((t) => (
             <button
               key={t.id}
@@ -86,7 +87,7 @@ export const Header: React.FC = () => {
           )}
           <button
             onClick={() => runDesignPipeline()}
-            disabled={isGenerating}
+            disabled={isGenerating || !projectId || isSaving || isLoadingProject}
             className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-blue-600/30 transition-all disabled:opacity-50"
           >
             {isGenerating ? (

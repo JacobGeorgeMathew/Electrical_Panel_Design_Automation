@@ -1,4 +1,5 @@
 from typing import Any, Dict, List
+import math
 from app.models.pdm import PhysicalDesignModel
 
 
@@ -66,7 +67,8 @@ class CADEngine:
                 "category": comp.category,
                 "pdm_component_id": comp.id,
                 "cem_component_id": comp.cem_component_id,
-                "heat_loss_watts": comp.heat_loss_watts
+                "heat_loss_watts": comp.heat_loss_watts,
+                "rotation_xyzw": [0, 0, math.sin(math.radians(comp.rotation_deg) / 2), math.cos(math.radians(comp.rotation_deg) / 2)]
             })
 
         # 5. Wire Route Primitives (Polyline Tubes)
@@ -116,6 +118,8 @@ class CADEngine:
         for comp in pdm.components:
             script.append(f"# Component: {comp.name}")
             script.append(f"comp_box = Part.makeBox({comp.width}, {comp.height}, {comp.depth})")
+            if comp.rotation_deg:
+                script.append(f"comp_box.rotate(App.Vector({comp.width/2}, {comp.height/2}, {comp.depth/2}), App.Vector(0, 0, 1), {comp.rotation_deg})")
             script.append(f"comp_box.translate(App.Vector({comp.position.x}, {comp.position.y}, {comp.position.z}))")
             safe_id = comp.id.replace("-", "_")
             script.append(f"doc.addObject('Part::Feature', '{safe_id}').Shape = comp_box")

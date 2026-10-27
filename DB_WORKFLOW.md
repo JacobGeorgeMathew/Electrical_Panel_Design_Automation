@@ -1,12 +1,12 @@
 # Distribution Board workflow
 
-This prototype implements a single DB design flow in the existing FastAPI modular monolith. Catalogs and projects remain JSON-backed.
+This prototype implements a single DB design flow in the existing FastAPI modular monolith. Runtime catalogs, answers, requirements and project revisions are now PostgreSQL-backed through SQLAlchemy; original JSON files remain explicit import/test fixtures. See [PostgreSQL operations](docs/database/OPERATIONS.md) for migration, import, configuration and packaging instructions.
 
 ## Stage map and contracts
 
 | Stage | Existing module | Contract and behavior |
 |---|---|---|
-| Project and requirements | `app/api/routes_projects.py`, `routes_requirements.py`, `services/requirement_engine.py` | DB project payloads are saved in `sample_projects.json`; questionnaire values produce a typed `RequirementSet`. Type, option, integer, required, range, and unknown-field errors are returned before generation. |
+| Project and requirements | `app/api/routes_projects.py`, `routes_requirements.py`, `services/requirement_engine.py`, `persistence/` | DB project state, versioned questionnaire sessions and structured requirements are saved in PostgreSQL. Type, option, integer, required, range and unknown-field errors are returned before generation. |
 | Calculations and selection | `calculation_engine.py`, `component_selector.py`, `enclosure_engine.py` | Estimates and selected parts are typed CEM data. Selection must meet requested current, poles, breaking capacity, computed busbar current, DB way capacity, and IP enclosure requirements. Missing feasible catalog entries return structured design errors. |
 | Electrical graph and netlist | `graph_engine.py`, `netlist_engine.py`, `models/electrical_graph.py`, `models/cem.py` | The CEM carries graph nodes/edges, net IDs, and individual connection IDs. Component and terminal references are checked against the catalog. IDs are deterministic for a given project input. |
 | Schematic | `schematic_engine.py` | Consumes the CEM and renders wires from the same connection and terminal IDs as the netlist. The schematic is a diagram layout, not a physical drawing. |
@@ -33,4 +33,4 @@ The calculations use fixed assumptions for diversity, conductor current density,
 
 From `backend/`, run `python -m pytest`. From `frontend/`, run `npm test` and `npm run build`. Tests use deterministic requirement and geometry fixtures; the frontend tests cover viewport fit, camera reframing, editor warnings, and transform history. `TEST_CASES_FOR_TEACHER.md` includes manual classroom demonstration steps. These checks do not replace manual browser inspection at multiple window sizes.
 
-The JSON repository is suitable for the prototype and its deterministic fixtures. Database migration, deployment infrastructure, other panel archetypes, manufacturer libraries, advanced optimization, CFD, and production verification remain future work.
+Alembic adopts the existing SQL schema only after structural verification. Successful generation publishes a CEM/PDM revision and matching relational projections atomically; GET views reopen that revision without regeneration. Project controls save/close/reopen and restore historical designs as new revisions. GLB previews and FreeCAD scripts are hashed and registered in managed storage. Other panel engines, verified manufacturer libraries, richer native CAD adapters and shared deployment infrastructure remain future work.

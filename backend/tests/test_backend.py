@@ -258,27 +258,7 @@ def test_change_diff_reports_actual_field_values_and_stages():
     assert (requirement_diff["before"], requirement_diff["after"], requirement_diff["changed"]) == ("1", "2", True)
 
 
-def test_api_creates_validates_and_generates_a_db_project(tmp_path, monkeypatch):
-    from app.api import routes_design, routes_projects
-    from app.api import routes_requirements
-    from app.repositories.project_repository import ProjectRepository
-
-    repo = ProjectRepository(str(tmp_path / "projects.json"))
-    monkeypatch.setattr(routes_projects, "repo", repo)
-    orchestrator = DesignOrchestrator()
-    orchestrator.project_repo = repo
-    monkeypatch.setattr(routes_design, "orchestrator", orchestrator)
-    created = routes_projects.create_project({"name": "API DB", "archetype": "DB", "requirements": VALID_DB})
-    project_id = created["id"]
-    validation = routes_requirements.validate_requirements(project_id, VALID_DB)
-    assert validation["is_valid"]
-    design = routes_design.generate_design(project_id, {})
-    assert design["cem"]["physical_design_id"] == design["pdm"]["id"]
-
-    with pytest.raises(DesignError) as raised:
-        routes_design.generate_design(project_id, {"num_feeders": 100})
-    assert raised.value.as_dict()["error"]["code"] == "INVALID_REQUIREMENTS"
-    assert repo.get_by_id(project_id)["requirements"] == VALID_DB
+# Database-backed HTTP lifecycle/propagation tests live in test_postgres.py.
 
 
 def test_validate_placement_endpoint_checks_the_submitted_pdm_and_project_identity():
@@ -300,33 +280,3 @@ def test_validate_placement_endpoint_checks_the_submitted_pdm_and_project_identi
     with pytest.raises(DesignError) as mismatch:
         routes_design.validate_placement("OTHER-PROJECT", pdm)
     assert mismatch.value.code == "PROJECT_MISMATCH"
-
-
-def test_propagation_persists_only_successful_change_and_matches_clean_regeneration(tmp_path, monkeypatch):
-    from app.api import routes_design, routes_projects
-    from app.repositories.project_repository import ProjectRepository
-
-    repo = ProjectRepository(str(tmp_path / "projects.json"))
-    monkeypatch.setattr(routes_projects, "repo", repo)
-    orch = DesignOrchestrator()
-    orch.project_repo = repo
-    monkeypatch.setattr(routes_design, "project_repo", repo)
-    monkeypatch.setattr(routes_design, "orchestrator", orch)
-    project = routes_projects.create_project({"name": "Change DB", "archetype": "DB", "requirements": VALID_DB})
-    project_id = project["id"]
-
-    with pytest.raises(DesignError):
-        routes_design.propagate_change(project_id, {"modified_field": "num_feeders", "new_value": 100})
-    assert repo.get_by_id(project_id)["requirements"] == VALID_DB
-
-    result = routes_design.propagate_change(project_id, {"modified_field": "spare_capacity_pct", "new_value": 25})
-    report = result["diff_report"]
-    assert report["modified_field"] == "spare_capacity_pct"
-    assert report["diffs"][0]["before"] == "20"
-    assert report["diffs"][0]["after"] == "25"
-    assert repo.get_by_id(project_id)["requirements"]["spare_capacity_pct"] == 25
-
-    regenerated = orch.generate_design(project_id)
-    assert result["new_design"]["cem"] == regenerated["cem"]
-    assert result["new_design"]["pdm"] == regenerated["pdm"]
-    assert result["new_design"]["cad"] == regenerated["cad"]

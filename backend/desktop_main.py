@@ -1,6 +1,5 @@
 import argparse, multiprocessing, os, sys, threading
 import uvicorn
-from app.main import app   # adjust to your actual import path
 
 def exit_when_parent_dies():
     sys.stdin.read()       # returns when Tauri closes the pipe
@@ -19,4 +18,5 @@ if __name__ == "__main__":
     if args.exit_on_stdin_close:
         threading.Thread(target=exit_when_parent_dies, daemon=True).start()
 
+    from app.main import app
     uvicorn.run(app, host="127.0.0.1", port=args.port, log_level="info")

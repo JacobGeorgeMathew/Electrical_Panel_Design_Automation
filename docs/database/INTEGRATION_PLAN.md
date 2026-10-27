@@ -1,0 +1,12 @@
+# PostgreSQL integration plan
+
+The authoritative existing schema is `docs/database/001_core.sql`, already installed in the local `electrical_panel_design` database. There were no Alembic migrations. The runtime used JSON repositories, and the generated CEM/PDM was returned to the browser without durable snapshots.
+
+1. Add `backend/app/persistence` for configuration, SQLAlchemy mappings, session management, repositories, asset storage and a migration/import command. Freeze the existing DDL as Alembic baseline 0001; verify columns, types, defaults, PKs, unique/check constraints, FKs and indexes before stamping an existing database. Add only project draft configuration/current revision/concurrency fields in migration 0002.
+2. Import the existing catalog, enclosure, DB template/questionnaire, rules and projects into the existing tables with stable UUIDs. Preserve original files and existing published records. Retain legacy repository implementations only as explicit unit-test adapters.
+3. Inject repositories into the existing orchestrator and requirement engine. Materialize inputs and close read transactions before optimization. Save a revision, pinned dependencies, CEM/PDM snapshots and projections, validation and artifacts in one short write transaction with optimistic concurrency. Reads reconstruct saved revisions rather than recomputing designs.
+4. Add API-backed catalog, project/revision/configuration, answer and artifact operations. Keep compatible generate/validate routes; missing projects now return 404 rather than silently creating a demo project. Keep credentials and filesystem paths outside API responses.
+5. Extend the existing Zustand store, questionnaire and R3F viewer with typed requests, project reopening, saved revisions, draft status, catalog browsing, asset status and explicit configuration apply actions. Preserve existing editor drafts as UI state.
+6. Exercise migrations/import/workflow on an isolated PostgreSQL database, run backend/frontend suites and production TypeScript build, then baseline/migrate/import the existing development database without dropping it.
+
+Desktop deployment uses a separately configured PostgreSQL service. The sidecar inherits environment configuration and uses the app data directory for assets. Bundling a PostgreSQL server or switching to SQLite is a separate deployment decision, not part of this implementation. Existing geometric and electrical simplifications remain; importing demo rules does not certify them.

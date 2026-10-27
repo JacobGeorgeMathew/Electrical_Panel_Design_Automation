@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "test": "vitest run --environment jsdom",
+    "test": "vitest run --environment jsdom --maxWorkers=2 --minWorkers=1",
     "preview": "vite preview",
     "tauri": "tauri"
   },

@@ -28,6 +28,8 @@ export interface PhysicalComponent {
   zone_name: string;
   heat_loss_watts: number;
   cad_model: string;
+  cad_model_version_id?: string;
+  preview_asset?: import('./api').Artifact | null;
   color_hex: string;
   terminals: { id: string; x: number; y: number; z: number; [key: string]: any }[];
 }
