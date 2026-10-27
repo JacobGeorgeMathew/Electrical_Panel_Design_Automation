@@ -1,0 +1,117 @@
+Directory structure:
+└── jacobgeorgemathew-electrical_panel_design_automation/
+    ├── README.md
+    ├── DB_WORKFLOW.md
+    ├── LAYOUT_PIPELINE_INTEGRATION_SUMMARY.md
+    ├── TEST_CASES_FOR_TEACHER.md
+    ├── backend/
+    │   ├── desktop_main.py
+    │   ├── panel-backend.spec
+    │   ├── app/
+    │   │   ├── __init__.py
+    │   │   ├── execution_details.txt
+    │   │   ├── main.py
+    │   │   ├── algorithms/
+    │   │   │   ├── cp_sat_placement.py
+    │   │   │   ├── jps_theta_star.py
+    │   │   │   └── layout_config.py
+    │   │   ├── api/
+    │   │   │   ├── routes_cad.py
+    │   │   │   ├── routes_design.py
+    │   │   │   ├── routes_layout.py
+    │   │   │   ├── routes_projects.py
+    │   │   │   ├── routes_requirements.py
+    │   │   │   ├── routes_schematic.py
+    │   │   │   └── routes_validation.py
+    │   │   ├── data/
+    │   │   │   ├── components.json
+    │   │   │   ├── enclosures.json
+    │   │   │   ├── panel_templates.json
+    │   │   │   ├── rules.json
+    │   │   │   └── sample_projects.json
+    │   │   ├── models/
+    │   │   │   ├── cem.py
+    │   │   │   ├── electrical_graph.py
+    │   │   │   ├── pdm.py
+    │   │   │   └── requirements.py
+    │   │   ├── repositories/
+    │   │   │   ├── component_repository.py
+    │   │   │   ├── enclosure_repository.py
+    │   │   │   ├── project_repository.py
+    │   │   │   └── rule_repository.py
+    │   │   └── services/
+    │   │       ├── cad_engine.py
+    │   │       ├── calculation_engine.py
+    │   │       ├── change_propagation.py
+    │   │       ├── component_selector.py
+    │   │       ├── design_errors.py
+    │   │       ├── enclosure_engine.py
+    │   │       ├── graph_engine.py
+    │   │       ├── netlist_engine.py
+    │   │       ├── orchestrator.py
+    │   │       ├── requirement_engine.py
+    │   │       ├── schematic_engine.py
+    │   │       ├── validation_engine.py
+    │   │       └── zoning_engine.py
+    │   └── tests/
+    │       ├── __init__.py
+    │       └── test_backend.py
+    └── frontend/
+        ├── index.html
+        ├── package.json
+        ├── postcss.config.js
+        ├── tailwind.config.js
+        ├── tsconfig.json
+        ├── vite.config.ts
+        ├── .env.development
+        ├── src/
+        │   ├── App.tsx
+        │   ├── index.css
+        │   ├── main.tsx
+        │   ├── MainApp.tsx
+        │   ├── vite-env.d.ts
+        │   ├── api/
+        │   │   ├── backend.ts
+        │   │   ├── client.ts
+        │   │   └── config.ts
+        │   ├── components/
+        │   │   ├── bom/
+        │   │   │   └── BOMTable.tsx
+        │   │   ├── common/
+        │   │   │   ├── ChangePropagationModal.tsx
+        │   │   │   └── Header.tsx
+        │   │   ├── layout/
+        │   │   │   ├── Layout2DViewer.test.tsx
+        │   │   │   └── Layout2DViewer.tsx
+        │   │   ├── requirements/
+        │   │   │   └── Questionnaire.tsx
+        │   │   ├── schematic/
+        │   │   │   ├── schematicGraph.test.ts
+        │   │   │   ├── schematicGraph.ts
+        │   │   │   └── SchematicViewer.tsx
+        │   │   ├── threeD/
+        │   │   │   ├── cameraFit.test.ts
+        │   │   │   ├── cameraFit.ts
+        │   │   │   ├── editorGeometry.test.ts
+        │   │   │   ├── editorGeometry.ts
+        │   │   │   ├── Panel3DViewer.test.tsx
+        │   │   │   └── Panel3DViewer.tsx
+        │   │   └── validation/
+        │   │       └── ValidationPanel.tsx
+        │   ├── pages/
+        │   │   └── ProjectPage.tsx
+        │   ├── stores/
+        │   │   ├── projectStore.editor.test.ts
+        │   │   └── projectStore.ts
+        │   └── types/
+        │       ├── cem.ts
+        │       └── pdm.ts
+        └── src-tauri/
+            ├── build.rs
+            ├── Cargo.toml
+            ├── tauri.conf.json
+            ├── capabilities/
+            │   └── default.json
+            └── src/
+                ├── lib.rs
+                └── main.rs
