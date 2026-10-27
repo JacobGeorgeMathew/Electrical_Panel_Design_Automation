@@ -53,6 +53,11 @@ The routing and placement modules use custom Python code alongside OR-Tools. The
 
 ## E. System Architecture
 
+[![Architecture diagram](https://gitdiagram.com/diagram-badge.svg)](https://gitdiagram.com/jacobgeorgemathew/electrical_panel_design_automation?utm_source=readme&utm_medium=badge)
+
+[![Architecture diagram of jacobgeorgemathew/electrical_panel_design_automation](https://gitdiagram.com/jacobgeorgemathew/electrical_panel_design_automation/diagram.png)](https://gitdiagram.com/jacobgeorgemathew/electrical_panel_design_automation?utm_source=readme&utm_medium=picture)
+
+
 The application is a modular monolith: one FastAPI process contains the API, models, repositories, and design services. The React frontend calls the API directly using `VITE_API_BASE`.
 
 ```mermaid
