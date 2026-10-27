@@ -1,14 +1,34 @@
 import { create } from 'zustand';
 import { CanonicalEngineeringModel } from '../types/cem';
 import { PhysicalDesignModel } from '../types/pdm';
-import { createProject, generateDesign, propagateChange, validatePlacement, validateRequirements } from '../api/client';
+import { createProject, generateDesign, propagateChange, validatePlacement, validateRequirements,
+  listProjects, fetchProject, fetchDesign, fetchRevisions, restoreRevision, updateProject, fetchArchetypes, startCadJob, fetchCadJob } from '../api/client';
+import type { Artifact, Archetype, DesignPackage, ProjectConfiguration, ProjectRecord, RevisionSummary } from '../types/api';
 
-export type ViewTab = 'requirements' | 'schematic' | 'layout2d' | 'threeD' | 'validation' | 'bom';
+let projectRequest = 0;
+let openController: AbortController | null = null;
+
+export type ViewTab = 'requirements' | 'schematic' | 'layout2d' | 'threeD' | 'validation' | 'bom' | 'catalog';
 export type EditorTransform = { x: number; y: number; z: number; rotation_deg: number };
 type EditorTransformSnapshot = Record<string, EditorTransform>;
 export type EditorMode = 'select' | 'translate' | 'rotate';
 
 interface ProjectState {
+  projects: ProjectRecord[];
+  archetypes: Archetype[];
+  revisions: RevisionSummary[];
+  currentRevisionId: string | null;
+  currentRevisionNo: number | null;
+  lockVersion: number;
+  projectConfiguration: ProjectConfiguration;
+  savedRequirementValues: Record<string, any>;
+  savedConfiguration: ProjectConfiguration;
+  hasUnsavedChanges: boolean;
+  designStale: boolean;
+  isLoadingProject: boolean;
+  isSaving: boolean;
+  artifacts: Artifact[];
+  cadJobStatus: string | null;
   projectId: string;
   projectName: string;
   archetype: string;
@@ -64,30 +84,43 @@ interface ProjectState {
   resetEditorDraft: () => void;
   validateCurrentRequirements: () => Promise<boolean>;
   validateCurrentPlacement: () => Promise<void>;
-  createNewProject: (name: string) => Promise<void>;
+  createNewProject: (name: string, archetype?: string, versionId?: string) => Promise<void>;
+  initializeProjects: () => Promise<void>;
+  openProject: (id: string, discardDraft?: boolean) => Promise<void>;
+  closeProject: () => void;
+  saveCurrentProject: () => Promise<void>;
+  restoreSavedRevision: (id: string) => Promise<void>;
+  setProjectConfiguration: (configuration: ProjectConfiguration) => void;
+  refreshCadPreview: () => Promise<void>;
   
   runDesignPipeline: (overrides?: Record<string, any>) => Promise<void>;
   applyChangePropagation: (field: string, newValue: any) => Promise<void>;
 }
 
+const emptyDesign = { cem: null, pdm: null, pdmBaseline: null, schematicData: null, cadData: null,
+  currentRevisionId: null, currentRevisionNo: null, artifacts: [], editorTransforms: {}, editorHiddenComponentIds: [],
+  editorUndoStack: [], editorRedoStack: [], pendingEditorEdit: null, selectedObjectId: null, hoveredObjectId: null,
+  diffReport: null, isDiffModalOpen: false, cadJobStatus: null };
+const projectFields = (p: ProjectRecord) => ({ projectId: p.id, projectName: p.name, archetype: p.archetype,
+  requirementValues: p.requirements, savedRequirementValues: p.requirements, projectConfiguration: p.configuration,
+  savedConfiguration: p.configuration, lockVersion: p.lock_version, hasUnsavedChanges: false });
+const designFields = (d: DesignPackage) => ({ cem: d.cem, pdm: d.pdm, pdmBaseline: d.pdm, schematicData: d.schematic,
+  cadData: d.cad, currentRevisionId: d.revision_id, currentRevisionNo: d.revision_no, artifacts: d.artifacts,
+  lockVersion: d.lock_version, designStale: d.is_stale, editorTransforms: {}, editorHiddenComponentIds: [],
+  editorUndoStack: [], editorRedoStack: [], pendingEditorEdit: null });
+
 export const useProjectStore = create<ProjectState>((set, get) => ({
-  projectId: 'PROJ_DB_DEMO_001',
-  projectName: 'Main Distribution Panel DB-01',
+  projects: [], archetypes: [], revisions: [], currentRevisionId: null, currentRevisionNo: null, lockVersion: 0,
+  projectConfiguration: {}, savedRequirementValues: {}, savedConfiguration: {}, hasUnsavedChanges: false,
+  designStale: false, isLoadingProject: false, isSaving: false, artifacts: [], cadJobStatus: null,
+  projectId: '',
+  projectName: 'Select or create a project',
   archetype: 'DB',
   activeTab: 'requirements',
   selectedObjectId: null,
   hoveredObjectId: null,
   
-  requirementValues: {
-    supply_voltage: 415,
-    phases: 3,
-    frequency: 50,
-    incomer_rating: 250,
-    num_feeders: 12,
-    ip_rating: 'IP54',
-    spare_capacity_pct: 20,
-    neutral_required: true,
-  },
+  requirementValues: {},
   
   cem: null,
   pdm: null,
@@ -121,6 +154,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   setRequirementValue: (field, val) =>
     set((state) => ({
       requirementValues: { ...state.requirementValues, [field]: val },
+      hasUnsavedChanges: true, designStale: true,
     })),
     
   toggleExplodedView: () => set((state) => ({ explodedView: !state.explodedView })),
@@ -210,61 +244,135 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       set({ isValidatingPlacement: false, errorMessage: err instanceof Error ? err.message : String(err) });
     }
   },
-  createNewProject: async (name) => {
-    set({ isGenerating: true, errorMessage: null, validationErrors: [], validationWarnings: [] });
+  initializeProjects: async () => {
+    set({ isLoadingProject: true, errorMessage: null });
     try {
-      const result = await createProject(name, get().requirementValues);
-      set({ projectId: result.id, projectName: result.name, archetype: result.archetype || 'DB',
-        cem: null, pdm: null, pdmBaseline: null, schematicData: null, cadData: null, diffReport: null,
-        isDiffModalOpen: false, isGenerating: false, validationErrors: [], validationWarnings: [],
-        editorTransforms: {}, editorHiddenComponentIds: [], editorUndoStack: [], editorRedoStack: [], pendingEditorEdit: null });
-      await get().runDesignPipeline();
-    } catch (err) {
-      set({ isGenerating: false, errorMessage: err instanceof Error ? err.message : String(err) });
+      const [projects, archetypes] = await Promise.all([listProjects(), fetchArchetypes()]);
+      set({ projects, archetypes });
+      const first = projects.find((p) => p.id === 'PROJ_DB_DEMO_001') || projects.find((p) => p.archetype === 'DB');
+      if (first) await get().openProject(first.id);
+      else set({ isLoadingProject: false });
+    } catch (error) {
+      set({ isLoadingProject: false, errorMessage: error instanceof Error ? error.message : String(error) });
     }
   },
-  
-  runDesignPipeline: async (overrides) => {
-    set({ isGenerating: true, errorMessage: null, validationErrors: [], validationWarnings: [] });
+  openProject: async (id, discardDraft = false) => {
+    if (get().hasUnsavedChanges && !discardDraft) {
+      set({ errorMessage: 'Save or discard your local edits before opening a project.' }); return;
+    }
+    const token = ++projectRequest;
+    openController?.abort();
+    openController = new AbortController();
+    const signal = openController.signal;
+    set({ isLoadingProject: true, errorMessage: null });
     try {
-      const pid = get().projectId;
-      const values = overrides || get().requirementValues;
-      const result = await generateDesign(pid, values);
-      set({
-        cem: result.cem,
-        pdm: result.pdm,
-        pdmBaseline: result.pdm,
-        schematicData: result.schematic,
-        cadData: result.cad,
-        isGenerating: false,
-        editorTransforms: {}, editorHiddenComponentIds: [], editorUndoStack: [], editorRedoStack: [], pendingEditorEdit: null,
+      const p = await fetchProject(id, signal);
+      const [revisions, design] = await Promise.all([
+        fetchRevisions(id),
+        p.current_revision_id ? fetchDesign(id, signal) : Promise.resolve(null),
+      ]);
+      if (token !== projectRequest) return;
+      set({ ...emptyDesign, ...projectFields(p), ...(design ? designFields(design) : {}),
+        revisions, isLoadingProject: false, designStale: design?.is_stale || false,
+        validationErrors: [], validationWarnings: [], activeTab: 'requirements' });
+    } catch (error) {
+      if (token === projectRequest) set({ isLoadingProject: false, errorMessage: error instanceof Error ? error.message : String(error) });
+    }
+  },
+  closeProject: () => {
+    if (get().hasUnsavedChanges) { set({ errorMessage: 'Save or discard your local edits before closing.' }); return; }
+    ++projectRequest;
+    openController?.abort();
+    set({ ...emptyDesign, projectId: '', projectName: 'Select or create a project', requirementValues: {},
+      savedRequirementValues: {}, projectConfiguration: {}, savedConfiguration: {}, lockVersion: 0, revisions: [], designStale: false });
+  },
+  setProjectConfiguration: (configuration) => set({ projectConfiguration: configuration, hasUnsavedChanges: true, designStale: true }),
+  saveCurrentProject: async () => {
+    const state = get();
+    if (!state.projectId) { set({ errorMessage: 'Create a project before saving requirements.' }); return; }
+    set({ isSaving: true, errorMessage: null });
+    try {
+      const p = await updateProject(state.projectId, state.lockVersion, {
+        requirements: state.requirementValues, configuration: state.projectConfiguration,
       });
-    } catch (err) {
-      console.error(err);
-      set({ isGenerating: false, errorMessage: err instanceof Error ? err.message : String(err) });
+      set({ ...projectFields(p), isSaving: false, designStale: true, projects: await listProjects() });
+    } catch (error) {
+      set({ isSaving: false, errorMessage: error instanceof Error ? error.message : String(error) });
     }
   },
-  
-  applyChangePropagation: async (field, newValue) => {
+  createNewProject: async (name, archetype = 'DB', versionId) => {
+    set({ isSaving: true, errorMessage: null, validationErrors: [], validationWarnings: [] });
+    try {
+      const p = await createProject(name, get().requirementValues, archetype, versionId);
+      ++projectRequest;
+      set({ ...emptyDesign, ...projectFields(p), revisions: [], projects: await listProjects(),
+        isSaving: false, designStale: false, activeTab: 'requirements' });
+    } catch (error) {
+      set({ isSaving: false, errorMessage: error instanceof Error ? error.message : String(error) });
+    }
+  },
+  restoreSavedRevision: async (id) => {
+    if (get().hasUnsavedChanges) { set({ errorMessage: 'Save or discard local edits before restoring a revision.' }); return; }
+    const state = get();
+    set({ isSaving: true, errorMessage: null });
+    try {
+      const result = await restoreRevision(state.projectId, id, state.lockVersion);
+      const [project, revisions] = await Promise.all([fetchProject(state.projectId), fetchRevisions(state.projectId)]);
+      set({ ...projectFields(project), ...designFields(result), revisions, isSaving: false });
+    } catch (error) {
+      set({ isSaving: false, errorMessage: error instanceof Error ? error.message : String(error) });
+    }
+  },
+  runDesignPipeline: async (overrides) => {
+    const state = get();
+    if (!state.projectId) { set({ errorMessage: 'Create or open a project before generating a design.' }); return; }
+    const token = projectRequest;
     set({ isGenerating: true, errorMessage: null, validationErrors: [], validationWarnings: [] });
     try {
-      const pid = get().projectId;
-      const { new_design, diff_report } = await propagateChange(pid, field, newValue);
-      set((state) => ({
-        requirementValues: { ...state.requirementValues, [field]: newValue },
-        cem: new_design.cem,
-        pdm: new_design.pdm,
-        pdmBaseline: new_design.pdm,
-        schematicData: new_design.schematic,
-        cadData: new_design.cad,
-        diffReport: diff_report,
-        isDiffModalOpen: true,
-        isGenerating: false,
-        editorTransforms: {}, editorHiddenComponentIds: [], editorUndoStack: [], editorRedoStack: [], pendingEditorEdit: null,
-      }));
-    } catch (err) {
-      console.error(err);
-      set({ isGenerating: false, errorMessage: err instanceof Error ? err.message : String(err) });
+      const result = await generateDesign(state.projectId, { ...state.requirementValues, ...overrides }, state.lockVersion, state.projectConfiguration);
+      const [project, revisions] = await Promise.all([fetchProject(state.projectId), fetchRevisions(state.projectId)]);
+      if (token !== projectRequest) return;
+      set({ ...projectFields(project), ...designFields(result), revisions, isGenerating: false });
+    } catch (error) {
+      if (token === projectRequest) set({ isGenerating: false, errorMessage: error instanceof Error ? error.message : String(error) });
+    }
+  },
+  applyChangePropagation: async (field, newValue) => {
+    const state = get();
+    const otherEdits = Object.keys(state.requirementValues).some((key) => key !== field &&
+      JSON.stringify(state.requirementValues[key]) !== JSON.stringify(state.savedRequirementValues[key]));
+    if (otherEdits || JSON.stringify(state.projectConfiguration) !== JSON.stringify(state.savedConfiguration)) {
+      set({ errorMessage: 'Save other requirement and enclosure edits before reviewing a single change.' }); return;
+    }
+    set({ isGenerating: true, errorMessage: null, validationErrors: [], validationWarnings: [] });
+    try {
+      const { new_design, diff_report } = await propagateChange(state.projectId, field, newValue, state.lockVersion);
+      const [project, revisions] = await Promise.all([fetchProject(state.projectId), fetchRevisions(state.projectId)]);
+      set({ ...projectFields(project), ...designFields(new_design), revisions, diffReport: diff_report, isDiffModalOpen: true, isGenerating: false });
+    } catch (error) {
+      set({ isGenerating: false, errorMessage: error instanceof Error ? error.message : String(error) });
+    }
+  },
+  refreshCadPreview: async () => {
+    const state = get();
+    if (state.hasUnsavedChanges || state.designStale) { set({ errorMessage: 'Generate the current design before refreshing its preview.' }); return; }
+    const token = projectRequest;
+    set({ cadJobStatus: 'PENDING', errorMessage: null });
+    try {
+      const job = await startCadJob(state.projectId, state.lockVersion);
+      for (let attempt = 0; attempt < 60; attempt++) {
+        if (token !== projectRequest) return;
+        const status = await fetchCadJob(state.projectId, job.id);
+        if (status.status !== 'PENDING') {
+          if (status.status !== 'READY') throw new Error(status.error?.message || 'CAD preview generation failed.');
+          set({ artifacts: [status, ...get().artifacts.filter((a) => a.id !== status.id)], cadJobStatus: 'READY' });
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+      throw new Error('Preview generation is still pending. Reopen the project to check its saved status.');
+    } catch (error) {
+      set({ cadJobStatus: 'FAILED', errorMessage: error instanceof Error ? error.message : String(error) });
     }
   },
 }));

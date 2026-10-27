@@ -37,6 +37,9 @@ class LoadItem(BaseModel):
 class ComponentRef(BaseModel):
     id: str
     catalog_id: str
+    component_version_id: Optional[str] = None
+    product_version_id: Optional[str] = None
+    cad_model_version_id: Optional[str] = None
     name: str
     category: str
     current_rating: float

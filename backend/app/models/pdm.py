@@ -48,6 +48,8 @@ class PhysicalComponent(BaseModel):
     zone_name: str
     heat_loss_watts: float
     cad_model: str
+    cad_model_version_id: Optional[str] = None
+    preview_asset: Optional[Dict[str, Any]] = None
     color_hex: str = "#3B82F6"
     terminals: List[Dict[str, Any]] = Field(default_factory=list)
 

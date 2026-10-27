@@ -1,4 +1,6 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { AssetObject } from './AssetObject';
+import { assetUrl } from '../../api/client';
 import { Canvas, useThree } from '@react-three/fiber';
 import { Line, OrbitControls, Text, TransformControls } from '@react-three/drei';
 import { useProjectStore } from '../../stores/projectStore';
@@ -73,16 +75,17 @@ const ComponentMesh: React.FC<ComponentMeshProps> = ({ comp, transform, isSelect
   return (
     <>
       <group ref={groupRef} position={position} rotation={[0, 0, THREE.MathUtils.degToRad(transform.rotation_deg)]} visible={!hidden}>
-        <mesh
+        <group
           onClick={(event) => { event.stopPropagation(); onSelect(comp.cem_component_id); }}
           onPointerOver={(event) => { event.stopPropagation(); onHover(comp.cem_component_id); }}
-          onPointerOut={() => onHover(null)}
-        >
-          <boxGeometry args={[w, h, d]} />
-          <meshStandardMaterial color={isSelected ? '#3B82F6' : isHovered ? '#60A5FA' : comp.color_hex}
-            metalness={0.4} roughness={0.3} emissive={isSelected ? '#1D4ED8' : '#000000'}
-            emissiveIntensity={isSelected ? 0.4 : 0} />
-        </mesh>
+          onPointerOut={() => onHover(null)}>
+          {comp.preview_asset?.status === 'READY' && comp.preview_asset.url ?
+            <AssetObject url={assetUrl(comp.preview_asset.url)} scale={10}
+              fallback={<mesh><boxGeometry args={[w,h,d]}/><meshStandardMaterial color={comp.color_hex}/></mesh>}/> :
+            <mesh><boxGeometry args={[w,h,d]}/><meshStandardMaterial color={comp.color_hex} metalness={0.4} roughness={0.3}/></mesh>}
+          {(isSelected || isHovered) && <mesh><boxGeometry args={[w*1.02,h*1.02,d*1.02]}/>
+            <meshBasicMaterial color={isSelected?'#3B82F6':'#60A5FA'} wireframe/></mesh>}
+        </group>
         <Text position={[0, 0, d / 2 + 0.01]} fontSize={Math.min(w * 0.25, 0.12)} color="#FFFFFF"
           anchorX="center" anchorY="middle">{comp.cem_component_id}</Text>
       </group>
@@ -106,9 +109,13 @@ export const Panel3DViewer: React.FC = () => {
     editorTransforms, editorHiddenComponentIds, editorMode, editorSnapEnabled, editorGridMm,
     editorUndoStack, editorRedoStack, setEditorMode, toggleEditorSnap, setEditorGridMm,
     toggleComponentVisibility, updateEditorTransform, commitEditorTransform,
-    undoEditorTransform, redoEditorTransform, resetEditorDraft,
+    undoEditorTransform, redoEditorTransform, resetEditorDraft, artifacts, refreshCadPreview, cadJobStatus, designStale,
+    hasUnsavedChanges, currentRevisionId,
   } = useProjectStore();
 
+  const [showArtifact,setShowArtifact] = useState(false);
+  const preview = artifacts.find(a=>a.file_format==='GLB'&&a.status==='READY');
+  useEffect(()=>setShowArtifact(false),[currentRevisionId,designStale,editorTransforms]);
   const warnings = useMemo(() => pdm ? analyzeEditorGeometry(pdm.components, editorTransforms,
     { width: pdm.enclosure_width, height: pdm.enclosure_height, depth: pdm.enclosure_depth }) : [], [pdm, editorTransforms]);
   const selectedComponent = pdm?.components.find((component) =>
@@ -164,6 +171,16 @@ export const Panel3DViewer: React.FC = () => {
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+        <button className="editor-tool disabled:opacity-40" disabled={!preview?.url || designStale || hasUnsavedChanges || hasDraftEdits}
+          onClick={()=>setShowArtifact(v=>!v)}>{showArtifact?'Return to assembly editor':'View saved GLB'}</button>
+        <button className="editor-tool disabled:opacity-40" onClick={refreshCadPreview}
+          disabled={cadJobStatus==='PENDING'||designStale||hasUnsavedChanges}>Regenerate saved preview</button>
+        <span role="status">{cadJobStatus==='PENDING'?'Generating preview…':showArtifact?'Saved revision GLB preview':preview?'Saved preview ready':'Saved preview unavailable'}</span>
+        {preview?.url && !designStale && <a className="text-blue-300 underline" href={assetUrl(preview.url)} download>Download GLB</a>}
+        {pdm.components.some(c=>c.preview_asset&&c.preview_asset.status!=='READY')&&<span className="text-amber-300">Some component assets are unavailable; showing their bounds.</span>}
+      </div>
+      {designStale && <div role="status" className="rounded border border-amber-800 bg-amber-950/40 p-2 text-xs text-amber-200">Showing the last saved design. Generate the current requirements to refresh geometry and exports.</div>}
       {hasDraftEdits && (
         <div role="status" className="flex items-start gap-2 rounded-xl border border-amber-700 bg-amber-950/40 px-3 py-2 text-xs text-amber-200">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -198,6 +215,7 @@ export const Panel3DViewer: React.FC = () => {
             <directionalLight position={[10, 10, 10]} intensity={1.2} />
             <pointLight position={[-10, -10, 5]} intensity={0.5} />
             <OrbitControls makeDefault target={[encW / 2, encH / 2, encD / 2]} />
+            {showArtifact && preview?.url ? <AssetObject url={assetUrl(preview.url)} scale={10}/> : <>
             <mesh position={[encW / 2, encH / 2, encD / 2]}>
               <boxGeometry args={[encW, encH, encD]} />
               <meshStandardMaterial color="#1E293B" wireframe transparent opacity={0.3} />
@@ -229,6 +247,7 @@ export const Panel3DViewer: React.FC = () => {
               points={route.waypoints.map((point) => [point.x * scale, point.y * scale, point.z * scale])}
               color={hasDraftEdits ? '#F59E0B' : route.color_hex} lineWidth={1.5}
               transparent opacity={hasDraftEdits ? 0.35 : 0.8} dashed={hasDraftEdits} dashSize={0.08} gapSize={0.04} />)}
+            </>}
           </Canvas>
           {warnings.length > 0 && <div className="absolute bottom-3 left-3 rounded-lg border border-amber-700 bg-slate-950/90 px-3 py-2 text-xs text-amber-200">
             {warnings.length} placement warning{warnings.length === 1 ? '' : 's'}

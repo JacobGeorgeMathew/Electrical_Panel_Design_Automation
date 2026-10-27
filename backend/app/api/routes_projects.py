@@ -1,56 +1,56 @@
-from typing import Any, Dict, Optional
-from fastapi import APIRouter, HTTPException
-from app.repositories.project_repository import ProjectRepository
+from fastapi import APIRouter, Depends, Query
+from app.api.dependencies import get_service, get_session
+from app.models.api import ProjectCreate, ProjectUpdate, ProjectView, ExpectedVersion, AnswerSave, DesignPackage, RevisionCreate
+from app.persistence.repositories import ProjectRepository
+from app.persistence.repositories import identifier,serial
+from app.persistence import models as m
+from sqlalchemy import select
 
-router = APIRouter(prefix="/api/projects", tags=["projects"])
-repo = ProjectRepository()
+router=APIRouter(prefix='/api/projects',tags=['projects'])
 
+@router.get('',response_model=list[ProjectView])
+def list_projects(page:int=Query(1,ge=1),page_size:int=Query(50,ge=1,le=100),session=Depends(get_session)):
+    return ProjectRepository(session).list(page,page_size)
 
-@router.get("")
-def list_projects():
-    return repo.get_all()
+@router.post('',response_model=ProjectView,status_code=201)
+def create_project(data:ProjectCreate,service=Depends(get_service)):
+    return service.create(data)
 
+@router.get('/{project_id}',response_model=ProjectView)
+def get_project(project_id:str,session=Depends(get_session)):
+    return ProjectRepository(session).get(project_id)
 
-@router.get("/{project_id}")
-def get_project(project_id: str):
-    p = repo.get_by_id(project_id)
-    if not p:
-        # Create default demo project
-        p = {
-            "id": project_id,
-            "name": f"Distribution Board {project_id}",
-            "archetype": "DB",
-            "requirements": {
-                "supply_voltage": 415,
-                "phases": 3,
-                "frequency": 50,
-                "incomer_rating": 250,
-                "num_feeders": 12,
-                "ip_rating": "IP54",
-                "spare_capacity_pct": 20,
-                "neutral_required": True
-            }
-        }
-        repo.save(p)
-    return p
+@router.patch('/{project_id}',response_model=ProjectView)
+def update_project(project_id:str,data:ProjectUpdate,service=Depends(get_service)):
+    return service.update(project_id,data)
 
+@router.get('/{project_id}/answers')
+def get_answers(project_id:str,session=Depends(get_session)):
+    project=ProjectRepository(session).get(project_id)
+    return {'answers':project['requirements'],'lock_version':project['lock_version'],'archetype_version_id':project['archetype_version_id']}
 
-@router.post("")
-def create_project(data: Dict[str, Any]):
-    if not isinstance(data.get("name"), str) or not data["name"].strip():
-        raise HTTPException(status_code=422, detail={"code": "INVALID_PROJECT", "message": "Project name is required."})
-    archetype = data.get("archetype", "DB")
-    if archetype != "DB":
-        raise HTTPException(status_code=422, detail={"code": "UNSUPPORTED_ARCHETYPE", "message": "Only DB projects are currently supported."})
-    if "requirements" in data and not isinstance(data["requirements"], dict):
-        raise HTTPException(status_code=422, detail={"code": "INVALID_PROJECT", "message": "Project requirements must be an object."})
-    project_id = data.get("id", f"PROJ_{len(repo.get_all()) + 1:03d}")
-    if not isinstance(project_id, str) or not project_id.strip():
-        raise HTTPException(status_code=422, detail={"code": "INVALID_PROJECT", "message": "Project ID must be a non-empty string."})
-    if repo.get_by_id(project_id):
-        raise HTTPException(status_code=409, detail={"code": "PROJECT_EXISTS", "message": f"Project '{project_id}' already exists."})
-    data["id"] = project_id
-    data["archetype"] = archetype
-    data.setdefault("requirements", {})
-    saved = repo.save(data)
-    return saved
+@router.get('/{project_id}/requirements')
+def get_requirements(project_id:str,session=Depends(get_session)):
+    project=ProjectRepository(session).row(project_id)
+    rows=session.execute(select(m.project_requirements).where(m.project_requirements.c.project_id==project['id'],m.project_requirements.c.project_revision_id.is_(None))).mappings()
+    return {'requirements':serial([dict(r) for r in rows]),'lock_version':project['lock_version']}
+
+@router.put('/{project_id}/answers',response_model=ProjectView)
+def save_answers(project_id:str,data:AnswerSave,service=Depends(get_service)):
+    return service.update(project_id,ProjectUpdate(expected_version=data.expected_version,requirements=data.answers))
+
+@router.get('/{project_id}/revisions')
+def revisions(project_id:str,session=Depends(get_session)):
+    return ProjectRepository(session).revisions(project_id)
+
+@router.post('/{project_id}/revisions',response_model=DesignPackage,status_code=201)
+def create_revision(project_id:str,data:RevisionCreate,service=Depends(get_service)):
+    return service.generate(project_id,data.requirements,data.expected_version,data.configuration)
+
+@router.get('/{project_id}/revisions/{revision_id}',response_model=DesignPackage)
+def get_revision(project_id:str,revision_id:str,service=Depends(get_service)):
+    return service.load_revision(project_id,revision_id)
+
+@router.post('/{project_id}/revisions/{revision_id}/restore',response_model=DesignPackage,status_code=201)
+def restore_revision(project_id:str,revision_id:str,data:ExpectedVersion,service=Depends(get_service)):
+    return service.restore(project_id,revision_id,data.expected_version)

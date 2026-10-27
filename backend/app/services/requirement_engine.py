@@ -1,5 +1,6 @@
 import json
 import os
+import math
 from typing import Any, Dict, List, Tuple
 from app.models.requirements import (
     DependencyRule,
@@ -11,7 +12,10 @@ from app.models.requirements import (
 
 
 class RequirementEngine:
-    def __init__(self, templates_path: str = None):
+    def __init__(self, templates_path: str = None, templates: Dict[str, Any] = None):
+        if templates is not None:
+            self._templates = templates
+            return
         if templates_path is None:
             templates_path = os.path.join(os.path.dirname(__file__), "..", "data", "panel_templates.json")
         self.templates_path = templates_path
@@ -70,7 +74,9 @@ class RequirementEngine:
         errors = []
         warnings = []
 
-        visible_questions = self.evaluate_dependencies(questions, values)
+        effective_values = {q.id: q.default for q in questions}
+        effective_values.update(values)
+        visible_questions = self.evaluate_dependencies(questions, effective_values)
         visible_ids = {q.id for q in visible_questions}
 
         known_ids = {q.id for q in questions}
@@ -101,15 +107,17 @@ class RequirementEngine:
             # Validate the questionnaire's declared type and options before ranges.
             if val is not None:
                 type_valid = {
-                    "number": lambda x: isinstance(x, (int, float)) and not isinstance(x, bool),
+                    "number": lambda x: type(x) in (int, float) and math.isfinite(x),
                     "boolean": lambda x: isinstance(x, bool),
                     "select": lambda x: True,
                     "text": lambda x: isinstance(x, str),
+                    "object": lambda x: isinstance(x, dict),
+                    "multi_select": lambda x: isinstance(x, list),
                 }.get(q.type, lambda x: True)(val)
                 if not type_valid:
                     errors.append(f"'{q.label}' must be a {q.type} value.")
                     state = RequirementState.CONFLICTING
-                elif q.options is not None and val not in q.options:
+                elif q.options is not None and ((q.type == 'multi_select' and any(v not in q.options for v in val)) or (q.type != 'multi_select' and val not in q.options)):
                     errors.append(f"'{q.label}' must be one of: {', '.join(map(str, q.options))}.")
                     state = RequirementState.CONFLICTING
                 elif q.id in {"phases", "num_feeders", "frequency", "incomer_rating", "supply_voltage", "spare_capacity_pct"} and isinstance(val, float) and not val.is_integer():

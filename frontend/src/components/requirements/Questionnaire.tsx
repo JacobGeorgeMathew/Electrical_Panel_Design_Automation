@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useProjectStore } from '../../stores/projectStore';
-import { fetchQuestionnaire } from '../../api/client';
+import { fetchQuestionnaire, fetchArchetype } from '../../api/client';
+import type { Question } from '../../types/api';
+import { EnclosureConfigurator } from '../projects/EnclosureConfigurator';
 import { Sliders, CheckCircle2, AlertTriangle, Zap, ArrowUpRight, Cpu } from 'lucide-react';
 
 const dependencyMatches = (dep: any, value: any) => {
@@ -27,23 +29,28 @@ export const Questionnaire: React.FC = () => {
     validationWarnings,
     setError,
     validateCurrentRequirements,
-    createNewProject
+    createNewProject, archetypes, isSaving, isLoadingProject
   } = useProjectStore();
 
-  const [questions, setQuestions] = useState<any[]>([]);
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [loadingQuestions, setLoadingQuestions] = useState(true);
+  const [questionAttempt, setQuestionAttempt] = useState(0);
+  const [selectedArchetype, setSelectedArchetype] = useState('DB');
+  const busy = isGenerating || isSaving || isLoadingProject;
   const [projectName, setProjectName] = useState('New Distribution Board');
 
   useEffect(() => {
-    fetchQuestionnaire(projectId).then(setQuestions).catch((error) => {
-      setError(`Could not load DB requirements: ${error instanceof Error ? error.message : String(error)}`);
-    });
-  }, [projectId, setError]);
+    const abort = new AbortController();
+    setLoadingQuestions(true);
+    const pending = projectId ? fetchQuestionnaire(projectId, abort.signal) :
+      fetchArchetype(selectedArchetype, abort.signal).then(t => t.questions);
+    pending.then(rows => { if (!abort.signal.aborted) { setQuestions(rows); setLoadingQuestions(false); } })
+      .catch(error => { if (!abort.signal.aborted) { setLoadingQuestions(false); setError(error.message); } });
+    return () => abort.abort();
+  }, [projectId, selectedArchetype, setError, questionAttempt]);
 
-  // Evaluate visible questions
-  const visibleQuestions = questions.filter((q) => {
-    if (!q.depends_on || q.depends_on.length === 0) return true;
-    return q.depends_on.every((dep: any) => dependencyMatches(dep, requirementValues[dep.field]));
-  });
+  const effectiveValues = { ...Object.fromEntries(questions.map(q => [q.id, q.default])), ...requirementValues };
+  const visibleQuestions = questions.filter(q => q.depends_on.every(dep => dependencyMatches(dep, effectiveValues[dep.field])));
 
   const handleValueChange = (id: string, val: any) => {
     setRequirementValue(id, val);
@@ -70,38 +77,22 @@ export const Questionnaire: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={() => {
-              setRequirementValue('incomer_rating', 250);
-              setRequirementValue('num_feeders', 12);
-              runDesignPipeline({ incomer_rating: 250, num_feeders: 12 });
-            }}
-            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono rounded-lg border border-slate-700"
-          >
-            Preset: Standard DB (250A / 12 Feeder)
-          </button>
-          <button
-            onClick={() => {
-              setRequirementValue('incomer_rating', 400);
-              setRequirementValue('num_feeders', 16);
-              runDesignPipeline({ incomer_rating: 400, num_feeders: 16 });
-            }}
-            className="px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 text-xs font-mono rounded-lg border border-blue-500/30"
-          >
-            Preset: Heavy DB (400A / 16 Feeder)
-          </button>
-        </div>
+        <label className="text-xs text-slate-400">New project archetype
+          <select aria-label="New project archetype" value={selectedArchetype} disabled={busy}
+            onChange={e=>setSelectedArchetype(e.target.value)} className="ml-2 rounded border border-slate-700 bg-slate-950 p-2">
+            {archetypes.map(a=><option key={a.version_id} value={a.code} disabled={!a.supported}>{a.name} · v{a.version_no}{!a.supported?' (reference only)':''}</option>)}
+          </select>
+        </label>
       </div>
 
       <div className="flex flex-wrap items-center gap-3 bg-slate-900/70 border border-slate-800 p-4 rounded-xl">
         <input value={projectName} onChange={(e) => setProjectName(e.target.value)} aria-label="New project name"
           className="min-w-64 flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" />
-        <button onClick={() => createNewProject(projectName)} disabled={isGenerating || !projectName.trim()}
+        <button onClick={() => createNewProject(projectName, selectedArchetype, archetypes.find(a=>a.code===selectedArchetype)?.version_id)} disabled={busy || !projectName.trim() || !archetypes.some(a=>a.code===selectedArchetype&&a.supported)}
           className="px-4 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 border border-slate-700 rounded-lg text-xs font-semibold">
           Create DB Project
         </button>
-        <button onClick={handleValidate} disabled={isGenerating}
+        <button onClick={handleValidate} disabled={busy || !projectId}
           className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg text-xs font-semibold">
           Validate & Generate
         </button>
@@ -119,10 +110,13 @@ export const Questionnaire: React.FC = () => {
         </div>
       )}
 
+      <EnclosureConfigurator />
+      {loadingQuestions && <p role="status" className="text-sm text-slate-400">Loading questionnaire…</p>}
+      {!loadingQuestions && !questions.length && <p className="text-sm text-slate-400">Questionnaire unavailable. <button className="underline" onClick={()=>setQuestionAttempt(v=>v+1)}>Retry</button></p>}
       {/* Grid of Dynamic Questions */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {visibleQuestions.map((q) => {
-          const val = requirementValues[q.id] ?? q.default;
+          const val = effectiveValues[q.id];
           const isConfirmed = requirementValues[q.id] !== undefined;
 
           return (
@@ -152,7 +146,7 @@ export const Questionnaire: React.FC = () => {
                 <div className="flex items-center space-x-3">
                   <input
                     type="number"
-                    value={val}
+                    value={val ?? ''} disabled={busy} min={q.validation.min} max={q.validation.max} aria-label={q.label}
                     onChange={(e) => handleValueChange(q.id, Number(e.target.value))}
                     className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2 text-sm text-slate-100 focus:outline-none focus:border-blue-500 font-mono"
                   />
@@ -166,8 +160,8 @@ export const Questionnaire: React.FC = () => {
 
               {q.type === 'select' && (
                 <select
-                  value={val}
-                  onChange={(e) => handleValueChange(q.id, e.target.value)}
+                  value={String(val ?? '')} disabled={busy} aria-label={q.label}
+                  onChange={(e) => handleValueChange(q.id, q.options?.find(o=>String(o)===e.target.value) ?? e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2 text-sm text-slate-100 focus:outline-none focus:border-blue-500 font-mono"
                 >
                   {q.options?.map((opt: any) => (
@@ -183,7 +177,7 @@ export const Questionnaire: React.FC = () => {
                   <label className="flex items-center space-x-2 text-xs text-slate-300 cursor-pointer">
                     <input
                       type="radio"
-                      name={q.id}
+                      name={q.id} disabled={busy}
                       checked={val === true}
                       onChange={() => handleValueChange(q.id, true)}
                       className="text-blue-600 focus:ring-blue-500"
@@ -193,7 +187,7 @@ export const Questionnaire: React.FC = () => {
                   <label className="flex items-center space-x-2 text-xs text-slate-300 cursor-pointer">
                     <input
                       type="radio"
-                      name={q.id}
+                      name={q.id} disabled={busy}
                       checked={val === false}
                       onChange={() => handleValueChange(q.id, false)}
                       className="text-blue-600 focus:ring-blue-500"
@@ -203,8 +197,13 @@ export const Questionnaire: React.FC = () => {
                 </div>
               )}
 
+              {q.type === 'text' && <input aria-label={q.label} value={val ?? ''} disabled={busy} onChange={e=>handleValueChange(q.id,e.target.value)} className="w-full rounded border border-slate-700 bg-slate-950 p-2 text-sm"/>}
+              {q.type === 'multi_select' && <select multiple aria-label={q.label} disabled={busy} value={(val || []).map(String)}
+                onChange={e=>handleValueChange(q.id,Array.from(e.target.selectedOptions,o=>q.options?.find(v=>String(v)===o.value)??o.value))}
+                className="w-full rounded border border-slate-700 bg-slate-950 p-2 text-sm">{q.options?.map(o=><option key={String(o)} value={String(o)}>{String(o)}</option>)}</select>}
+              {q.type === 'object' && <ObjectAnswer value={val} disabled={busy} onChange={v=>handleValueChange(q.id,v)} onError={setError}/>}
               <div className="flex justify-end pt-1">
-                <button onClick={() => handleApplyChange(q.id, val)} disabled={isGenerating || !cem}
+                <button onClick={() => handleApplyChange(q.id, val)} disabled={busy || !cem}
                   className="px-3 py-1.5 bg-blue-600/80 hover:bg-blue-500 disabled:opacity-40 text-white text-[11px] font-semibold rounded-lg">
                   Review & Apply Change
                 </button>
@@ -238,3 +237,11 @@ export const Questionnaire: React.FC = () => {
     </div>
   );
 };
+
+function ObjectAnswer({value,disabled,onChange,onError}:{value:any;disabled:boolean;onChange:(v:any)=>void;onError:(message:string)=>void}){
+  const [text,setText]=useState(JSON.stringify(value??{},null,2));
+  useEffect(()=>setText(JSON.stringify(value??{},null,2)),[value]);
+  return <textarea aria-label="Structured answer" value={text} disabled={disabled} onChange={e=>setText(e.target.value)}
+    onBlur={()=>{try{onChange(JSON.parse(text));}catch{onError('Structured answer must contain valid JSON. Your local text is retained.');}}}
+    className="w-full rounded border border-slate-700 bg-slate-950 p-2 font-mono text-xs"/>;
+}

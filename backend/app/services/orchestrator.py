@@ -34,11 +34,12 @@ DEFAULT_PROJECT = {
 class DesignOrchestrator:
     """Coordinates typed CEM and PDM contracts for deterministic DB generation."""
 
-    def __init__(self):
-        self.project_repo = ProjectRepository()
-        self.comp_repo = ComponentRepository()
-        self.enclosure_repo = EnclosureRepository()
-        self.req_engine = RequirementEngine()
+    def __init__(self, project_repo=None, comp_repo=None, enclosure_repo=None, req_engine=None, layout_config=None):
+        self.project_repo = project_repo or ProjectRepository()
+        self.comp_repo = comp_repo or ComponentRepository()
+        self.enclosure_repo = enclosure_repo or EnclosureRepository()
+        self.req_engine = req_engine or RequirementEngine()
+        self.layout_config = layout_config or LayoutConfig()
         self.calc_engine = CalculationEngine()
         self.comp_selector = ComponentSelector(self.comp_repo)
         self.graph_engine = GraphEngine()
@@ -129,7 +130,7 @@ class DesignOrchestrator:
         connections = [(conn.from_component, conn.to_component) for net in nets for conn in net.connections
                        if conn.from_component != "PANEL_ROOT" and conn.to_component != "PANEL_ROOT"]
         plate_cfg = replace(
-            LayoutConfig(),
+            self.layout_config,
             margin_x=max(20.0, enclosure.mounting_plate_offset_x + 20.0),
             margin_bottom=max(20.0, enclosure.mounting_plate_offset_y + 10.0),
             margin_top=max(20.0, enclosure.mounting_plate_offset_y + 10.0),

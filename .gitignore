@@ -27,6 +27,8 @@ venv/
 env/
 ENV/
 backend/venv/
+.local/
+backend/.local/
 
 # IDE / OS
 .vscode/
