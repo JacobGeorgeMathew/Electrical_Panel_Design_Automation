@@ -1,0 +1,2219 @@
+
+# Unified Architecture and Methodology
+
+## Configuration-Driven, Constraint-Aware, Parametric Digital Twin Framework for Automated Electrical Panel Design
+
+---
+
+# 1. Overall System Objective
+
+The proposed system is an intelligent, configuration-driven electrical panel engineering platform that automates the transformation of **customer/project requirements into a validated electrical and physical panel design and finally into parametric CAD and engineering documentation**.
+
+The system is intended to support multiple panel archetypes rather than being restricted to distribution boards.
+
+Potential panel archetypes include:
+
+* Distribution Boards
+* Motor Control Panels
+* MCCs
+* PLC/Automation Panels
+* VFD Panels
+* ATS/AMF Panels
+* APFC/Capacitor Panels
+* HVAC Panels
+* Pump Control Panels
+* Instrumentation Panels
+* Custom Panels
+
+The first implementation may use a DB as the proof-of-concept, but the architecture must remain generalized.
+
+The fundamental principle is:
+
+> **Capture engineering requirements once, transform them into a canonical engineering model, perform deterministic engineering calculations and constraint validation, automatically synthesize the electrical topology, generate and optimize the physical design, create parametric CAD, and generate all engineering documentation from the same authoritative model.**
+
+The system should behave conceptually as a:
+
+> **Panel Design Compiler**
+
+where:
+
+```text
+High-Level Requirements
+        ↓
+Canonical Engineering Model
+        ↓
+Engineering Design
+        ↓
+Physical Design Model
+        ↓
+Parametric CAD
+        ↓
+Engineering / Manufacturing Outputs
+```
+
+---
+
+# 2. The Central Architectural Concept
+
+The complete architecture should use **two interconnected levels of digital representation**.
+
+## Level 1 — Canonical Engineering Model (CEM)
+
+The CEM represents the complete engineering definition of the panel.
+
+It contains:
+
+```text
+Requirements
+Panel Configuration
+Functional Architecture
+Electrical Topology
+Components
+Calculations
+Protection
+Cables
+Connections
+Rules
+Constraints
+Compliance
+Physical Design Reference
+Traceability
+Revision
+```
+
+The CEM is the **overall single source of truth**.
+
+## Level 2 — Physical Design Model (PDM)
+
+The PDM is derived from the CEM and represents the physical realization.
+
+It contains:
+
+```text
+Enclosure
+Functional Zones
+Components
+Positions
+Orientations
+Mounting Rails
+Mounting Plates
+Busbars
+Cable Ducts
+Cable Routes
+Clearance Envelopes
+Physical Constraints
+Thermal Data
+Accessibility
+Manufacturing Information
+Validation Results
+```
+
+The PDM becomes the direct source for parametric CAD generation.
+
+Therefore:
+
+```text
+                    CANONICAL ENGINEERING MODEL
+                              │
+             ┌────────────────┴────────────────┐
+             │                                 │
+             ▼                                 ▼
+      ELECTRICAL DESIGN                  PHYSICAL DESIGN
+             │                                 │
+             ▼                                 ▼
+         NETLIST                            PDM
+             │                                 │
+             ▼                                 ▼
+        SCHEMATIC                         CAD MODEL
+```
+
+This separation is critical.
+
+The electrical design answers:
+
+> **What is the panel supposed to do?**
+
+The physical design answers:
+
+> **How is that electrical system physically realized?**
+
+The CAD model answers:
+
+> **How is that physical design geometrically represented?**
+
+---
+
+# 3. Complete System Architecture
+
+The unified architecture is:
+
+```text
+                         ENGINEER / CUSTOMER
+                                │
+                                ▼
+                ┌─────────────────────────────┐
+                │ Requirement Engineering     │
+                │ & Configuration Interface   │
+                └──────────────┬──────────────┘
+                               │
+                               ▼
+                ┌─────────────────────────────┐
+                │ Dynamic Questionnaire       │
+                │ + Decision Tree             │
+                │ + Requirement Prioritization│
+                └──────────────┬──────────────┘
+                               │
+                               ▼
+                ┌─────────────────────────────┐
+                │ Requirement Validation      │
+                │ Completeness / Conflicts    │
+                └──────────────┬──────────────┘
+                               │
+                               ▼
+                ┌─────────────────────────────┐
+                │ CANONICAL ENGINEERING MODEL │
+                │          (CEM)              │
+                └──────────────┬──────────────┘
+                               │
+              ┌────────────────┼─────────────────┐
+              │                │                 │
+              ▼                ▼                 ▼
+       Rules Engine      Calculation Engine   Component
+                                             Selection
+              │                │                 │
+              └────────────────┼─────────────────┘
+                               ▼
+                ┌─────────────────────────────┐
+                │ Functional Architecture     │
+                │ + Module Library            │
+                │ + Graph Grammar              │
+                └──────────────┬──────────────┘
+                               │
+                               ▼
+                ┌─────────────────────────────┐
+                │ Electrical Engineering      │
+                │ Graph / Netlist              │
+                └──────────────┬──────────────┘
+                               │
+                    ┌──────────┴──────────┐
+                    ▼                     ▼
+             SCHEMATIC ENGINE       PHYSICAL DESIGN
+                    │                     │
+                    ▼                     ▼
+             Graph Layout            PDM Builder
+                    │                     │
+                    │                     ▼
+                    │               Functional Zoning
+                    │                     │
+                    │                     ▼
+                    │               Panel Size Selection
+                    │                     │
+                    │                     ▼
+                    │              Constraint Placement
+                    │                     │
+                    │                     ▼
+                    │              Layout Optimization
+                    │                     │
+                    │                     ▼
+                    │                  Routing
+                    │                     │
+                    │                     ▼
+                    │             Thermal / Accessibility
+                    │             / Manufacturing Validation
+                    │                     │
+                    │                     ▼
+                    │                    PDM
+                    │                     │
+                    └──────────┬──────────┘
+                               ▼
+                    ┌─────────────────────┐
+                    │ Unified Validation  │
+                    └──────────┬──────────┘
+                               │
+                ┌──────────────┼───────────────┐
+                ▼              ▼               ▼
+              CAD             BOM         Documentation
+                │                              │
+                ▼                              ▼
+          Parametric 3D                 Manufacturing
+          + 2D Drawings                  Documents
+                │
+                └──────────────┬───────────────┘
+                               ▼
+                    ┌─────────────────────┐
+                    │ Engineer Review     │
+                    └──────────┬──────────┘
+                               ▼
+                          APPROVAL
+                               │
+                               ▼
+                           RELEASE
+```
+
+---
+
+# 4. Layer 1 — Requirement Engineering
+
+The first layer converts incomplete and potentially ambiguous customer requirements into a structured engineering specification.
+
+The system should primarily use a **questionnaire-driven methodology**, rather than relying entirely on free-form natural-language interpretation.
+
+The questionnaire should be dynamic.
+
+For example:
+
+```text
+Panel Type?
+      ↓
+Motor Control Panel
+      ↓
+Are motors present?
+      ↓
+YES
+      ↓
+How many motors?
+      ↓
+5
+      ↓
+Motor starting method?
+      ↓
+VFD
+      ↓
+Are bypass arrangements required?
+      ↓
+YES
+```
+
+The next question is determined by previous answers.
+
+This avoids asking irrelevant questions.
+
+---
+
+# 5. Requirement Representation
+
+Every requirement should have a structured representation.
+
+Example:
+
+```text
+Requirement
+ ├── ID
+ ├── Parameter
+ ├── Value
+ ├── Unit
+ ├── Source
+ ├── Confidence
+ ├── State
+ ├── Priority
+ ├── Dependencies
+ └── Traceability
+```
+
+Requirement states should include:
+
+```text
+MISSING
+PROPOSED
+ASSUMED
+CONFIRMED
+DERIVED
+CALCULATED
+VALIDATED
+CONFLICTING
+NOT_APPLICABLE
+```
+
+This allows the system to distinguish between:
+
+> "Customer explicitly specified 250 A"
+
+and:
+
+> "System assumed 250 A because information was unavailable."
+
+That distinction is important for engineering traceability.
+
+---
+
+# 6. Dynamic Requirement Questioning
+
+The questionnaire engine should maintain a dependency graph.
+
+For example:
+
+```text
+Panel Type
+    ↓
+Motor Required?
+    ↓
+Motor Count
+    ↓
+Motor Rating
+    ↓
+Starting Method
+    ↓
+Protection
+    ↓
+Contactor / VFD
+    ↓
+Cable
+    ↓
+Thermal Load
+```
+
+The system should identify missing information based on downstream impact.
+
+---
+
+# 7. MCDA / Question Prioritization
+
+The requirement engine can use a scoring methodology to determine which unanswered question should be asked next.
+
+The priority score can consider:
+
+```text
+Engineering Impact
+Safety Criticality
+Dependency Impact
+Uncertainty
+Information Value
+User Effort
+```
+
+A question that determines several downstream engineering decisions should receive a higher priority.
+
+For example:
+
+```text
+Short-circuit level
+```
+
+may be more important than:
+
+```text
+Preferred labeling style
+```
+
+during early design.
+
+This creates an intelligent requirement-acquisition process.
+
+---
+
+# 8. Requirement Validation
+
+The system should continuously validate collected requirements.
+
+Validation includes:
+
+### Type validation
+
+Example:
+
+```text
+Current = "250 A"
+```
+
+must be recognized as a valid engineering quantity.
+
+### Range validation
+
+Example:
+
+```text
+Voltage = -50 V
+```
+
+must be rejected.
+
+### Unit validation
+
+The system should normalize:
+
+```text
+250 A
+0.25 kA
+250000 mA
+```
+
+into a canonical representation.
+
+### Dependency validation
+
+Example:
+
+```text
+Panel Type = DB
+Motor Starting Method = VFD
+```
+
+may require review depending on the selected architecture.
+
+### Cross-field consistency
+
+Example:
+
+```text
+System Voltage = 230 V
+Three-phase = TRUE
+```
+
+may require clarification.
+
+### Engineering validation
+
+Requirements should eventually be checked against engineering rules.
+
+---
+
+# 9. Canonical Engineering Model
+
+Once sufficient requirements are collected, the system creates the CEM.
+
+The CEM contains:
+
+```text
+Panel
+ │
+ ├── Requirements
+ ├── Configuration
+ ├── Archetype
+ ├── Functional Modules
+ ├── Loads
+ ├── Components
+ ├── Connections
+ ├── Nets
+ ├── Protection
+ ├── Cables
+ ├── Busbars
+ ├── Calculations
+ ├── Constraints
+ ├── Compliance
+ ├── Physical Design Reference
+ ├── Documents
+ └── Revision History
+```
+
+Every engineering object receives a persistent ID.
+
+For example:
+
+```text
+PANEL-001
+COMP-QF001
+COMP-KM001
+NET-N001
+LOAD-M001
+ZONE-Z01
+REQ-R017
+```
+
+These IDs allow all representations to remain synchronized.
+
+---
+
+# 10. Engineering Knowledge Base
+
+The system should maintain a separate engineering knowledge layer.
+
+It should contain:
+
+```text
+Electrical Rules
+Protection Rules
+Component Compatibility
+Sizing Rules
+Layout Rules
+Clearance Rules
+Thermal Rules
+Segregation Rules
+Accessibility Rules
+Manufacturing Rules
+Company Standards
+Project Standards
+Manufacturer Requirements
+```
+
+Rules should be categorized as:
+
+```text
+HARD CONSTRAINT
+SOFT CONSTRAINT
+PREFERENCE
+WARNING
+INFORMATION
+```
+
+The rule engine should remain independent from the application interface.
+
+This allows engineering rules to be updated without rewriting the software.
+
+---
+
+# 11. Calculation Engine
+
+The calculation engine operates on the CEM.
+
+Typical calculations include:
+
+```text
+Load Calculation
+Design Current
+Conductor Sizing
+Voltage Drop
+Protection Selection
+Short-Circuit Analysis
+Busbar Sizing
+Derating
+Earthing
+Transformer Sizing
+Thermal Loading
+```
+
+The output of every calculation should be stored in the CEM with:
+
+```text
+Input
+Calculation Method
+Result
+Unit
+Applicable Rule
+Timestamp
+Revision
+Validation Status
+```
+
+This creates calculation traceability.
+
+For actual engineering calculations, the software should use a deterministic calculation engine and appropriate engineering standards rather than allowing an LLM to act as the numerical authority.
+
+---
+
+# 12. Component Selection Engine
+
+Component selection occurs after the engineering requirements and calculations establish the required ratings.
+
+The selection process should be:
+
+```text
+Engineering Requirement
+        ↓
+Candidate Filtering
+        ↓
+Electrical Compatibility
+        ↓
+Mechanical Compatibility
+        ↓
+Manufacturer / Project Rules
+        ↓
+Cost / Availability
+        ↓
+Ranking
+        ↓
+Selected Component
+```
+
+Each selected component must have both:
+
+### Electrical representation
+
+```text
+Ratings
+Terminals
+Electrical function
+Protection characteristics
+Heat dissipation
+```
+
+and:
+
+### Physical representation
+
+```text
+Width
+Height
+Depth
+Mounting method
+Mounting points
+Orientation
+Clearance envelope
+CAD reference
+```
+
+This dual representation is essential for connecting electrical design to physical CAD.
+
+---
+
+# 13. Functional Module Library
+
+The system should use reusable functional modules.
+
+Examples:
+
+```text
+INCOMER
+FEEDER
+BUSBAR
+DOL_STARTER
+STAR_DELTA
+VFD_FEEDER
+PLC_POWER
+PLC_IO
+CONTROL_SUPPLY
+ATS_SOURCE
+APFC_STAGE
+TERMINAL_GROUP
+COMMUNICATION
+```
+
+Each module contains:
+
+```text
+Components
+Ports
+Connections
+Rules
+Calculation dependencies
+Schematic template
+Physical constraints
+Placement preferences
+```
+
+This provides a reusable design grammar.
+
+---
+
+# 14. Engineering Graph
+
+The CEM should contain a typed engineering graph.
+
+```text
+G = (V, E)
+```
+
+where:
+
+```text
+V = Components / Loads / Modules / Terminals
+E = Electrical / Functional / Control / Physical relationships
+```
+
+A richer representation can use multiple relationship types:
+
+```text
+CONNECTS_TO
+PROTECTED_BY
+CONTROLLED_BY
+MOUNTED_ON
+LOCATED_NEAR
+MUST_BE_SEPARATED_FROM
+FEEDS
+BELONGS_TO
+DEPENDS_ON
+```
+
+This allows both electrical and physical relationships to be represented.
+
+---
+
+# 15. Netlist Synthesis
+
+The netlist should be generated from the engineering graph.
+
+The methodology is:
+
+```text
+Requirements
+      ↓
+Functional Modules
+      ↓
+Graph Templates
+      ↓
+Graph Transformation
+      ↓
+Electrical Graph
+      ↓
+Canonical Netlist
+```
+
+Graph transformation is preferred over AI-generated connectivity because electrical connectivity must be deterministic and auditable.
+
+The netlist should contain:
+
+```text
+Source Component
+Source Terminal
+Destination Component
+Destination Terminal
+Net ID
+Voltage Domain
+Wire/Cable Data
+Routing Class
+```
+
+---
+
+# 16. Netlist Validation
+
+Before schematic or physical design generation, validate the electrical topology.
+
+Checks include:
+
+```text
+Floating terminals
+Missing connections
+Duplicate connections
+Invalid terminal connections
+Voltage-domain conflicts
+Missing PE/N
+Incorrect phase relationships
+Invalid protection topology
+Disconnected loads
+```
+
+Critical failures should prevent downstream generation.
+
+---
+
+# 17. Automatic Schematic Generation
+
+The schematic engine converts the validated netlist into an engineering drawing.
+
+Pipeline:
+
+```text
+Netlist
+ ↓
+Functional Grouping
+ ↓
+Hierarchical Decomposition
+ ↓
+Page Partitioning
+ ↓
+Graph Layering
+ ↓
+Crossing Minimization
+ ↓
+Component Placement
+ ↓
+Port Assignment
+ ↓
+Orthogonal Routing
+ ↓
+Labels / References
+ ↓
+Schematic
+```
+
+Recommended algorithms:
+
+* Graph clustering
+* Sugiyama hierarchical layout
+* Median/barycenter crossing minimization
+* Orthogonal routing
+* Local geometric optimization
+
+The schematic generator should follow applicable engineering drafting and reference-designation conventions.
+
+---
+
+# 18. Transition from Electrical Design to Physical Design
+
+After the electrical design has been established, the system constructs the:
+
+# Physical Design Model (PDM)
+
+The PDM is the bridge between electrical engineering and CAD.
+
+The PDM receives:
+
+```text
+Panel Specification
+Component Data
+Electrical Connectivity
+Logical Layout
+Design Rules
+```
+
+and converts them into:
+
+```text
+Physical Components
+Zones
+Positions
+Orientations
+Mounting Structures
+Clearances
+Routes
+Physical Constraints
+```
+
+This follows the methodology in the uploaded parametric CAD study.
+
+---
+
+# 19. Physical Design Model Structure
+
+The PDM contains:
+
+```text
+PDM
+│
+├── Enclosure
+│
+├── Functional Zones
+│
+├── Components
+│
+├── Component Positions
+│
+├── Component Orientations
+│
+├── Terminals
+│
+├── Busbars
+│
+├── DIN Rails
+│
+├── Mounting Plates
+│
+├── Cable Ducts
+│
+├── Cable Routes
+│
+├── Clearance Envelopes
+│
+├── Constraints
+│
+├── Thermal Data
+│
+├── Accessibility Data
+│
+├── Manufacturing Data
+│
+└── Validation Results
+```
+
+All physical algorithms operate on this model.
+
+---
+
+# 20. Functional Zoning
+
+Before individual component placement, the system divides the panel into functional zones.
+
+Typical zones:
+
+```text
+Incoming
+Main Protection
+Busbar
+Distribution
+Power
+Motor
+Control
+PLC
+Instrumentation
+Communication
+Termination
+Cable Entry
+```
+
+Zone assignment is based on:
+
+```text
+Component Type
+Electrical Connectivity
+Functional Module
+Design Rules
+Segregation Requirements
+User Preferences
+```
+
+Zoning reduces the physical search space.
+
+---
+
+# 21. Panel Size Determination
+
+The system should initially select from a standard enclosure library.
+
+For each candidate enclosure:
+
+```text
+Create usable area
+       ↓
+Generate functional zones
+       ↓
+Attempt component placement
+       ↓
+Check clearance
+       ↓
+Check mounting
+       ↓
+Check accessibility
+       ↓
+Check routing
+       ↓
+Estimate thermal behavior
+       ↓
+Calculate design objective
+```
+
+The system selects the smallest or most suitable feasible enclosure according to configured optimization priorities.
+
+Possible objectives:
+
+```text
+Minimum enclosure volume
+Minimum wiring length
+Thermal performance
+Accessibility
+Manufacturability
+Future expansion
+Cost
+```
+
+---
+
+# 22. Component Placement
+
+Physical placement is formulated as a constrained optimization problem.
+
+Decision variables:
+
+```text
+X
+Y
+Z
+Orientation
+```
+
+Constraints:
+
+```text
+Inside enclosure
+No overlap
+Required clearance
+Valid orientation
+Valid mounting
+Correct functional zone
+Accessibility
+Segregation
+Cable entry compatibility
+```
+
+The system should use the **clearance envelope**, not merely the physical bounding box.
+
+---
+
+# 23. CP-SAT / Constraint Programming
+
+The initial physical placement engine should use a constraint solver such as:
+
+> **Google OR-Tools CP-SAT**
+
+The solver first finds layouts that satisfy hard constraints.
+
+For example:
+
+```text
+Component A ≠ overlap Component B
+
+Distance(A,B) ≥ required clearance
+
+Component A ∈ POWER_ZONE
+
+Component B ∈ CONTROL_ZONE
+
+Terminal block ∈ CABLE_ENTRY_ZONE
+```
+
+This produces a feasible physical design.
+
+---
+
+# 24. Electrical Topology-Based Placement
+
+Electrical connectivity should influence physical placement.
+
+If:
+
+```text
+QF1 → KM1 → OL1 → TB1
+```
+
+are strongly connected electrically, the optimizer should assign a lower cost to physically separating them.
+
+Therefore the objective can contain:
+
+```text
+Electrical Proximity Cost
++
+Estimated Wire Length
++
+Zone Penalty
++
+Accessibility Penalty
+```
+
+This connects the **electrical graph** to the **physical optimization engine**.
+
+---
+
+# 25. Multi-Objective Layout Optimization
+
+Once a feasible layout is obtained, the system should optimize it.
+
+Potential objectives:
+
+```text
+Wire Length
+Enclosure Size
+Thermal Distribution
+Component Density
+Accessibility
+EMC / Segregation
+Manufacturing Complexity
+Cost
+Future Expansion
+```
+
+A suitable methodology is:
+
+> **NSGA-II + Local Search**
+
+This allows the system to generate a Pareto set of alternatives.
+
+For example:
+
+```text
+Design A → Minimum enclosure size
+
+Design B → Minimum wiring length
+
+Design C → Best thermal distribution
+
+Design D → Best manufacturing accessibility
+```
+
+The engineer can choose the preferred design.
+
+---
+
+# 26. Cable Routing
+
+Routing is performed after physical component placement.
+
+Inputs:
+
+```text
+Source Terminal
+Destination Terminal
+Cable Size
+Routing Class
+Bend Requirements
+Obstacles
+Cable Ducts
+Segregation Rules
+```
+
+Recommended method:
+
+> **A* pathfinding with orthogonal/Manhattan routing**
+
+The routing objective can minimize:
+
+```text
+Cable Length
++
+Number of Bends
++
+Crossings
++
+Congestion
++
+Segregation Penalty
+```
+
+The routing system should distinguish:
+
+```text
+Power
+Control
+Analog
+Communication
+PE
+Neutral
+```
+
+where applicable.
+
+---
+
+# 27. Physical Infrastructure Generation
+
+Once component placement is finalized, the system automatically generates:
+
+```text
+DIN Rails
+Mounting Plates
+Support Structures
+Busbar Supports
+Cable Ducts
+Gland Plates
+Cable Entry Structures
+Mounting Hardware
+```
+
+These become objects within the PDM.
+
+---
+
+# 28. Thermal-Aware Physical Design
+
+Thermal behavior should participate in the design process rather than existing only as a final check.
+
+The iterative process is:
+
+```text
+Initial Layout
+      ↓
+Thermal Estimation
+      ↓
+Thermal Penalty
+      ↓
+Optimization
+      ↓
+New Layout
+      ↓
+Thermal Estimation
+      ↓
+Validation
+```
+
+The initial implementation can use a fast engineering/empirical thermal model.
+
+Later versions can introduce:
+
+```text
+ML Thermal Surrogate
+       ↓
+Fast Optimization
+       ↓
+Higher-Fidelity Final Validation
+```
+
+---
+
+# 29. Physical Validation
+
+The PDM must undergo dedicated physical validation.
+
+Checks include:
+
+### Collision
+
+```text
+Component ↔ Component
+Component ↔ Enclosure
+Component ↔ Door
+Component ↔ Duct
+Busbar ↔ Component
+```
+
+### Clearance
+
+```text
+Required Distance
+vs.
+Actual Distance
+```
+
+### Accessibility
+
+Check whether terminals and serviceable components can be accessed.
+
+### Routing
+
+Check:
+
+```text
+Cable bend radius
+Duct capacity
+Cable crossings
+Restricted zones
+```
+
+### Mounting
+
+Check:
+
+```text
+DIN compatibility
+Mounting points
+Rail availability
+Support structures
+```
+
+A violation should be represented as structured data.
+
+Example:
+
+```json
+{
+  "type": "CLEARANCE",
+  "object_a": "QF1",
+  "object_b": "QF2",
+  "required": 30,
+  "actual": 18,
+  "status": "FAIL"
+}
+```
+
+Safety-critical violations must be hard constraints.
+
+---
+
+# 30. PDM as the CAD Source
+
+Only after the PDM is validated should the CAD generation engine create geometry.
+
+The relationship is:
+
+```text
+Validated PDM
+      ↓
+CAD Abstraction Layer
+      ↓
+Parametric Geometry
+      ↓
+3D Assembly
+      ↓
+2D Drawings
+      ↓
+CAD Exchange
+```
+
+The CAD system should not independently decide engineering placement.
+
+It should represent the already-defined physical design.
+
+---
+
+# 31. Parametric CAD Generation
+
+The CAD generator creates:
+
+```text
+Panel Assembly
+│
+├── Enclosure
+├── Door
+├── Backplate
+├── DIN Rails
+├── Components
+├── Busbars
+├── Cable Ducts
+├── Cable Routes
+└── Mounting Hardware
+```
+
+Enclosure geometry should be driven by parameters:
+
+```text
+Width
+Height
+Depth
+Sheet Thickness
+Door Dimensions
+Backplate Dimensions
+Plinth
+Mounting Positions
+Cable Entry
+Cutouts
+```
+
+A parameter change should automatically regenerate dependent geometry.
+
+This follows the parametric CAD methodology from the uploaded study.
+
+---
+
+# 32. CAD Abstraction Layer
+
+The engineering system should not be tightly coupled to one CAD platform.
+
+Use:
+
+```text
+                 CAD Interface
+                      │
+       ┌──────────────┼──────────────┐
+       ▼              ▼              ▼
+   FreeCAD        SolidWorks       Inventor
+       │              │              │
+       └──────────────┼──────────────┘
+                      ▼
+                STEP / Other
+```
+
+For an initial research prototype:
+
+```text
+Python
++
+FreeCAD
++
+OpenCascade
++
+STEP
+```
+
+is a practical implementation route.
+
+Manufacturer CAD models should be associated with component records.
+
+---
+
+# 33. Cross-Domain Synchronization
+
+The system must maintain synchronization between:
+
+```text
+Requirement
+     ↕
+CEM
+     ↕
+Electrical Graph
+     ↕
+Netlist
+     ↕
+Schematic
+     ↕
+PDM
+     ↕
+CAD
+     ↕
+BOM
+     ↕
+Manufacturing Documentation
+```
+
+The same persistent component ID should be used everywhere.
+
+Example:
+
+```text
+COMP-QF001
+```
+
+must refer to the same object in:
+
+```text
+Netlist
+Schematic
+PDM
+CAD
+BOM
+Wiring List
+```
+
+This eliminates duplicate sources of truth.
+
+---
+
+# 34. Change Propagation Engine
+
+The system should maintain a dependency DAG.
+
+Example:
+
+```text
+Requirement
+    ↓
+Load
+    ↓
+Current
+    ↓
+Protection
+    ↓
+Component
+    ↓
+Thermal Load
+    ↓
+PDM
+    ↓
+Placement
+    ↓
+Routing
+    ↓
+CAD
+    ↓
+BOM
+    ↓
+Documents
+```
+
+If a requirement changes, the system identifies all affected objects.
+
+For example:
+
+```text
+250 A → 400 A incomer
+```
+
+may trigger:
+
+```text
+Protection
+Busbar
+Cable
+Component Selection
+Thermal Load
+Physical Dimensions
+Placement
+Routing
+CAD
+BOM
+Documentation
+```
+
+The system should regenerate only the affected portions where possible.
+
+This provides **incremental engineering regeneration**.
+
+---
+
+# 35. Unified Validation
+
+Validation should occur throughout the pipeline.
+
+```text
+Requirement Validation
+        ↓
+Engineering Validation
+        ↓
+Netlist Validation
+        ↓
+Component Validation
+        ↓
+Schematic Validation
+        ↓
+PDM Validation
+        ↓
+Thermal Validation
+        ↓
+CAD Validation
+        ↓
+Cross-Domain Validation
+```
+
+The final cross-domain validator should verify that:
+
+```text
+Electrical Design
+=
+Schematic
+=
+Physical Design
+=
+CAD
+=
+BOM
+=
+Manufacturing Data
+```
+
+with respect to their intended representations.
+
+---
+
+# 36. Documentation Generation
+
+All documents must be generated from the validated model.
+
+Outputs include:
+
+```text
+Single Line Diagram
+Electrical Schematic
+General Arrangement
+Panel Layout
+3D CAD
+BOM
+Load Schedule
+Cable Schedule
+Terminal Schedule
+Wiring Schedule
+Mounting Drawing
+Cutout Drawing
+Drilling Information
+Engineering Calculations
+Validation Report
+Manufacturing Documentation
+```
+
+The uploaded requirements architecture specifically identifies these engineering outputs as downstream products of the canonical model.
+
+---
+
+# 37. Revision and Traceability
+
+Every design must have a revision history.
+
+Example:
+
+```text
+REV-03
+
+Requirement:
+Incomer changed from 250 A to 400 A
+
+Affected:
+REQ-017
+CALC-023
+COMP-QF001
+BUS-001
+PDM-001
+CAD-001
+BOM-001
+
+Status:
+Recalculated
+Reoptimized
+Revalidated
+```
+
+The engineer should be able to see:
+
+> **Why did this component change?**
+
+and:
+
+> **Which documents are affected by this requirement change?**
+
+---
+
+# 38. AI Layer
+
+AI should operate as an assistance layer around the deterministic engineering architecture.
+
+AI can assist with:
+
+### Requirement interpretation
+
+Convert natural-language input into candidate structured requirements.
+
+### Requirement questioning
+
+Suggest the next important question.
+
+### Engineering explanation
+
+Explain why a component or layout was selected.
+
+### Design recommendation
+
+Recommend:
+
+```text
+Panel Archetype
+Functional Module
+Component
+Similar Existing Design
+Layout Pattern
+```
+
+### Document assistance
+
+Generate engineering descriptions and reports.
+
+### Natural-language modification
+
+Example:
+
+> "Increase the number of outgoing feeders to 16."
+
+The AI converts this into a structured model modification.
+
+The deterministic system then evaluates the consequences.
+
+The architecture should therefore be:
+
+```text
+Human / AI
+     ↓
+Structured Requirement Change
+     ↓
+CEM
+     ↓
+Deterministic Engineering
+     ↓
+Validation
+```
+
+not:
+
+```text
+AI
+ ↓
+Final Panel Design
+```
+
+---
+
+# 39. Semantic Panel Representation
+
+An additional intelligence layer can represent each panel using engineering features such as:
+
+```text
+Power Intensity
+Automation Intensity
+Control Complexity
+Thermal Intensity
+Wiring Complexity
+Physical Density
+Communication Intensity
+Modularity
+Protection Complexity
+Motor Content
+```
+
+This can create an engineering feature vector.
+
+A graph-based embedding can additionally encode:
+
+```text
+Component Relationships
+Electrical Topology
+Functional Modules
+Physical Relationships
+```
+
+This allows:
+
+```text
+Panel Similarity
+Design Retrieval
+Design Reuse
+Configuration Recommendation
+Component Recommendation
+Anomaly Detection
+Design Classification
+```
+
+However, this semantic layer remains subordinate to deterministic engineering rules.
+
+---
+
+# 40. Panel Design Compiler
+
+The complete architecture can be viewed as a compiler.
+
+## Source
+
+```text
+Customer / Project Requirements
+```
+
+## Front End
+
+```text
+Requirement Engineering
+Questionnaire
+Validation
+Configuration
+```
+
+## Intermediate Representation
+
+```text
+Canonical Engineering Model
++
+Engineering Graph
+```
+
+## Electrical Compiler Passes
+
+```text
+Calculation
+Component Selection
+Functional Architecture
+Netlist Generation
+Netlist Validation
+Schematic Generation
+```
+
+## Physical Compiler Passes
+
+```text
+PDM Generation
+Functional Zoning
+Enclosure Selection
+Placement
+Optimization
+Routing
+Thermal Validation
+Physical Validation
+```
+
+## CAD Compiler Pass
+
+```text
+PDM
+ ↓
+Parametric CAD
+```
+
+## Output Passes
+
+```text
+BOM
+Drawings
+Schedules
+Manufacturing Data
+Reports
+```
+
+This compiler interpretation provides a strong theoretical structure for the complete software.
+
+---
+
+# 41. End-to-End Methodology
+
+The final methodology can therefore be defined as:
+
+### Stage 1 — Requirement Acquisition
+
+Collect requirements using a dynamic questionnaire.
+
+### Stage 2 — Requirement Analysis
+
+Validate, normalize, classify and prioritize requirements.
+
+### Stage 3 — Configuration
+
+Determine the panel archetype and required functional modules.
+
+### Stage 4 — Canonical Model Creation
+
+Construct the Canonical Engineering Model.
+
+### Stage 5 — Engineering Calculation
+
+Determine currents, ratings, protection, conductors and other required parameters.
+
+### Stage 6 — Component Selection
+
+Select compatible components from the component library.
+
+### Stage 7 — Functional Graph Generation
+
+Instantiate functional module templates and construct the electrical graph.
+
+### Stage 8 — Netlist Generation
+
+Transform the graph into a validated canonical netlist.
+
+### Stage 9 — Schematic Synthesis
+
+Convert the netlist into a structured engineering schematic.
+
+### Stage 10 — Physical Design Model Generation
+
+Convert the electrical design into a Physical Design Model.
+
+### Stage 11 — Functional Zoning
+
+Divide the enclosure into functional regions.
+
+### Stage 12 — Enclosure Selection
+
+Evaluate standard enclosure sizes.
+
+### Stage 13 — Constraint-Based Placement
+
+Generate physically feasible component arrangements.
+
+### Stage 14 — Layout Optimization
+
+Optimize wiring, enclosure size, thermal distribution, accessibility and manufacturability.
+
+### Stage 15 — Routing
+
+Generate cable and wire paths.
+
+### Stage 16 — Physical Validation
+
+Perform collision, clearance, mounting, accessibility and routing checks.
+
+### Stage 17 — Thermal Validation
+
+Evaluate thermal performance and feed results back into optimization where required.
+
+### Stage 18 — Parametric CAD Generation
+
+Convert the validated PDM into a parametric 3D CAD model.
+
+### Stage 19 — Documentation Generation
+
+Generate BOM, schedules, drawings and manufacturing documentation.
+
+### Stage 20 — Cross-Domain Validation
+
+Verify consistency between all representations.
+
+### Stage 21 — Engineer Review
+
+Allow the engineer to inspect, modify and override generated results.
+
+### Stage 22 — Approval and Release
+
+Freeze the approved revision and release the engineering package.
+
+---
+
+# 42. Recommended Algorithm Architecture
+
+| System Function                 | Recommended Method                    |
+| ------------------------------- | ------------------------------------- |
+| Requirement acquisition         | Dynamic questionnaire                 |
+| Question prioritization         | MCDA / impact-based scoring           |
+| Requirement validation          | Rule-based validation                 |
+| Natural-language interpretation | LLM → structured schema               |
+| Panel classification            | Rules + ML                            |
+| Functional architecture         | Rule engine + graph grammar           |
+| Component selection             | Constraint filtering + scoring        |
+| Electrical calculations         | Deterministic calculation engine      |
+| Engineering representation      | Typed attributed graph                |
+| Netlist generation              | Graph transformation                  |
+| Netlist validation              | Graph algorithms + rules              |
+| Schematic grouping              | Graph clustering                      |
+| Schematic layout                | Sugiyama                              |
+| Schematic routing               | Orthogonal routing                    |
+| Physical zoning                 | Rule-based + constraint programming   |
+| Enclosure selection             | Feasibility search + optimization     |
+| Component placement             | CP-SAT                                |
+| Layout optimization             | NSGA-II + local search                |
+| Alternative optimization        | Pareto Simulated Annealing            |
+| Cable routing                   | A* + orthogonal routing               |
+| Thermal estimation              | Physics/empirical model               |
+| Thermal acceleration            | ML surrogate                          |
+| Physical validation             | Computational geometry + rules        |
+| CAD generation                  | Parametric CAD + CAD API              |
+| CAD exchange                    | STEP                                  |
+| Similar design retrieval        | Feature similarity + graph embeddings |
+| Design recommendation           | Retrieval + ML                        |
+| Change propagation              | Dependency DAG                        |
+| Revision management             | Versioned engineering model           |
+
+---
+
+# 43. Software Module Architecture
+
+A practical implementation can be divided into:
+
+```text
+01. Project Management
+        ↓
+02. Requirement Engineering
+        ↓
+03. Configuration Engine
+        ↓
+04. Canonical Engineering Model
+        ↓
+05. Engineering Knowledge Base
+        ↓
+06. Calculation Engine
+        ↓
+07. Component Database
+        ↓
+08. Functional Module / Graph Engine
+        ↓
+09. Netlist Engine
+        ↓
+10. Schematic Engine
+        ↓
+11. Physical Design / PDM Engine
+        ↓
+12. Placement Optimization
+        ↓
+13. Routing Engine
+        ↓
+14. Thermal / Validation Engine
+        ↓
+15. Parametric CAD Engine
+        ↓
+16. BOM / Documentation Engine
+        ↓
+17. Revision / Traceability Engine
+        ↓
+18. AI / Semantic Intelligence Layer
+```
+
+The AI layer can interact with multiple modules but should not replace their engineering authority.
+
+---
+
+# 44. MVP Development Architecture
+
+The complete system should not initially attempt every panel type or every engineering capability.
+
+A DB should be used as the first implementation domain.
+
+## MVP
+
+Implement:
+
+```text
+Requirement Questionnaire
+        ↓
+DB Configuration
+        ↓
+Requirement Validation
+        ↓
+Canonical Engineering Model
+        ↓
+Basic Calculations
+        ↓
+Component Selection
+        ↓
+Netlist
+        ↓
+Schematic
+        ↓
+PDM
+        ↓
+Functional Zoning
+        ↓
+CP-SAT Placement
+        ↓
+A* Routing
+        ↓
+Collision / Clearance Validation
+        ↓
+Parametric FreeCAD
+        ↓
+BOM
+```
+
+Then demonstrate:
+
+```text
+Requirement Change
+        ↓
+Automatic Change Impact Detection
+        ↓
+Recalculation
+        ↓
+Component Reselection
+        ↓
+Layout Reoptimization
+        ↓
+CAD Regeneration
+        ↓
+BOM / Drawing Update
+```
+
+This change-propagation demonstration can become one of the strongest demonstrations of the proposed system.
+
+---
+
+# 45. Generalization to Other Panel Types
+
+Once the DB implementation is working, new panel types should be introduced primarily through configuration.
+
+For example:
+
+```text
+DB
+ ├── Incomer
+ ├── Busbar
+ └── Feeders
+```
+
+can be followed by:
+
+```text
+MCC
+ ├── Incomer
+ ├── Busbar
+ ├── Motor Feeders
+ ├── Star-Delta
+ ├── DOL
+ └── VFD
+```
+
+and:
+
+```text
+PLC PANEL
+ ├── Power Supply
+ ├── PLC
+ ├── I/O
+ ├── Relays
+ ├── Communication
+ └── Terminals
+```
+
+The underlying engines remain unchanged.
+
+Only:
+
+```text
+Archetype
++
+Functional Modules
++
+Rules
++
+Templates
++
+Component Library
+```
+
+change.
+
+This is what makes the architecture scalable.
+
+---
+
+# 46. Final Conceptual Architecture
+
+The entire proposed system can finally be summarized as:
+
+```text
+                         REQUIREMENTS
+                              │
+                              ▼
+                 REQUIREMENT ENGINEERING
+                 Questionnaire + MCDA
+                              │
+                              ▼
+                    REQUIREMENT VALIDATION
+                              │
+                              ▼
+                ┌───────────────────────────┐
+                │ CANONICAL ENGINEERING     │
+                │ MODEL (CEM)               │
+                └─────────────┬─────────────┘
+                              │
+              ┌───────────────┼────────────────┐
+              │               │                │
+              ▼               ▼                ▼
+          RULES          CALCULATIONS      COMPONENTS
+              │               │                │
+              └───────────────┼────────────────┘
+                              ▼
+                    FUNCTIONAL GRAPH
+                              │
+                              ▼
+                         NETLIST
+                              │
+                    ┌─────────┴─────────┐
+                    ▼                   ▼
+                SCHEMATIC         PHYSICAL DESIGN
+                                       │
+                                       ▼
+                              PHYSICAL DESIGN MODEL
+                                       │
+                              ┌────────┼────────┐
+                              ▼        ▼        ▼
+                           ZONING   PLACEMENT  SIZE
+                              │        │        │
+                              └────────┼────────┘
+                                       ▼
+                              CONSTRAINT SOLVER
+                                       │
+                                       ▼
+                              MULTI-OBJECTIVE
+                               OPTIMIZATION
+                                       │
+                                       ▼
+                                    ROUTING
+                                       │
+                                       ▼
+                              THERMAL / PHYSICAL
+                                 VALIDATION
+                                       │
+                                       ▼
+                                    PDM
+                                       │
+                                       ▼
+                             PARAMETRIC CAD ENGINE
+                                       │
+                              ┌────────┼────────┐
+                              ▼        ▼        ▼
+                             3D       2D       STEP
+                              │
+                              ▼
+                    BOM + MANUFACTURING DATA
+                              │
+                              ▼
+                       UNIFIED VALIDATION
+                              │
+                              ▼
+                        ENGINEER REVIEW
+                              │
+                              ▼
+                            RELEASE
+
+
+                 ┌──────────────────────────┐
+                 │      AI / ML LAYER       │
+                 │                          │
+                 │ Requirement Assistance   │
+                 │ Recommendations          │
+                 │ Similar Design Retrieval │
+                 │ Semantic Embeddings      │
+                 │ What-if Interaction      │
+                 │ Design Review Assistance │
+                 └──────────────────────────┘
+                            ↕
+                  interacts with the system
+                  but does not replace the
+                  engineering authority
+```
+
+# 47. Core Research/Engineering Contribution
+
+The strongest way to describe the complete system is not simply:
+
+> "AI-based automatic electrical panel design."
+
+A more technically accurate description is:
+
+> **A configuration-driven, constraint-aware parametric digital twin framework for automated electrical panel engineering, integrating requirement engineering, deterministic electrical design, graph-based topology synthesis, automated schematic generation, constraint-based physical layout optimization, parametric CAD generation, and traceable engineering documentation through a unified canonical engineering model.**
+
+The system has four central computational representations:
+
+```text
+1. Requirements
+        ↓
+2. Canonical Engineering Model
+        ↓
+3. Engineering Graph
+        ↓
+4. Physical Design Model
+```
+
+and three major transformation domains:
+
+```text
+Requirements → Electrical Design
+Electrical Design → Physical Design
+Physical Design → Parametric CAD
+```
+
+with a continuous validation and change-propagation mechanism connecting them.
+
+The most important architectural relationship is therefore:
+
+> **Requirement Engineering → Canonical Engineering Model → Engineering Graph → Physical Design Model → Parametric CAD**
+
+rather than treating requirement engineering, electrical design and CAD generation as separate software sections.
+
+The uploaded requirement-engineering study establishes the questionnaire, validation, requirement-state, canonical-model and traceability foundations, while the CAD study establishes the PDM, zoning, enclosure selection, CP-SAT placement, A* routing, physical validation and parametric CAD stages.
+Together, they form a coherent **end-to-end automated panel engineering architecture**.
