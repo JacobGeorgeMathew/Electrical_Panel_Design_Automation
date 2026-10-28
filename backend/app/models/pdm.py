@@ -52,6 +52,7 @@ class PhysicalComponent(BaseModel):
     preview_asset: Optional[Dict[str, Any]] = None
     color_hex: str = "#3B82F6"
     terminals: List[Dict[str, Any]] = Field(default_factory=list)
+    geometry: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class DINRail(BaseModel):
@@ -61,8 +62,8 @@ class DINRail(BaseModel):
     y: float
     z: float
     length: float
-    profile_height: float = 7.5
-    profile_depth: float = 35.0
+    profile_height: float = 35.0
+    profile_depth: float = 7.5
     orientation: str = "HORIZONTAL"  # "HORIZONTAL", "VERTICAL"
 
 
@@ -76,6 +77,30 @@ class CableDuct(BaseModel):
     height: float
     depth: float
     capacity_pct: float = 0.0
+    catalog_id: str = ""
+    component_version_id: Optional[str] = None
+    orientation: str = "HORIZONTAL"
+    wall_mm: float = 2.0
+    usable_area_mm2: float = 0.0
+    max_fill_pct: float = 40.0
+    wire_area_mm2: float = 0.0
+    route_ids: List[str] = Field(default_factory=list)
+
+
+class PanelAccessory(BaseModel):
+    id: str
+    catalog_id: str
+    component_version_id: Optional[str] = None
+    name: str
+    category: str
+    parent_id: str = "ENCLOSURE"
+    position: Position3D
+    width: float
+    height: float
+    depth: float
+    material: str = ""
+    color_hex: str = "#CBD5E1"
+    parameters: Dict[str, Any] = Field(default_factory=dict)
 
 
 class BusbarAssembly(BaseModel):
@@ -109,6 +134,10 @@ class WireRoute(BaseModel):
     length_mm: float
     bend_count: int
     color_hex: str = "#EF4444"
+    duct_ids: List[str] = Field(default_factory=list)
+    duct_entry_index: Optional[int] = None
+    duct_exit_index: Optional[int] = None
+    wire_diameter_mm: float = 3.0
 
 
 class ClearanceEnvelope(BaseModel):
@@ -151,6 +180,8 @@ class PhysicalDesignModel(BaseModel):
     components: List[PhysicalComponent] = Field(default_factory=list)
     rails: List[DINRail] = Field(default_factory=list)
     ducts: List[CableDuct] = Field(default_factory=list)
+    accessories: List[PanelAccessory] = Field(default_factory=list)
+    construction: Dict[str, Any] = Field(default_factory=dict)
     busbars: List[BusbarAssembly] = Field(default_factory=list)
     routes: List[WireRoute] = Field(default_factory=list)
     clearances: List[ClearanceEnvelope] = Field(default_factory=list)

@@ -107,6 +107,15 @@ def write_revision(session,project,template,req_set,answers,result,manifest,file
             uid=uuid4();structures[item['id']]=uid
             session.execute(insert(m.pdm_mounting_structures).values(id=uid,project_revision_id=rid,enclosure_id=enc,stable_key=item['id'],structure_kind=kind,
                 transform=transform(item),dimensions_mm={k:item[k] for k in ('width','height','depth')},parameters=item))
+    # Mechanical hardware has its own identity and never masquerades as an electrical CEM device.
+    for item in pdm.get('accessories',[]):
+        uid=uuid4(); structures[item['id']]=uid
+        session.execute(insert(m.pdm_mounting_structures).values(id=uid,project_revision_id=rid,enclosure_id=enc,
+            stable_key=item['id'],structure_kind='OTHER',transform=transform(item['position']),
+            dimensions_mm={k:item[k] for k in ('width','height','depth')},parameters=item))
+    for code,version in manifest.get('hardware_component_versions',{}).items():
+        session.execute(insert(m.revision_components).values(project_revision_id=rid,component_version_id=identifier(version),
+            role_code='PANEL_HARDWARE',selected_by='SELECTOR',selection_evidence={'catalog_code':code,'engine_version':manifest['engine_version']}))
     physical={}
     c_by_id={c['id']:c for c in cem['components']}
     for p in pdm['components']:
@@ -128,7 +137,9 @@ def write_revision(session,project,template,req_set,answers,result,manifest,file
     for route in pdm['routes']:
         session.execute(insert(m.pdm_routes).values(project_revision_id=rid,stable_key=route['id'],net_id=nets[route['net_id']],
             conductor_id=conductors[route['id'].removeprefix('ROUTE-')],waypoints_mm=route['waypoints'],length_mm=route['length_mm'],
-            routing_constraints={'engine_version':manifest['engine_version'],'wire_class':route['wire_class']}))
+            routing_constraints={'engine_version':manifest['engine_version'],'wire_class':route['wire_class'],
+                'duct_ids':route.get('duct_ids',[]),'duct_entry_index':route.get('duct_entry_index'),'duct_exit_index':route.get('duct_exit_index'),
+                'wire_diameter_mm':route.get('wire_diameter_mm')}))
     for i,clearance in enumerate(pdm.get('clearances',[])):
         session.execute(insert(m.pdm_clearance_regions).values(project_revision_id=rid,stable_key=f'CLEARANCE-{i}',
             owner_component_instance_id=physical.get(clearance['component_id']),region_kind='CLEARANCE',geometry_ref=clearance))

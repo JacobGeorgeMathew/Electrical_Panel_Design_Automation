@@ -1,7 +1,8 @@
-from dataclasses import replace
 from typing import Any, Dict, Optional
 from app.algorithms.cp_sat_placement import CPSATPlacementOptimizer
 from app.algorithms.jps_theta_star import JPSThetaStarRouter, RoutePlanningError
+from app.algorithms.duct_routing import DuctRouter
+from app.services.panel_assembly import PanelAssemblyEngine, assembly_bom
 from app.algorithms.layout_config import LayoutConfig
 from app.models.cem import CEMState, CanonicalEngineeringModel, FunctionalModule
 from app.models.pdm import PhysicalDesignModel
@@ -34,7 +35,7 @@ DEFAULT_PROJECT = {
 class DesignOrchestrator:
     """Coordinates typed CEM and PDM contracts for deterministic DB generation."""
 
-    def __init__(self, project_repo=None, comp_repo=None, enclosure_repo=None, req_engine=None, layout_config=None):
+    def __init__(self, project_repo=None, comp_repo=None, enclosure_repo=None, req_engine=None, layout_config=None, hardware_catalog=None):
         self.project_repo = project_repo or ProjectRepository()
         self.comp_repo = comp_repo or ComponentRepository()
         self.enclosure_repo = enclosure_repo or EnclosureRepository()
@@ -51,6 +52,7 @@ class DesignOrchestrator:
         self.validation_engine = ValidationEngine()
         self.cad_engine = CADEngine()
         self.change_prop_engine = ChangePropagationEngine()
+        self.panel_assembly = PanelAssemblyEngine(hardware_catalog)
 
     def generate_design(self, project_id: str, requirement_overrides: Optional[Dict[str, Any]] = None,
                         persist_requirements: bool = True) -> Dict[str, Any]:
@@ -129,12 +131,7 @@ class DesignOrchestrator:
 
         connections = [(conn.from_component, conn.to_component) for net in nets for conn in net.connections
                        if conn.from_component != "PANEL_ROOT" and conn.to_component != "PANEL_ROOT"]
-        plate_cfg = replace(
-            self.layout_config,
-            margin_x=max(20.0, enclosure.mounting_plate_offset_x + 20.0),
-            margin_bottom=max(20.0, enclosure.mounting_plate_offset_y + 10.0),
-            margin_top=max(20.0, enclosure.mounting_plate_offset_y + 10.0),
-        )
+        plate_cfg = self.panel_assembly.layout_config(enclosure, self.layout_config)
         try:
             placement = CPSATPlacementOptimizer(plate_cfg).solve(
                 components, enclosure.width, enclosure.height, connections)
@@ -149,9 +146,10 @@ class DesignOrchestrator:
             raise DesignError("PLACEMENT_INVALID", "The placement solver returned geometry that fails its independent checks.",
                               {"violations": placement.violations})
 
+        ducts = self.panel_assembly.ducts(placement, enclosure, plate_cfg)
         try:
-            routes = JPSThetaStarRouter(plate_cfg).route_layout(
-                placement, nets, enclosure.width, enclosure.height, enclosure.depth)
+            routes = DuctRouter(plate_cfg).route_layout(
+                placement, nets, enclosure.width, enclosure.height, enclosure.depth, ducts=ducts)
         except RoutePlanningError as exc:
             raise DesignError("ROUTING_INFEASIBLE", "An electrical connection could not be routed.",
                               {"connection_id": exc.connection_id, "net_id": exc.net_id,
@@ -176,8 +174,13 @@ class DesignOrchestrator:
             mounting_plate_height=enclosure.mounting_plate_height,
             zones=enclosure.zones,
             components=placement.components, rails=placement.rails, routes=routes,
+            ducts=ducts, construction=self.panel_assembly.parameters('PANEL_SHELL_STEEL'),
             total_heat_loss_watts=total_heat_loss,
         )
+        pdm.accessories = self.panel_assembly.accessories(pdm)
+        from app.services.panel_geometry import component_geometry
+        for part in pdm.components:
+            part.geometry = component_geometry(part)
         violations = self.validation_engine.validate_pdm(pdm, cem, plate_cfg)
         pdm.validation_results = violations
         critical = [v for v in violations if v.severity == "CRITICAL"]
@@ -187,10 +190,7 @@ class DesignOrchestrator:
         cem.physical_design_id = pdm.id
         cem.state = CEMState.FINAL_VALIDATED
         cad_data = self.cad_engine.generate_parametric_geometry(pdm)
-        bom = [{"component_id": c.id, "catalog_id": c.catalog_id, "name": c.name,
-                "category": c.category, "quantity": c.quantity, "current_rating_a": c.current_rating,
-                "breaking_capacity_ka": c.breaking_capacity, "heat_loss_w": c.heat_loss}
-               for c in cem.components]
+        bom = assembly_bom(cem, pdm)
 
         if requirement_overrides and persist_requirements and project_existed:
             updated = {**project, "requirements": req_values}

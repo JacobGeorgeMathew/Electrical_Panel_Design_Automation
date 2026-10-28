@@ -18,8 +18,9 @@ from app.services.cad_engine import CADEngine
 from app.services.schematic_engine import SchematicEngine
 from app.services.change_propagation import ChangePropagationEngine
 from app.services.design_errors import DesignError
+from app.services.panel_assembly import assembly_bom
 
-ENGINE_VERSION='db-pipeline-1'
+ENGINE_VERSION='db-pipeline-2'
 
 
 class ProjectService:
@@ -100,6 +101,7 @@ class ProjectService:
                 .where(m.rule_sets.c.code=='DB_ENGINE_V1',m.rule_set_versions.c.status=='PUBLISHED').order_by(m.rule_set_versions.c.version_no.desc()))
             rules=catalog.rules(str(rs)) if rs else []
             component_models={r['id']:catalog.cad_models(r['component_version_id']) for r in rows}
+            hardware=catalog.hardware_catalog()
         layout_data=next((r['parameters']['layout_config'] for r in rules if r['code']=='DB_LAYOUT_CONFIG'),None)
         if not layout_data or rs is None:
             raise PersistenceError('CATALOG_NOT_INITIALIZED','Import the application catalog and rules before generating a design.',503)
@@ -107,10 +109,10 @@ class ProjectService:
         layout_data['weights']=LayoutWeights(**layout_data['weights'])
         for field in ('din_categories','plate_categories'): layout_data[field]=set(layout_data[field])
         layout=LayoutConfig(**layout_data)
-        return project,template,rows,enclosures,component_models,templates,rules,str(rs),layout
+        return project,template,rows,enclosures,component_models,templates,rules,str(rs),layout,hardware
 
     def generate(self,key,overrides=None,expected_version=None,configuration=None):
-        project,template,rows,enclosures,models,templates,rules,rsv,layout=self._inputs(key)
+        project,template,rows,enclosures,models,templates,rules,rsv,layout,hardware=self._inputs(key)
         if configuration is not None:
             project['configuration']=configuration
         if expected_version is not None and expected_version!=project['lock_version']:
@@ -119,7 +121,7 @@ class ProjectService:
         reqs=self.validate(template,project['id'],values)
         enclosures,selected=self.configure_enclosures(enclosures,project['configuration'])
         engine=DesignOrchestrator(project_repo=MemoryProjects(project),comp_repo=MemoryComponents(rows),
-            enclosure_repo=MemoryEnclosures(enclosures,selected),req_engine=RequirementEngine(templates={'DB':template}),layout_config=layout)
+            enclosure_repo=MemoryEnclosures(enclosures,selected),req_engine=RequirementEngine(templates={'DB':template}),layout_config=layout,hardware_catalog=hardware)
         result=engine.generate_design(project['id'],values,persist_requirements=False)
         by_code={r['id']:r for r in rows}
         for c in result['cem']['components']:
@@ -141,7 +143,8 @@ class ProjectService:
             'component_versions':{c['id']:c['component_version_id'] for c in result['cem']['components']},
             'cad_model_versions':{c['id']:c['cad_model_version_id'] for c in result['cem']['components']},
             'enclosure_component_version_id':enclosure['component_version_id'],'enclosure_cad_model_version_id':enc_model['id'] if enc_model else None,
-            'generator':{'name':'panelstudio-primitives','version':'1'},'input_sha256':content_hash({'requirements':values,'configuration':project['configuration']})}
+            'hardware_component_versions':{h['code']:h['component_version_id'] for h in hardware},
+            'generator':{'name':'panelstudio-primitives','version':'2'},'input_sha256':content_hash({'requirements':values,'configuration':project['configuration']})}
         files=self.generate_files(result)
         with self.db.sessions.begin() as s:
             saved=write_revision(s,project,template,reqs,values,result,manifest,files,project['lock_version'])
@@ -150,7 +153,7 @@ class ProjectService:
     def generate_files(self,result):
         preview=self.assets.put(primitive_glb(result['cad']['primitives']),'glb')
         script=self.assets.put(CADEngine().export_freecad_script(PhysicalDesignModel(**result['pdm'])).encode('utf-8'),'py')
-        return [{**preview,'artifact_type':'CAD_PREVIEW','file_format':'GLB','generator_name':'panelstudio-primitives','generator_version':'1'},
+        return [{**preview,'artifact_type':'CAD_PREVIEW','file_format':'GLB','generator_name':'panelstudio-primitives','generator_version':'2'},
                 {**script,'artifact_type':'FREECAD_SCRIPT','file_format':'PY','generator_name':'existing-freecad-script','generator_version':ENGINE_VERSION}]
 
     def load_revision(self,key,revision_id=None):
@@ -172,8 +175,7 @@ class ProjectService:
             manifest=revision['model_manifest']
         cem_model,pdm_model=CanonicalEngineeringModel(**c),PhysicalDesignModel(**p)
         return {'cem':c,'pdm':p,'schematic':SchematicEngine().generate_schematic_data(cem_model),'cad':CADEngine().generate_parametric_geometry(pdm_model),
-            'bom':[{'component_id':v.id,'catalog_id':v.catalog_id,'name':v.name,'category':v.category,'quantity':v.quantity,
-                    'current_rating_a':v.current_rating,'breaking_capacity_ka':v.breaking_capacity,'heat_loss_w':v.heat_loss} for v in cem_model.components],
+            'bom':assembly_bom(cem_model,pdm_model),
             'validation_errors':p['validation_results'],'revision_id':str(rid),'revision_no':revision['revision_no'],'lock_version':project['lock_version'],
             'snapshot_sha256':revision['content_sha256'],'manifest':manifest,'artifacts':artifacts,
             'is_stale':project['current_revision_id']!=str(rid) or manifest.get('input_sha256')!=content_hash({
@@ -218,7 +220,7 @@ class ProjectService:
 
     def queue_artifact(self,key,file_format,expected_version):
         result=self.load_revision(key)
-        if result['manifest'].get('generator')!={'name':'panelstudio-primitives','version':'1'} or result['manifest'].get('engine_version')!=ENGINE_VERSION:
+        if result['manifest'].get('generator')!={'name':'panelstudio-primitives','version':'2'} or result['manifest'].get('engine_version')!=ENGINE_VERSION:
             raise PersistenceError('GENERATOR_VERSION_UNAVAILABLE','This saved revision requires a different CAD generator version.',409)
         if result['is_stale'] or result['lock_version']!=expected_version:
             raise PersistenceError('REVISION_CONFLICT','Generate a revision from the current requirements before exporting.',409)
@@ -227,7 +229,7 @@ class ProjectService:
         with self.db.sessions.begin() as s:
             ProjectRepository(s).check_version(key,expected_version)
             s.execute(insert(m.generated_artifacts).values(id=job,project_revision_id=identifier(result['revision_id']),artifact_type='CAD_PREVIEW' if file_format=='GLB' else 'FREECAD_SCRIPT',
-                file_format='GLB' if file_format=='GLB' else 'PY',generator_name='panelstudio-primitives' if file_format=='GLB' else 'existing-freecad-script',generator_version='1' if file_format=='GLB' else ENGINE_VERSION,
+                file_format='GLB' if file_format=='GLB' else 'PY',generator_name='panelstudio-primitives' if file_format=='GLB' else 'existing-freecad-script',generator_version='2' if file_format=='GLB' else ENGINE_VERSION,
                 source_model_kind='PDM',source_model_sha256=content_hash(result['pdm']),generation_status='PENDING'))
         self.executor.submit(self._artifact_worker,key,result['revision_id'],str(job),file_format)
         return {'id':str(job),'status':'PENDING','project_revision_id':result['revision_id']}

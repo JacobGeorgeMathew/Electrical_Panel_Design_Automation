@@ -138,12 +138,19 @@ class CPSATPlacementOptimizer:
         cy: Dict[str, object] = {}
         zone_terms: list = []
 
+        def occupied_width(c):
+            if c.category!='TERMINAL': return G(c.width)+gapx
+            # Pack terminals closely while retaining room for the catalog port
+            # lead clearance at the outer edge of a multi-pole assembly.
+            edge=min([min(float(t.get('x',c.width/2)),c.width-float(t.get('x',c.width/2))) for t in c.terminals] or [c.width/2])
+            return G(c.width+max(0,cfg.wire_clearance-edge+.2))
+
         # ---- DIN devices: row choice + x ---------------------------------
         x_var, row_sel = {}, {}
         row_iv = [[] for _ in range(n)]
         for c in din:
             wg, hg = G(c.width), G(c.height)
-            w = wg + gapx
+            w = occupied_width(c)
             x = m.NewIntVar(mx, mx + rail_len_g - wg, f"x_{c.id}")
             b = [m.NewBoolVar(f"b_{c.id}_{r}") for r in range(n)]
             m.AddExactlyOne(b)
@@ -178,6 +185,32 @@ class CPSATPlacementOptimizer:
             zone_terms.append(dev)
         if len(xs) > 1:
             m.AddNoOverlap2D(xs, ys)
+
+        # Reserve the physical troughs below/above DIN bands across the plate.
+        # Plate devices must sit outside these bands, not just outside the rails.
+        if cfg.duct_width_mm:
+            dw, dc = G(cfg.duct_width_mm), G(cfg.duct_device_clearance_mm)
+            duct_y = [mb-dc-dw] + [y+dinh_g+dc for y in rail_y]
+            for c in plate:
+                for i, dy in enumerate(duct_y):
+                    above = m.NewBoolVar(f'over_duct_{c.id}_{i}')
+                    m.Add(py[c.id] >= dy+dw+dc).OnlyEnforceIf(above)
+                    m.Add(py[c.id]+G(c.height)+dc <= dy).OnlyEnforceIf(above.Not())
+
+        # A terminal strip is contiguous and includes room for its two end stops.
+        terminal_devices = [c for c in din if c.category=='TERMINAL']
+        if terminal_devices:
+            for c in din:
+                if c.category != 'TERMINAL':
+                    for r in range(n):
+                        m.Add(row_sel[c.id][r] + row_sel[terminal_devices[0].id][r] <= 1)
+        for a, b in zip(terminal_devices, terminal_devices[1:]):
+            for r in range(n):
+                m.Add(row_sel[a.id][r] == row_sel[b.id][r])
+            m.Add(x_var[b.id] == x_var[a.id] + occupied_width(a))
+        for c in terminal_devices:
+            m.Add(x_var[c.id] >= mx + G(15))
+            m.Add(x_var[c.id] + G(c.width) <= Wg-mx-G(15))
 
         # ---- Objective (soft) --------------------------------------------
         wts, terms = cfg.weights, []
@@ -226,7 +259,7 @@ class CPSATPlacementOptimizer:
             out.append(self._mk(c, s.Value(px[c.id]) * g, s.Value(py[c.id]) * g,
                                 cfg.z_plate, None))
         rails = [DINRail(id=f"RAIL-{r + 1:02d}", label=f"DIN Rail {r + 1}",
-                         x=cfg.margin_x, y=rail_y[r] * g, z=25.0,
+                         x=cfg.margin_x, y=rail_y[r] * g, z=cfg.rail_z,
                          length=W_mm - 2 * cfg.margin_x) for r in sorted(used)]
         return LayoutResult(True, name, "ok", out, rails, n,
                             s.ObjectiveValue() if terms else None,
@@ -260,6 +293,7 @@ def validate_layout(placed: Sequence[PhysicalComponent], W: float, H: float,
             same_rail = a.rail_id is not None and a.rail_id == b.rail_id
             required = cfg.device_gap_x if same_rail else (
                 cfg.plate_clearance if (a.rail_id is None or b.rail_id is None) else 0.0)
+            if same_rail and a.category==b.category=='TERMINAL': required=0
             if gap < required - 1e-6:
                 v.append({"type": "OVERLAP" if gap < 0 else "CLEARANCE",
                           "object_a": a.cem_component_id, "object_b": b.cem_component_id,

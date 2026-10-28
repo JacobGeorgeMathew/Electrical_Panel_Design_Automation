@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 
 class ComponentRepository:
     def __init__(self, data_path: Optional[str] = None):
+        self.fixture_catalog = data_path is None
         if data_path is None:
             data_path = os.path.join(os.path.dirname(__file__), "..", "data", "components.json")
         self.data_path = data_path
@@ -14,6 +15,9 @@ class ComponentRepository:
         if os.path.exists(self.data_path):
             with open(self.data_path, "r", encoding="utf-8") as f:
                 self._components = json.load(f)
+            if self.fixture_catalog:
+                with open(os.path.join(os.path.dirname(self.data_path), 'panel_hardware.json'), encoding='utf-8') as f:
+                    self._components += [r for r in json.load(f)['items'] if r.get('engine_component')]
         else:
             self._components = []
 

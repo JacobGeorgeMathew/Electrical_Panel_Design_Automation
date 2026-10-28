@@ -190,6 +190,11 @@ class ComponentSelector:
             from app.services.design_errors import DesignError
             raise DesignError("CATALOG_INCOMPLETE", "The component catalog has no DB outgoing terminal block.", {"category": "TERMINAL"})
         for i in range(1, num_feeders + 1):
+            terminal_code='TERMINAL_BLOCK_3P_6MM' if phases==3 and i%4==0 else 'TERMINAL_BLOCK_6MM'
+            term=self.comp_repo.get_by_id(terminal_code)
+            if term is None:
+                from app.services.design_errors import DesignError
+                raise DesignError('CATALOG_INCOMPLETE','No isolated terminal assembly is available.',{'catalog_id':terminal_code})
             selected.append(ComponentRef(
                 id=f"X{i:03d}",
                 catalog_id=term["id"],
@@ -197,7 +202,7 @@ class ComponentSelector:
                 category="TERMINAL",
                 current_rating=term["current_rating"],
                 breaking_capacity=0,
-                poles=1,
+                poles=term['poles'],
                 width=term["width"],
                 height=term["height"],
                 depth=term["depth"],

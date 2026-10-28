@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AssetObject } from './AssetObject';
+import { PanelAssembly, PrimitiveMesh, WireMesh } from './PanelAssembly';
 import { assetUrl } from '../../api/client';
 import { Canvas, useThree } from '@react-three/fiber';
-import { Line, OrbitControls, Text, TransformControls } from '@react-three/drei';
+import { OrbitControls, Text, TransformControls } from '@react-three/drei';
 import { useProjectStore } from '../../stores/projectStore';
 import { AlertTriangle, Box, Eye, EyeOff, Layers, MousePointer2, Redo2, Rotate3D, RotateCcw,
   Sparkles, Undo2, Move3D } from 'lucide-react';
@@ -79,7 +80,7 @@ const ComponentMesh: React.FC<ComponentMeshProps> = ({ comp, transform, isSelect
           onClick={(event) => { event.stopPropagation(); onSelect(comp.cem_component_id); }}
           onPointerOver={(event) => { event.stopPropagation(); onHover(comp.cem_component_id); }}
           onPointerOut={() => onHover(null)}>
-          {comp.preview_asset?.status === 'READY' && comp.preview_asset.url ?
+          {comp.geometry?.length ? <group position={[-w/2,-h/2,-d/2]}>{comp.geometry.map(p=><PrimitiveMesh key={p.id} primitive={p}/>)}</group> : comp.preview_asset?.status === 'READY' && comp.preview_asset.url ?
             <AssetObject url={assetUrl(comp.preview_asset.url)} scale={10}
               fallback={<mesh><boxGeometry args={[w,h,d]}/><meshStandardMaterial color={comp.color_hex}/></mesh>}/> :
             <mesh><boxGeometry args={[w,h,d]}/><meshStandardMaterial color={comp.color_hex} metalness={0.4} roughness={0.3}/></mesh>}
@@ -110,10 +111,13 @@ export const Panel3DViewer: React.FC = () => {
     editorUndoStack, editorRedoStack, setEditorMode, toggleEditorSnap, setEditorGridMm,
     toggleComponentVisibility, updateEditorTransform, commitEditorTransform,
     undoEditorTransform, redoEditorTransform, resetEditorDraft, artifacts, refreshCadPreview, cadJobStatus, designStale,
-    hasUnsavedChanges, currentRevisionId,
+    hasUnsavedChanges, currentRevisionId, cadData,
   } = useProjectStore();
 
   const [showArtifact,setShowArtifact] = useState(false);
+  const [doorOpen,setDoorOpen] = useState(true);
+  const [showCovers,setShowCovers] = useState(false);
+  const [showBody,setShowBody] = useState(true);
   const preview = artifacts.find(a=>a.file_format==='GLB'&&a.status==='READY');
   useEffect(()=>setShowArtifact(false),[currentRevisionId,designStale,editorTransforms]);
   const warnings = useMemo(() => pdm ? analyzeEditorGeometry(pdm.components, editorTransforms,
@@ -123,6 +127,8 @@ export const Panel3DViewer: React.FC = () => {
   const selectedId = selectedComponent?.cem_component_id;
   const selectedTransform = selectedComponent ? componentTransform(selectedComponent, editorTransforms[selectedComponent.cem_component_id]) : null;
   const hasDraftEdits = Object.keys(editorTransforms).length > 0;
+  const selectedDuct=pdm?.ducts?.find(d=>d.id===selectedObjectId);
+  const selectedAccessory=pdm?.accessories?.find(a=>a.id===selectedObjectId);
 
   if (!pdm) {
     return <div className="p-12 text-center text-slate-500 font-mono text-sm">No 3D panel model loaded. Click "Generate Design" to create the 3D panel.</div>;
@@ -172,6 +178,9 @@ export const Panel3DViewer: React.FC = () => {
       </div>
 
       <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+        <button className="editor-tool" aria-pressed={doorOpen} onClick={()=>{setShowArtifact(false);setDoorOpen(v=>!v);}}>{doorOpen?'Close door':'Open door'}</button>
+        <button className="editor-tool" aria-pressed={showCovers} onClick={()=>{setShowArtifact(false);setShowCovers(v=>!v);}}>{showCovers?'Remove duct covers':'Fit duct covers'}</button>
+        <button className="editor-tool" aria-pressed={showBody} onClick={()=>{setShowArtifact(false);setShowBody(v=>!v);}}>{showBody?'Hide cabinet body':'Show cabinet body'}</button>
         <button className="editor-tool disabled:opacity-40" disabled={!preview?.url || designStale || hasUnsavedChanges || hasDraftEdits}
           onClick={()=>setShowArtifact(v=>!v)}>{showArtifact?'Return to assembly editor':'View saved GLB'}</button>
         <button className="editor-tool disabled:opacity-40" onClick={refreshCadPreview}
@@ -180,6 +189,7 @@ export const Panel3DViewer: React.FC = () => {
         {preview?.url && !designStale && <a className="text-blue-300 underline" href={assetUrl(preview.url)} download>Download GLB</a>}
         {pdm.components.some(c=>c.preview_asset&&c.preview_asset.status!=='READY')&&<span className="text-amber-300">Some component assets are unavailable; showing their bounds.</span>}
       </div>
+      {!pdm.ducts?.length&&<div className="text-xs text-amber-300">This saved revision predates the detailed enclosure and duct layout. Generate Design to create a new revision.</div>}
       {designStale && <div role="status" className="rounded border border-amber-800 bg-amber-950/40 p-2 text-xs text-amber-200">Showing the last saved design. Generate the current requirements to refresh geometry and exports.</div>}
       {hasDraftEdits && (
         <div role="status" className="flex items-start gap-2 rounded-xl border border-amber-700 bg-amber-950/40 px-3 py-2 text-xs text-amber-200">
@@ -206,16 +216,22 @@ export const Panel3DViewer: React.FC = () => {
               </li>;
             })}
           </ul>
+          <h4 className="mb-2 mt-4 text-xs font-bold uppercase text-slate-300">Cabinet and accessories</h4>
+          <ul className="space-y-1">{(pdm.accessories||[]).map(a=><li key={a.id}><button onClick={()=>selectObject(a.id)} className={`w-full rounded px-2 py-1 text-left text-xs ${selectedObjectId===a.id?'bg-blue-900 text-white':'text-slate-300 hover:bg-slate-800'}`}>{a.name}</button></li>)}</ul>
+          <h4 className="mb-2 mt-4 text-xs font-bold uppercase text-slate-300">Wiring ducts</h4>
+          <ul className="space-y-1">{(pdm.ducts||[]).map(d=><li key={d.id}><button onClick={()=>selectObject(d.id)} className={`w-full rounded px-2 py-1 text-left text-xs ${selectedObjectId===d.id?'bg-blue-900 text-white':'text-slate-300 hover:bg-slate-800'}`}>{d.label}<span className="block text-[10px] text-slate-500">{d.capacity_pct.toFixed(1)}% fill · {d.route_ids.length} wires</span></button></li>)}</ul>
         </aside>
 
         <div className="relative min-h-0 min-w-0 overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60">
           <Canvas camera={{ fov: 45, near: 0.01, far: Math.max(encW, encH, encD) * 20 }} className="h-full w-full">
-            <ResponsiveCamera width={encW} height={encH} depth={encD} />
+            <ResponsiveCamera width={encW} height={encH} depth={doorOpen&&pdm.accessories?.length?encD+encW*.7:encD} />
             <ambientLight intensity={0.7} />
             <directionalLight position={[10, 10, 10]} intensity={1.2} />
             <pointLight position={[-10, -10, 5]} intensity={0.5} />
             <OrbitControls makeDefault target={[encW / 2, encH / 2, encD / 2]} />
             {showArtifact && preview?.url ? <AssetObject url={assetUrl(preview.url)} scale={10}/> : <>
+            {cadData?.primitives?.some((p:any)=>p.assembly_group) ? <PanelAssembly pdm={pdm} primitives={cadData.primitives}
+              doorOpen={doorOpen} showCovers={showCovers} showBody={showBody} selectedId={selectedObjectId} onSelect={selectObject}/> : <>
             <mesh position={[encW / 2, encH / 2, encD / 2]}>
               <boxGeometry args={[encW, encH, encD]} />
               <meshStandardMaterial color="#1E293B" wireframe transparent opacity={0.3} />
@@ -233,6 +249,7 @@ export const Panel3DViewer: React.FC = () => {
               <boxGeometry args={[rail.length * scale, rail.profile_height * scale, rail.profile_depth * scale]} />
               <meshStandardMaterial color="#94A3B8" metalness={0.9} roughness={0.1} />
             </mesh>)}
+            </>}
             {pdm.components.map((component) => {
               const id = component.cem_component_id;
               return <ComponentMesh key={component.id} comp={component}
@@ -243,10 +260,9 @@ export const Panel3DViewer: React.FC = () => {
                 snapEnabled={editorSnapEnabled} gridMm={editorGridMm}
                 onSelect={selectObject} onHover={hoverObject} onTransform={updateEditorTransform} onCommit={commitEditorTransform} />;
             })}
-            {wireVisibility && pdm.routes.map((route) => <Line key={route.id}
-              points={route.waypoints.map((point) => [point.x * scale, point.y * scale, point.z * scale])}
-              color={hasDraftEdits ? '#F59E0B' : route.color_hex} lineWidth={1.5}
-              transparent opacity={hasDraftEdits ? 0.35 : 0.8} dashed={hasDraftEdits} dashSize={0.08} gapSize={0.04} />)}
+            {wireVisibility && pdm.routes.map((route) => <WireMesh key={route.id} route={route} draft={hasDraftEdits}
+              highlighted={!!selectedDuct&&!!route.duct_ids?.includes(selectedDuct.id)}
+              dimmed={!!selectedDuct&&!route.duct_ids?.includes(selectedDuct.id)}/>)}
             </>}
           </Canvas>
           {warnings.length > 0 && <div className="absolute bottom-3 left-3 rounded-lg border border-amber-700 bg-slate-950/90 px-3 py-2 text-xs text-amber-200">
@@ -256,7 +272,7 @@ export const Panel3DViewer: React.FC = () => {
 
         <aside className="min-h-0 overflow-y-auto rounded-xl border border-slate-800 bg-slate-900/80 p-3" aria-label="Properties inspector">
           <h4 className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-300">Properties inspector</h4>
-          {!selectedComponent || !selectedTransform ? <p className="text-xs text-slate-500">Select a component in the tree or viewport.</p> : <>
+          {selectedDuct?<div className="space-y-2 text-xs text-slate-300"><p className="font-semibold">{selectedDuct.label}</p><p>{selectedDuct.catalog_id}</p><p>{selectedDuct.width} × {selectedDuct.height} × {selectedDuct.depth} mm</p><p>Estimated fill: {selectedDuct.capacity_pct}% / {selectedDuct.max_fill_pct}% limit</p><p>{selectedDuct.route_ids.length} routed conductors</p><p className="text-slate-500">Trunks follow this trough; terminal leads leave it locally.</p></div>:selectedAccessory?<div className="space-y-2 text-xs text-slate-300"><p className="font-semibold">{selectedAccessory.name}</p><p>{selectedAccessory.catalog_id}</p><p>{selectedAccessory.material}</p><p>{selectedAccessory.width} × {selectedAccessory.height} × {selectedAccessory.depth} mm</p></div>:!selectedComponent || !selectedTransform ? <p className="text-xs text-slate-500">Select a component in the tree or viewport.</p> : <>
             <div className="mb-3 border-b border-slate-800 pb-3">
               <p className="text-sm font-semibold text-slate-100">{selectedComponent.name}</p>
               <p className="font-mono text-[10px] text-blue-300">{selectedComponent.cem_component_id} · {selectedComponent.category}</p>

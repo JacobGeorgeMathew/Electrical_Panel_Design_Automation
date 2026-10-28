@@ -1,6 +1,7 @@
 """Managed immutable files and the existing primitive CAD adapter's GLB exporter."""
 import hashlib
 import json
+import math
 import os
 import struct
 import tempfile
@@ -68,15 +69,15 @@ def content_hash(value) -> str:
     return hashlib.sha256(canonical_json(value)).hexdigest()
 
 
-def primitive_glb(primitives: list[dict]) -> bytes:
-    """Tessellate existing BOX primitives; routes remain GLB line segments.
+def primitive_glb(primitives: list[dict], generator_version: str = '2') -> bytes:
+    """Tessellate panel boxes, cylinders and swept wire tubes.
 
     CAD/PDM inputs are mm. glTF positions and translations are metres. Meshes are
     centred, with identity axes matching the existing right-handed PDM convention.
     This is a visualization export, not a solid or FreeCAD feature history.
     """
     binary = bytearray()
-    doc = {"asset": {"version": "2.0", "generator": "panelstudio-primitives/1"},
+    doc = {"asset": {"version": "2.0", "generator": "panelstudio-primitives/"+generator_version},
            "scene": 0, "scenes": [{"nodes": []}], "nodes": [], "meshes": [],
            "materials": [], "buffers": [], "bufferViews": [], "accessors": []}
 
@@ -115,16 +116,38 @@ def primitive_glb(primitives: list[dict]) -> bytes:
                           "NORMAL": buffer(normals,"f",5126,"VEC3",24)}
             index = buffer(indices,"H",5123,"SCALAR",36)
             mode = 4
-        elif kind == "TUBE":
-            points = item.get("points", [])
+        elif kind in {"TUBE", "CYLINDER"}:
+            if kind=='CYLINDER':
+                points=[{'x':0,'y':0,'z':-item['height']/2},{'x':0,'y':0,'z':item['height']/2}]
+            else:
+                points = item.get("points", [])
             if len(points) < 2:
                 continue
             coords = [[float(p[k])/1000 for k in ("x","y","z")] for p in points]
-            verts = [c for point in coords for c in point]
-            attributes = {"POSITION": buffer(verts,"f",5126,"VEC3",len(coords),
-                ([min(p[i] for p in coords) for i in range(3)], [max(p[i] for p in coords) for i in range(3)]))}
-            index = buffer(list(range(len(coords))),"I",5125,"SCALAR",len(coords))
-            mode = 3
+            verts=[];normals=[];indices=[];sides=8;radius=float(item.get('radius',1.5))/1000
+            def unit(v):
+                length=math.sqrt(sum(x*x for x in v));return [x/max(length,1e-12) for x in v]
+            def cross(a,b): return [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]]
+            for i,point in enumerate(coords):
+                before=coords[max(0,i-1)];after=coords[min(len(coords)-1,i+1)]
+                tangent=unit([after[k]-before[k] for k in range(3)])
+                normal=unit(cross(tangent,[0,0,1] if abs(tangent[2])<.9 else [0,1,0]))
+                binormal=cross(tangent,normal)
+                for j in range(sides):
+                    angle=j*2*math.pi/sides
+                    n=[normal[k]*math.cos(angle)+binormal[k]*math.sin(angle) for k in range(3)]
+                    verts.extend(point[k]+radius*n[k] for k in range(3));normals.extend(n)
+            for i in range(len(coords)-1):
+                for j in range(sides):
+                    a=i*sides+j;b=i*sides+(j+1)%sides;c=a+sides;d=b+sides
+                    indices.extend((a,b,c,b,d,c))
+            for j in range(1,sides-1):
+                indices.extend((0,j+1,j))
+                base=(len(coords)-1)*sides;indices.extend((base,base+j,base+j+1))
+            bounds=([min(verts[k::3]) for k in range(3)],[max(verts[k::3]) for k in range(3)])
+            count=len(verts)//3
+            attributes={'POSITION':buffer(verts,'f',5126,'VEC3',count,bounds),'NORMAL':buffer(normals,'f',5126,'VEC3',count)}
+            index=buffer(indices,'I',5125,'SCALAR',len(indices));mode=4
         else:
             continue
         color = item.get("color", "#94a3b8").lstrip("#")
@@ -135,7 +158,7 @@ def primitive_glb(primitives: list[dict]) -> bytes:
         doc["meshes"].append({"primitives":[{"attributes":attributes,"indices":index,"material":len(doc["materials"])-1,"mode":mode}]})
         node = {"name":item.get("name",item.get("id","part")),"mesh":len(doc["meshes"])-1,
                 "translation":[float(position[k])/1000 for k in ("x","y","z")],
-                "extras":{k:item[k] for k in ("id","pdm_component_id","cem_component_id","route_id","net_id") if k in item}}
+                "extras":{k:item[k] for k in ("id","pdm_component_id","cem_component_id","route_id","net_id","assembly_group","object_id") if k in item}}
         if item.get("rotation_xyzw"):
             node["rotation"] = item["rotation_xyzw"]
         doc["nodes"].append(node)

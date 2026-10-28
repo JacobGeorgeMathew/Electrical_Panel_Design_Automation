@@ -1,5 +1,6 @@
 from typing import List, Tuple
-from shapely.geometry import LineString, box
+from shapely.geometry import LineString, box, Point
+from shapely.ops import unary_union
 from app.algorithms.layout_config import LayoutConfig
 from app.models.cem import CanonicalEngineeringModel
 from app.models.pdm import PhysicalComponent, PhysicalDesignModel, ValidationViolation
@@ -63,6 +64,7 @@ class ValidationEngine:
                 # Clearance distance check
                 dist = poly1.distance(poly2)
                 min_req = layout_config.device_gap_x if c1.rail_id and c2.rail_id else layout_config.plate_clearance
+                if c1.rail_id==c2.rail_id and c1.category==c2.category=='TERMINAL': min_req=0
                 if 0 < dist < min_req:
                     violations.append(ValidationViolation(
                         type="CLEARANCE",
@@ -174,4 +176,43 @@ class ValidationEngine:
                             object_b=conn.id, required_value=1, actual_value=0, unit="references",
                             message=f"PDM route {route.id} does not match CEM connection {conn.id}."))
 
+        if pdm.ducts:
+            def problem(kind, object_id, message, actual=0, required=1, severity='CRITICAL'):
+                violations.append(ValidationViolation(type=kind,severity=severity,object_a=object_id,
+                    required_value=required,actual_value=actual,unit='mm' if kind!='DUCT_CAPACITY' else '%',message=message))
+            network=unary_union([box(d.x,d.y,d.x+d.width,d.y+d.height) for d in pdm.ducts])
+            duct_ids={d.id for d in pdm.ducts}
+            for d in pdm.ducts:
+                if (d.x<pdm.mounting_plate_x or d.y<pdm.mounting_plate_y or
+                    d.x+d.width>pdm.mounting_plate_x+(pdm.mounting_plate_width or enc_w) or
+                    d.y+d.height>pdm.mounting_plate_y+(pdm.mounting_plate_height or enc_h) or d.z+d.depth>pdm.enclosure_depth):
+                    problem('DUCT_BOUNDARY',d.id,'Wiring duct leaves the backplate or enclosure.')
+                footprint=box(d.x,d.y,d.x+d.width,d.y+d.height)
+                for c in components:
+                    if footprint.intersection(box(c.position.x,c.position.y,c.position.x+c.width,c.position.y+c.height)).area>.01:
+                        problem('DUCT_COLLISION',d.id,f'Wiring duct overlaps component {c.id}.')
+                import math
+                used_area=sum(math.pi*(r.wire_diameter_mm/2)**2 for r in pdm.routes if d.id in r.duct_ids)
+                section=(min(d.width,d.height)-2*d.wall_mm)*(d.depth-d.wall_mm)
+                actual_fill=100*used_area/max(1,section)
+                if actual_fill>d.max_fill_pct:
+                    problem('DUCT_CAPACITY',d.id,'Estimated insulated-wire area exceeds the configured duct fill limit.',round(actual_fill,2),d.max_fill_pct)
+            for route in pdm.routes:
+                start,end=route.duct_entry_index,route.duct_exit_index
+                if (start is None or end is None or not 0<=start<=end<len(route.waypoints) or
+                    not route.duct_ids or not set(route.duct_ids).issubset(duct_ids)):
+                    problem('DUCT_ROUTING',route.id,'Route has no valid duct-trunk references or indices.');continue
+                points=route.waypoints[start:end+1]
+                path=LineString([(p.x,p.y) for p in points]) if len(points)>1 else Point(points[0].x,points[0].y)
+                if not network.buffer(.01).covers(path.buffer(route.wire_diameter_mm/2,cap_style='flat',join_style='mitre')):
+                    problem('DUCT_ROUTING',route.id,'A trunk segment leaves the physical wiring-duct network.')
+                if any(not any(d.id in route.duct_ids and d.x-.01<=p.x<=d.x+d.width+.01 and d.y-.01<=p.y<=d.y+d.height+.01
+                    and d.z+d.wall_mm-.01<=p.z<=d.z+d.depth-d.wall_mm+.01 for d in pdm.ducts) for p in points):
+                    problem('DUCT_ROUTING',route.id,'A trunk point is outside its declared duct volume.')
+        # The cabinet cavity must contain the full device envelope, including depth.
+        for c in components:
+            if c.position.z < pdm.mounting_plate_z or c.position.z+c.depth > pdm.enclosure_depth-5:
+                violations.append(ValidationViolation(type='BOUNDARY',severity='CRITICAL',object_a=c.id,
+                    required_value=pdm.enclosure_depth-5,actual_value=c.position.z+c.depth,unit='mm',
+                    message='Component depth leaves the cabinet cavity or intersects the backplate.'))
         return violations

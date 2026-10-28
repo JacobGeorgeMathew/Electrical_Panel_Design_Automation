@@ -28,7 +28,7 @@ def initialize(database):
 
 def main():
     parser=argparse.ArgumentParser()
-    parser.add_argument('action',choices=['initialize','status','import-legacy','verify-baseline','audit-assets'])
+    parser.add_argument('action',choices=['initialize','status','import-legacy','import-panel-hardware','verify-baseline','audit-assets'])
     args=parser.parse_args()
     database=Database(Settings.load())
     try:
@@ -43,6 +43,10 @@ def main():
             if not database.ready(): raise RuntimeError('Apply migrations before importing.')
             from app.persistence.import_legacy import import_legacy
             print(json.dumps(import_legacy(database)))
+        elif args.action=='import-panel-hardware':
+            if not database.ready(): raise RuntimeError('Apply migrations before importing.')
+            from app.persistence.import_panel_hardware import import_panel_hardware
+            print(json.dumps(import_panel_hardware(database)))
         elif args.action=='audit-assets':
             from sqlalchemy import select
             from app.persistence import models as m

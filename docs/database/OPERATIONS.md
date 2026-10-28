@@ -74,6 +74,8 @@ The centralized TypeScript client provides typed responses, timeouts, cancellati
 
 ## CAD assets, files and recovery
 
+Detailed cabinet hardware and physical duct routing are available in engine `db-pipeline-2` and primitive generator 2. After updating an existing installation, run `python -m app.persistence.manage import-panel-hardware` from `backend/` with private database environment configuration. Full `import-legacy` also runs this additive hardware import. No new tables or destructive schema changes are required. Version 1 catalog/CAD records and saved revisions remain preserved. Generate a new revision to receive the new geometry and ducts. See [panel assembly details](../PANEL_ASSEMBLY.md).
+
 The file store uses relative content-addressed keys `sha256/aa/bb/<hash>.<format>`. Files are written to a temporary name, flushed, hashed, atomically moved and verified before metadata is registered. Filesystem writes cannot join the DB transaction; a failed database commit can leave a harmless unreferenced content file. `python -m app.persistence.manage audit-assets` reports missing/corrupt and unreferenced files without deleting engineering history. Restore a missing file from backup or regenerate a compatible saved revision. Automatic file deletion requires an explicit retention policy.
 
 Asset/content endpoints resolve UUIDs through database records, restrict resolved paths to the managed root and verify size and SHA-256. Their responses contain application URLs rather than filesystem paths. Metadata alone does not make an asset available. Assets marked READY but absent/corrupt are reported as unavailable and content retrieval returns 404.

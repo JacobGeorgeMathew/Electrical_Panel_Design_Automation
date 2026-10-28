@@ -50,19 +50,16 @@ class NetlistEngine:
                                   {"component_id": mcb.id, "terminal_id": terminal_id})
             phase_count = max(1, min(phases, mcb.poles))
             phase = (index % phases) + 1
-            if phase_count == 1:
-                endpoints = [(busbar.id, f"IN_L{phase}", mcb.id, "IN"),
-                             (mcb.id, "OUT", terminal_id, "LEFT")]
-                branch_voltage = voltage / (3 ** 0.5) if phases == 3 else voltage
-            else:
-                # The current catalog exposes three pole terminals as L1/L2/L3.
-                endpoints = [(busbar.id, f"IN_L{p}", mcb.id, f"L{p}_IN")
-                             for p in range(1, min(phase_count, phases) + 1)]
-                endpoints += [(mcb.id, f"L{p}_OUT", terminal_id, "LEFT")
-                              for p in range(1, min(phase_count, phases) + 1)]
-                branch_voltage = voltage
-            add_net(f"NET-BRANCH-{mcb.id}", f"Branch Circuit {mcb.id} to {terminal_id}",
-                    branch_voltage, "POWER", endpoints)
+            # Each phase and each side of a breaker has its own electrical net.
+            # A three-pole outgoing assembly has three distinct screw terminals.
+            for p in ([phase] if phase_count==1 else range(1,phase_count+1)):
+                in_terminal='IN' if phase_count==1 else f'L{p}_IN'
+                out_terminal='OUT' if phase_count==1 else f'L{p}_OUT'
+                load_terminal='LEFT' if phase_count==1 else f'L{p}_LEFT'
+                branch_voltage=voltage/(3**.5) if phases==3 else voltage
+                for side,endpoints in [('IN',[(busbar.id,f'IN_L{p}',mcb.id,in_terminal)]),
+                    ('OUT',[(mcb.id,out_terminal,terminal_id,load_terminal)])]:
+                    add_net(f'NET-BRANCH-{mcb.id}-L{p}-{side}',f'{mcb.id} L{p} {side}',branch_voltage,'POWER',endpoints)
 
         nbar = by_category["NEUTRAL_BAR"]
         if nbar:

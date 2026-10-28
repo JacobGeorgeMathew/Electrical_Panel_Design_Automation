@@ -80,7 +80,7 @@ def import_legacy(database):
             if not s.scalar(select(m.component_cad_models.c.component_version_id).where(
                 m.component_cad_models.c.component_version_id==version,m.component_cad_models.c.cad_model_version_id==mv)):
                 s.execute(insert(m.component_cad_models).values(component_version_id=version,cad_model_version_id=mv))
-            file=assets.put(primitive_glb([{'type':'BOX','id':code,'name':data['name'],'dimensions':{k:data[k] for k in ('width','height','depth')},'color':'#94A3B8'}]),'glb')
+            file=assets.put(primitive_glb([{'type':'BOX','id':code,'name':data['name'],'dimensions':{k:data[k] for k in ('width','height','depth')},'color':'#94A3B8'}],generator_version='1'),'glb')
             put(m.cad_assets,'preview:'+code,cad_model_version_id=mv,asset_role='PREVIEW',file_format='GLB',
                 **file,media_type='model/gltf-binary',generator_name='panelstudio-primitives',generator_version='1',generation_status='READY')
 
@@ -160,4 +160,6 @@ def import_legacy(database):
             repo.save_requirements(row,template,requirements,project.get('requirements',{}))
             put(m.provenance,'project-import:'+project['id'],project_id=row['id'],subject_kind='PROJECT',subject_key=project['id'],
                 source_kind='IMPORT',source_ref='sample_projects.json',details={'original':project,'source_sha256':content_hash(project)})
-    return {'components':len(components),'enclosures':len(enclosures),'archetypes':len(templates),'source_files_unchanged':True}
+    from app.persistence.import_panel_hardware import import_panel_hardware
+    hardware = import_panel_hardware(database)
+    return {'components':len(components),'enclosures':len(enclosures),'archetypes':len(templates),'source_files_unchanged':True,**hardware}

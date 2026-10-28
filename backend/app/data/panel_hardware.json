@@ -1,0 +1,20 @@
+{
+  "catalog_version": 1,
+  "provenance": "Generic parametric panel construction. Dimensions and fill limits are design assumptions, not manufacturer certification.",
+  "items": [
+    {"id":"PANEL_SHELL_STEEL","name":"Folded steel enclosure body","category":"ENCLOSURE_BODY","width":800,"height":1000,"depth":300,"material":"Powder-coated steel","color":"#CBD5E1","parameters":{"sheet_mm":1.5,"edge_mm":5,"door_gap_mm":3,"device_clearance_mm":15,"terminal_lead_clearance_mm":10,"backplate_mm":3}},
+    {"id":"PANEL_DOOR_STEEL","name":"Hinged steel panel door","category":"DOOR","width":790,"height":990,"depth":18,"material":"Powder-coated steel","color":"#D4D8DC","parameters":{"sheet_mm":1.5,"return_mm":18}},
+    {"id":"PANEL_HANDLE","name":"Quarter-turn door handle and lock","category":"HANDLE","width":22,"height":110,"depth":24,"material":"Polyamide / steel","color":"#202832","parameters":{}},
+    {"id":"PANEL_HINGE","name":"Lift-off enclosure hinge","category":"HINGE","width":12,"height":45,"depth":16,"material":"Zinc-plated steel","color":"#7D8790","parameters":{}},
+    {"id":"PANEL_GASKET","name":"Continuous door perimeter gasket","category":"GASKET","width":780,"height":980,"depth":4,"material":"Elastomer","color":"#292E32","parameters":{"section_mm":5}},
+    {"id":"PANEL_GLAND_PLATE","name":"Removable bottom cable-entry gland plate","category":"GLAND_PLATE","width":300,"height":2,"depth":160,"material":"Zinc-plated steel","color":"#9AA5AE","parameters":{}},
+    {"id":"WIRE_DUCT_40_60","name":"Slotted wiring duct 40 x 60 mm with cover","category":"WIRE_DUCT","width":40,"height":1000,"depth":60,"material":"PVC","color":"#A7B1BA","parameters":{"wall_mm":2,"slot_pitch_mm":12,"finger_mm":7,"max_fill_pct":40}},
+    {"id":"DIN_RAIL_35","name":"35 mm top-hat DIN rail","category":"DIN_RAIL","width":1000,"height":35,"depth":7.5,"material":"Zinc-plated steel","color":"#ABB5BE","parameters":{"sheet_mm":1}},
+    {"id":"TERMINAL_END_STOP","name":"DIN terminal row end stop","category":"END_STOP","width":8,"height":45,"depth":35,"material":"Polyamide / steel","color":"#586775","parameters":{}},
+    {"id":"TERMINAL_END_PLATE","name":"Terminal strip insulating end plate","category":"END_PLATE","width":2,"height":48,"depth":47,"material":"Polyamide","color":"#D6A94A","parameters":{}},
+    {"id":"TERMINAL_BLOCK_3P_6MM","name":"Three isolated feed-through terminals 6 mm2","category":"TERMINAL","engine_component":true,"width":24.6,"height":48,"depth":47,"current_rating":41,"breaking_capacity":0,"poles":3,"mounting":"DIN_RAIL","heat_loss":1.5,"cad_model":"parametric:terminal-3p","material":"Polyamide / copper","color":"#D6A94A","parameters":{},"terminals":[
+      {"id":"L1_LEFT","x":4.1,"y":48,"z":23.5,"type":"POWER"},{"id":"L1_RIGHT","x":4.1,"y":0,"z":23.5,"type":"POWER"},
+      {"id":"L2_LEFT","x":12.3,"y":48,"z":23.5,"type":"POWER"},{"id":"L2_RIGHT","x":12.3,"y":0,"z":23.5,"type":"POWER"},
+      {"id":"L3_LEFT","x":20.5,"y":48,"z":23.5,"type":"POWER"},{"id":"L3_RIGHT","x":20.5,"y":0,"z":23.5,"type":"POWER"}]}
+  ]
+}

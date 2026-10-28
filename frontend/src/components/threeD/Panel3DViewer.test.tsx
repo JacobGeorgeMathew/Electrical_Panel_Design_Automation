@@ -87,4 +87,23 @@ describe('Panel3DViewer sizing', () => {
     act(() => host.querySelector('[aria-label="Hide QF001"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(useProjectStore.getState().editorHiddenComponentIds).toContain('QF001');
   });
+
+  it('opens the door, removes covers and inspects persisted duct fill',()=>{
+    useProjectStore.setState({pdm:{...useProjectStore.getState().pdm!,ducts:[{
+      id:'DUCT-LEFT',label:'Left vertical wiring duct',x:20,y:20,z:30,width:40,height:700,depth:60,
+      catalog_id:'WIRE_DUCT_40_60',orientation:'VERTICAL',wall_mm:2,capacity_pct:12.5,max_fill_pct:40,
+      wire_area_mm2:250,usable_area_mm2:2000,route_ids:['R1','R2']
+    }],accessories:[{id:'DOOR',catalog_id:'PANEL_DOOR_STEEL',name:'Hinged steel door',category:'DOOR',
+      parent_id:'ENCLOSURE',position:{x:3,y:3,z:303},width:594,height:794,depth:18,material:'Steel',color_hex:'#CBD5E1',parameters:{}}]}});
+    act(()=>root.render(<Panel3DViewer/>));
+    const button=(text:string)=>Array.from(host.querySelectorAll('button')).find(b=>b.textContent?.includes(text))!;
+    expect(button('Close door').getAttribute('aria-pressed')).toBe('true');
+    act(()=>button('Close door').click());
+    expect(button('Open door').getAttribute('aria-pressed')).toBe('false');
+    act(()=>button('Fit duct covers').click());
+    expect(button('Remove duct covers').getAttribute('aria-pressed')).toBe('true');
+    act(()=>button('Left vertical wiring duct').click());
+    expect(useProjectStore.getState().selectedObjectId).toBe('DUCT-LEFT');
+    expect(host.querySelector('[aria-label="Properties inspector"]')?.textContent).toContain('12.5% / 40%');
+  });
 });

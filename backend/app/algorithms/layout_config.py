@@ -2,7 +2,7 @@
 
 Everything the solver needs to be tuned lives here, so the algorithm itself
 contains no magic numbers and can later be fed from rules.json / the DB.
-All lengths are in millimetres. Origin = bottom-left of the mounting plate.
+All lengths are in millimetres. Origin = lower-left-front of the enclosure.
 """
 from dataclasses import dataclass, field
 from typing import Dict, Set
@@ -30,6 +30,10 @@ class LayoutConfig:
     fill_factor: float = 0.85        # max rail utilisation when sizing rows
     z_din: float = 30.0
     z_plate: float = 20.0
+    rail_z: float = 25.0
+    duct_width_mm: float = 0.0  # zero keeps the standalone legacy placement API
+    duct_edge_mm: float = 5.0
+    duct_device_clearance_mm: float = 15.0
 
     solver_time_s: float = 5.0
     solver_deterministic_time: float = 0.5

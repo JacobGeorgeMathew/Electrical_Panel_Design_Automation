@@ -29,6 +29,9 @@ export const BOMTable: React.FC = () => {
   };
 
   const components = cem.components;
+  const hardware=[...(pdm?.accessories||[]).map(a=>({id:a.id,code:a.catalog_id,name:a.name,detail:`${a.width} × ${a.height} × ${a.depth} mm`})),
+    ...(pdm?.ducts||[]).map(d=>({id:d.id,code:d.catalog_id,name:d.label+' with cover',detail:`Cut ${d.orientation==='VERTICAL'?d.height:d.width} mm · ${d.capacity_pct}% fill`})),
+    ...(pdm?.rails||[]).map(r=>({id:r.id,code:'DIN_RAIL_35',name:r.label,detail:`Cut ${r.length} mm`}))];
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
@@ -119,6 +122,7 @@ export const BOMTable: React.FC = () => {
           </table>
         </div>
       </div>
+      {hardware.length>0&&<section className="rounded-xl border border-slate-800 bg-slate-900 p-4"><h3 className="mb-3 font-semibold text-slate-100">Enclosure, ducts and accessories</h3><table className="w-full text-left text-xs"><thead className="text-slate-400"><tr><th className="p-2">Part</th><th className="p-2">Catalog</th><th className="p-2">Quantity / dimensions</th></tr></thead><tbody>{hardware.map(a=><tr key={a.id} onClick={()=>{selectObject(a.id);setActiveTab('threeD');}} className="cursor-pointer border-t border-slate-800 hover:bg-slate-800"><td className="p-2">{a.name}</td><td className="p-2 font-mono text-blue-300">{a.code}</td><td className="p-2">1 · {a.detail}</td></tr>)}</tbody></table></section>}
     </div>
   );
 };

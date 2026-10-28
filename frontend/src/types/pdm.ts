@@ -32,6 +32,24 @@ export interface PhysicalComponent {
   preview_asset?: import('./api').Artifact | null;
   color_hex: string;
   terminals: { id: string; x: number; y: number; z: number; [key: string]: any }[];
+  geometry?: PanelPrimitive[];
+}
+
+export interface PanelPrimitive {
+  id: string; name: string; type: string; position: Position3D; color: string;
+  dimensions?: { width: number; height: number; depth: number };
+  radius?: number; height?: number; opacity?: number; rotation_xyzw?: [number,number,number,number];
+  assembly_group?: string; object_id?: string;
+}
+export interface CableDuct {
+  id: string; label: string; x: number; y: number; z: number; width: number; height: number; depth: number;
+  catalog_id: string; component_version_id?: string; orientation: string; wall_mm: number;
+  capacity_pct: number; max_fill_pct: number; wire_area_mm2: number; usable_area_mm2: number; route_ids: string[];
+}
+export interface PanelAccessory {
+  id: string; catalog_id: string; component_version_id?: string; name: string; category: string;
+  parent_id: string; position: Position3D; width: number; height: number; depth: number;
+  material: string; color_hex: string; parameters: Record<string,any>;
 }
 
 export interface DINRail {
@@ -65,6 +83,7 @@ export interface WireRoute {
   length_mm: number;
   bend_count: number;
   color_hex: string;
+  duct_ids?: string[]; duct_entry_index?: number; duct_exit_index?: number; wire_diameter_mm?: number;
 }
 
 export interface ValidationViolation {
@@ -95,6 +114,9 @@ export interface PhysicalDesignModel {
   zones: PhysicalZone[];
   components: PhysicalComponent[];
   rails: DINRail[];
+  ducts?: CableDuct[];
+  accessories?: PanelAccessory[];
+  construction?: Record<string,any>;
   routes: WireRoute[];
   validation_results: ValidationViolation[];
   total_heat_loss_watts: number;

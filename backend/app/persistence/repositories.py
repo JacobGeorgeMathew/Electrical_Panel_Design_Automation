@@ -117,8 +117,13 @@ class CatalogRepository:
         return {'items':[self._component(r) for r in rows],'total':total,'page':page,'page_size':page_size}
 
     def engine_catalog(self):
-        rows=self.s.execute(self._query().where(m.component_versions.c.specification['import_source'].astext=='legacy-json-v1')).mappings()
+        rows=self.s.execute(self._query().where(or_(m.component_versions.c.specification['import_source'].astext=='legacy-json-v1',
+            m.component_versions.c.specification['engine_component'].as_boolean()==True))).mappings()
         return [{**self._component(r),'id':r['code']} for r in rows if r['category_code']!='ENCLOSURE']
+
+    def hardware_catalog(self):
+        rows=self.s.execute(self._query().where(m.component_versions.c.specification['import_source'].astext=='panel-hardware-v1')).mappings()
+        return [self._component(r) for r in rows]
 
     def enclosures(self):
         rows=self.s.execute(self._query().where(m.components.c.category_code=='ENCLOSURE',
@@ -140,7 +145,8 @@ class CatalogRepository:
     def cad_models(self, version_id):
         query=select(m.cad_model_versions).join(m.component_cad_models,
             m.cad_model_versions.c.id==m.component_cad_models.c.cad_model_version_id).where(
-                m.component_cad_models.c.component_version_id==identifier(version_id))
+                m.component_cad_models.c.component_version_id==identifier(version_id),m.cad_model_versions.c.status=='PUBLISHED')\
+                .order_by(m.cad_model_versions.c.version_no.desc(),m.cad_model_versions.c.id)
         result=[]
         for row in self.s.execute(query).mappings():
             value=serial(dict(row))

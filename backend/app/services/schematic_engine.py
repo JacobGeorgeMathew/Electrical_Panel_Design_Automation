@@ -131,10 +131,8 @@ class SchematicEngine:
                 "width": terminal_symbol_width,
                 "height": 40,
                 "label": term.id,
-                "terminals": [
-                    {"id": "LEFT", "x": t_x + terminal_symbol_width / 2, "y": 540},
-                    {"id": "RIGHT", "x": t_x + terminal_symbol_width / 2, "y": 580}
-                ]
+                "terminals": [{'id':t['id'],'x':t_x+terminal_symbol_width*float(t['x'])/max(1,term.width),
+                    'y':540 if float(t['y'])>term.height/2 else 580} for t in term.terminals]
             })
 
         if nbar:

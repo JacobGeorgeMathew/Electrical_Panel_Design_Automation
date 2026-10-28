@@ -118,7 +118,9 @@ def test_pipeline_uses_consistent_cem_pdm_schematic_routes_bom_and_cad_ids():
     assert {symbol["id"] for symbol in result["schematic"]["symbols"]} >= {
         component["id"] for component in cem["components"]
     }
-    assert {item["component_id"] for item in result["bom"]} == {component["id"] for component in cem["components"]}
+    assert {item["component_id"] for item in result["bom"]} == (
+        {component["id"] for component in cem["components"]} |
+        {item['id'] for group in ('accessories','ducts','rails') for item in pdm[group]})
     cad_components = {primitive["cem_component_id"] for primitive in result["cad"]["primitives"]
                       if primitive.get("cem_component_id")}
     assert cad_components == {component["id"] for component in cem["components"]}
