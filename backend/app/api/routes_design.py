@@ -27,4 +27,4 @@ def validate_placement(project_id:str,pdm:PhysicalDesignModel):
     violations=ValidationEngine().validate_pdm(pdm)
     pdm.validation_results=violations
     return {'pdm':pdm.model_dump(),'validation_results':[v.model_dump() for v in violations],
-            'is_valid':not any(v.severity=='CRITICAL' for v in violations)}
+            'is_valid':not violations}

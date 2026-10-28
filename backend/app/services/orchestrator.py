@@ -5,7 +5,7 @@ from app.algorithms.duct_routing import DuctRouter
 from app.services.panel_assembly import PanelAssemblyEngine, assembly_bom
 from app.algorithms.layout_config import LayoutConfig
 from app.models.cem import CEMState, CanonicalEngineeringModel, FunctionalModule
-from app.models.pdm import PhysicalDesignModel
+from app.models.pdm import PhysicalDesignModel, DesignValidationPolicy
 from app.repositories.component_repository import ComponentRepository
 from app.repositories.enclosure_repository import EnclosureRepository
 from app.repositories.project_repository import ProjectRepository
@@ -121,14 +121,44 @@ class DesignOrchestrator:
 
         total_comp_width = sum(c.width for c in components if c.category in {"MCCB", "MCB", "SPD", "BUSBAR"})
         total_heat_loss = sum(c.heat_loss for c in components)
-        enclosure = self.enclosure_engine.select_enclosure(
+        candidates = self.enclosure_engine.candidates(
             total_components_width=total_comp_width, total_heat_loss=total_heat_loss,
-            ip_rating=values["ip_rating"])
-        if not enclosure:
-            raise DesignError("NO_FEASIBLE_ENCLOSURE", "No catalog enclosure satisfies the selected components, heat load, and IP rating.",
-                              {"minimum_component_width_mm": total_comp_width,
-                               "total_heat_loss_w": total_heat_loss, "ip_rating": values["ip_rating"]})
+            ip_rating=values["ip_rating"], thermal_density_limit_w_per_l=self.layout_config.thermal_density_limit_w_per_l)
+        if not candidates:
+            raise DesignError("NO_FEASIBLE_ENCLOSURE", "No catalog enclosure satisfies the geometry, heat density and IP constraints; choose a larger enclosure or revise the requirements.",
+                              {"minimum_component_width_mm": total_comp_width, "total_heat_loss_w": total_heat_loss,
+                               "thermal_density_limit_w_per_l": self.layout_config.thermal_density_limit_w_per_l,
+                               "minimum_volume_litres": total_heat_loss/self.layout_config.thermal_density_limit_w_per_l,
+                               "ip_rating": values["ip_rating"]})
+        attempted=[]
+        pdm=None
+        last_error=None
+        retryable={"PLACEMENT_INFEASIBLE","PLACEMENT_INVALID","ROUTING_INFEASIBLE",
+                   "PHYSICAL_VALIDATION_FAILED","DUCT_SPACE_INFEASIBLE"}
+        for enclosure in candidates:
+            attempted.append(enclosure.id)
+            try:
+                pdm,violations=self._physical_design(cem,components,nets,enclosure,total_heat_loss)
+                break
+            except DesignError as exc:
+                if exc.code not in retryable: raise
+                last_error=exc
+        if pdm is None:
+            last_error.details["attempted_enclosure_ids"]=attempted
+            raise last_error
+        cem.physical_design_id = pdm.id
+        cem.state = CEMState.FINAL_VALIDATED
+        cad_data = self.cad_engine.generate_parametric_geometry(pdm)
+        bom = assembly_bom(cem, pdm)
 
+        if requirement_overrides and persist_requirements and project_existed:
+            updated = {**project, "requirements": req_values}
+            self.project_repo.save(updated)
+        return {"cem": cem.model_dump(), "pdm": pdm.model_dump(), "schematic": schematic_data,
+                "cad": cad_data, "bom": bom, "validation_errors": [v.model_dump() for v in violations]}
+
+    def _physical_design(self, cem, components, nets, enclosure, total_heat_loss):
+        project_id=cem.project_id
         connections = [(conn.from_component, conn.to_component) for net in nets for conn in net.connections
                        if conn.from_component != "PANEL_ROOT" and conn.to_component != "PANEL_ROOT"]
         plate_cfg = self.panel_assembly.layout_config(enclosure, self.layout_config)
@@ -176,6 +206,7 @@ class DesignOrchestrator:
             components=placement.components, rails=placement.rails, routes=routes,
             ducts=ducts, construction=self.panel_assembly.parameters('PANEL_SHELL_STEEL'),
             total_heat_loss_watts=total_heat_loss,
+            validation_policy=DesignValidationPolicy.from_layout(plate_cfg),
         )
         pdm.accessories = self.panel_assembly.accessories(pdm)
         from app.services.panel_geometry import component_geometry
@@ -183,17 +214,7 @@ class DesignOrchestrator:
             part.geometry = component_geometry(part)
         violations = self.validation_engine.validate_pdm(pdm, cem, plate_cfg)
         pdm.validation_results = violations
-        critical = [v for v in violations if v.severity == "CRITICAL"]
-        if critical:
-            raise DesignError("PHYSICAL_VALIDATION_FAILED", "The generated physical design has critical validation violations.",
-                              {"violations": [v.model_dump() for v in critical]})
-        cem.physical_design_id = pdm.id
-        cem.state = CEMState.FINAL_VALIDATED
-        cad_data = self.cad_engine.generate_parametric_geometry(pdm)
-        bom = assembly_bom(cem, pdm)
-
-        if requirement_overrides and persist_requirements and project_existed:
-            updated = {**project, "requirements": req_values}
-            self.project_repo.save(updated)
-        return {"cem": cem.model_dump(), "pdm": pdm.model_dump(), "schematic": schematic_data,
-                "cad": cad_data, "bom": bom, "validation_errors": [v.model_dump() for v in violations]}
+        if violations:
+            raise DesignError("PHYSICAL_VALIDATION_FAILED", "The generated physical design does not satisfy all physical constraints.",
+                              {"violations": [v.model_dump() for v in violations]})
+        return pdm,violations

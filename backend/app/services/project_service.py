@@ -5,7 +5,7 @@ from uuid import uuid4
 from sqlalchemy import insert, select, update
 from app.algorithms.layout_config import LayoutConfig, LayoutWeights
 from app.models.cem import CanonicalEngineeringModel
-from app.models.pdm import PhysicalDesignModel
+from app.models.pdm import PhysicalDesignModel, DesignValidationPolicy
 from app.persistence import models as m
 from app.persistence.assets import AssetStore, AssetUnavailable, content_hash, primitive_glb
 from app.persistence.parameters import resolve_parameters
@@ -20,7 +20,7 @@ from app.services.change_propagation import ChangePropagationEngine
 from app.services.design_errors import DesignError
 from app.services.panel_assembly import assembly_bom
 
-ENGINE_VERSION='db-pipeline-2'
+ENGINE_VERSION='db-pipeline-3'
 
 
 class ProjectService:
@@ -109,6 +109,14 @@ class ProjectService:
         layout_data['weights']=LayoutWeights(**layout_data['weights'])
         for field in ('din_categories','plate_categories'): layout_data[field]=set(layout_data[field])
         layout=LayoutConfig(**layout_data)
+        policy_data=next((r['parameters'] for r in rules if r['code']=='DB_CONSTRAINT_POLICY'),None)
+        if policy_data is None:
+            raise PersistenceError('CONSTRAINT_POLICY_NOT_INITIALIZED','Apply migrations and run seed-constraints before generating a design.',503)
+        policy=DesignValidationPolicy(**policy_data)
+        layout.device_gap_x=policy.din_clearance_mm
+        layout.plate_clearance=policy.plate_clearance_mm
+        layout.wire_clearance=policy.wire_clearance_mm
+        layout.thermal_density_limit_w_per_l=policy.thermal_density_limit_w_per_l
         return project,template,rows,enclosures,component_models,templates,rules,str(rs),layout,hardware
 
     def generate(self,key,overrides=None,expected_version=None,configuration=None):
@@ -178,7 +186,7 @@ class ProjectService:
             'bom':assembly_bom(cem_model,pdm_model),
             'validation_errors':p['validation_results'],'revision_id':str(rid),'revision_no':revision['revision_no'],'lock_version':project['lock_version'],
             'snapshot_sha256':revision['content_sha256'],'manifest':manifest,'artifacts':artifacts,
-            'is_stale':project['current_revision_id']!=str(rid) or manifest.get('input_sha256')!=content_hash({
+            'is_stale':manifest.get('engine_version')!=ENGINE_VERSION or project['current_revision_id']!=str(rid) or manifest.get('input_sha256')!=content_hash({
                 'requirements':project['requirements'],'configuration':project['configuration']})}
 
     def restore(self,key,revision_id,expected_version):

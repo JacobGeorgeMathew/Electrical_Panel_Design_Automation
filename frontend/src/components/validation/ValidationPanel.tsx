@@ -16,6 +16,8 @@ export const ValidationPanel: React.FC = () => {
   const violations = pdm.validation_results || [];
   const thermalIndex = pdm.thermal_density_index || 0;
   const totalHeat = pdm.total_heat_loss_watts || 0;
+  const thermalLimit = pdm.validation_policy?.thermal_density_limit_w_per_l ?? 0.45;
+  const actualDensity=totalHeat/Math.max(1,pdm.enclosure_width*pdm.enclosure_height*pdm.enclosure_depth/1_000_000);
 
   const handleViolationClick = (objId: string) => {
     if (objId && objId !== 'ENCLOSURE') {
@@ -47,11 +49,12 @@ export const ValidationPanel: React.FC = () => {
             <div className="text-[10px] text-slate-400 font-mono">Thermal Density</div>
             <div
               className={`text-base font-bold font-mono ${
-                thermalIndex > 0.45 ? 'text-amber-400' : 'text-emerald-400'
+                actualDensity > thermalLimit ? 'text-amber-400' : 'text-emerald-400'
               }`}
             >
               {thermalIndex} W/L
             </div>
+            <div className="text-[10px] text-slate-500">Limit {thermalLimit} W/L</div>
           </div>
         </div>
       </div>

@@ -32,7 +32,7 @@ export const Layout2DViewer: React.FC = () => {
   const svgRef = useRef<SVGSVGElement>(null);
 
   const warnings = useMemo(() => pdm ? analyzeEditorGeometry(pdm.components, editorTransforms,
-    { width: pdm.enclosure_width, height: pdm.enclosure_height, depth: pdm.enclosure_depth }) : [], [pdm, editorTransforms]);
+    { width: pdm.enclosure_width, height: pdm.enclosure_height, depth: pdm.enclosure_depth },pdm.validation_policy) : [], [pdm, editorTransforms]);
   if (!pdm) return <div className="p-12 text-center text-slate-500 font-mono text-sm">No PDM physical layout loaded. Click "Generate Design" to create the 2D layout.</div>;
 
   const { enclosure_width: width, enclosure_height: height, zones, components, rails, routes } = pdm;

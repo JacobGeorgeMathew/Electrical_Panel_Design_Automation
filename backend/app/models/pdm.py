@@ -161,6 +161,20 @@ class ValidationViolation(BaseModel):
     message: str
 
 
+class DesignValidationPolicy(BaseModel):
+    version: str = 'strict-v1'
+    din_clearance_mm: float = Field(default=4.0, ge=0)
+    plate_clearance_mm: float = Field(default=20.0, ge=0)
+    wire_clearance_mm: float = Field(default=5.0, ge=0)
+    thermal_density_limit_w_per_l: float = Field(default=0.45, gt=0)
+
+    @classmethod
+    def from_layout(cls, config):
+        return cls(din_clearance_mm=config.device_gap_x, plate_clearance_mm=config.plate_clearance,
+            wire_clearance_mm=max(config.wire_clearance,config.grid_mm),
+            thermal_density_limit_w_per_l=config.thermal_density_limit_w_per_l)
+
+
 class PhysicalDesignModel(BaseModel):
     id: str
     project_id: str
@@ -186,6 +200,7 @@ class PhysicalDesignModel(BaseModel):
     routes: List[WireRoute] = Field(default_factory=list)
     clearances: List[ClearanceEnvelope] = Field(default_factory=list)
     validation_results: List[ValidationViolation] = Field(default_factory=list)
+    validation_policy: DesignValidationPolicy = Field(default_factory=DesignValidationPolicy)
     
     total_heat_loss_watts: float = 0.0
     thermal_density_index: float = 0.0

@@ -340,7 +340,7 @@ class MemoryProjects:
 
 class MemoryEnclosures:
     def __init__(self,rows,selected_id=None): self.rows,self.selected_id=rows,selected_id
-    def get_all(self): return self.rows
+    def get_all(self): return [r for r in self.rows if not self.selected_id or r['id']==self.selected_id]
     def find_best_fit(self,min_width,min_height,min_thermal_dissipation,ip_rating='IP54'):
         order={'IP31':1,'IP42':2,'IP54':3,'IP65':4}
         feasible=[r for r in self.rows if (not self.selected_id or r['id']==self.selected_id) and

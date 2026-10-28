@@ -1,5 +1,7 @@
 # Enclosure assembly and duct routing
 
+The current engine is `db-pipeline-3` with migration `0003_constraints`: it enforces the declared DIN clearance for terminals and selects enclosures that also pass the thermal-density limit. [Upgrade instructions and strict-policy seeds](CONSTRAINT_POLICY_UPDATE.md) replace the earlier warning-tolerant generation behavior described in historical verification notes below. Primitive geometry generator 2 and the existing hardware definitions are retained.
+
 The generation engine now builds a cabinet assembly as well as electrical placements. All physical coordinates remain enclosure millimetres. A saved PDM includes `accessories`, `construction`, real `ducts`, detailed local component `geometry`, and each wire's duct references/trunk indices.
 
 ## Install/update catalog data

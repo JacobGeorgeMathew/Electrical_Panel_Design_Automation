@@ -139,11 +139,8 @@ class CPSATPlacementOptimizer:
         zone_terms: list = []
 
         def occupied_width(c):
-            if c.category!='TERMINAL': return G(c.width)+gapx
-            # Pack terminals closely while retaining room for the catalog port
-            # lead clearance at the outer edge of a multi-pole assembly.
-            edge=min([min(float(t.get('x',c.width/2)),c.width-float(t.get('x',c.width/2))) for t in c.terminals] or [c.width/2])
-            return G(c.width+max(0,cfg.wire_clearance-edge+.2))
+            # Terminals follow the same declared DIN clearance as other devices.
+            return G(c.width)+gapx
 
         # ---- DIN devices: row choice + x ---------------------------------
         x_var, row_sel = {}, {}
@@ -293,7 +290,6 @@ def validate_layout(placed: Sequence[PhysicalComponent], W: float, H: float,
             same_rail = a.rail_id is not None and a.rail_id == b.rail_id
             required = cfg.device_gap_x if same_rail else (
                 cfg.plate_clearance if (a.rail_id is None or b.rail_id is None) else 0.0)
-            if same_rail and a.category==b.category=='TERMINAL': required=0
             if gap < required - 1e-6:
                 v.append({"type": "OVERLAP" if gap < 0 else "CLEARANCE",
                           "object_a": a.cem_component_id, "object_b": b.cem_component_id,

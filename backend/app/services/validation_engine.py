@@ -13,6 +13,7 @@ class ValidationEngine:
                      layout_config: LayoutConfig = None) -> List[ValidationViolation]:
         violations = []
         layout_config = layout_config or LayoutConfig()
+        policy = pdm.validation_policy
 
         components = pdm.components
         enc_w = pdm.enclosure_width
@@ -63,12 +64,12 @@ class ValidationEngine:
 
                 # Clearance distance check
                 dist = poly1.distance(poly2)
-                min_req = layout_config.device_gap_x if c1.rail_id and c2.rail_id else layout_config.plate_clearance
-                if c1.rail_id==c2.rail_id and c1.category==c2.category=='TERMINAL': min_req=0
-                if 0 < dist < min_req:
+                min_req = policy.din_clearance_mm if c1.rail_id and c1.rail_id==c2.rail_id else (
+                    0 if c1.rail_id and c2.rail_id else policy.plate_clearance_mm)
+                if dist < min_req - 1e-6 and poly1.intersection(poly2).area <= .01:
                     violations.append(ValidationViolation(
                         type="CLEARANCE",
-                        severity="WARNING",
+                        severity="CRITICAL",
                         object_a=c1.id,
                         object_b=c2.id,
                         required_value=min_req,
@@ -79,17 +80,18 @@ class ValidationEngine:
 
         # 2. Thermal Density Index Check
         thermal_index = pdm.total_heat_loss_watts / max(1.0, (enc_w * enc_h * pdm.enclosure_depth) / 1000000.0)
-        pdm.thermal_density_index = round(thermal_index, 3)
+        pdm.thermal_density_index = round(thermal_index, 6)
 
-        if thermal_index > 0.45:
+        thermal_limit = policy.thermal_density_limit_w_per_l
+        if thermal_index > thermal_limit + 1e-9:
             violations.append(ValidationViolation(
                 type="THERMAL",
-                severity="WARNING",
+                severity="CRITICAL",
                 object_a="ENCLOSURE",
-                required_value=0.45,
-                actual_value=round(thermal_index, 3),
+                required_value=thermal_limit,
+                actual_value=round(thermal_index, 6),
                 unit="W/L",
-                message=f"High thermal load density ({round(thermal_index, 3)} W/L). Forced ventilation louvers recommended."
+                message=f"Thermal load density {thermal_index:.6f} W/L exceeds {thermal_limit:g} W/L; select an enclosure of at least {pdm.total_heat_loss_watts/thermal_limit:.1f} litres."
             ))
 
         component_ids = {component.cem_component_id for component in pdm.components}
@@ -135,7 +137,7 @@ class ValidationEngine:
                         message=f"Route {route.id} does not begin or end at its declared {side} terminal."))
 
             if len(route.waypoints) >= 2:
-                clearance = max(float(layout_config.wire_clearance), float(layout_config.grid_mm))
+                clearance = policy.wire_clearance_mm
                 last_segment = len(route.waypoints) - 2
                 for index, (a, b) in enumerate(zip(route.waypoints, route.waypoints[1:])):
                     buffered_segment = LineString([(a.x, a.y), (b.x, b.y)]).buffer(clearance, cap_style="square")

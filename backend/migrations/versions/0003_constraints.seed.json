@@ -1,0 +1,89 @@
+{
+  "seed_version": 1,
+  "description": "Strict existing prototype clearance and whole-enclosure heat-density constraints; no manufacturer certification.",
+  "layout_config": {
+    "grid_mm": 5,
+    "margin_x": 60.0,
+    "margin_bottom": 40.0,
+    "margin_top": 40.0,
+    "device_gap_x": 4.0,
+    "duct_gap_y": 50.0,
+    "plate_clearance": 20.0,
+    "wire_clearance": 5.0,
+    "thermal_density_limit_w_per_l": 0.45,
+    "fill_factor": 0.85,
+    "z_din": 30.0,
+    "z_plate": 20.0,
+    "rail_z": 25.0,
+    "duct_width_mm": 0.0,
+    "duct_edge_mm": 5.0,
+    "duct_device_clearance_mm": 15.0,
+    "solver_time_s": 5.0,
+    "solver_deterministic_time": 0.5,
+    "workers": 1,
+    "seed": 0,
+    "weights": {
+      "wire_length": 1.0,
+      "thermal": 0.8,
+      "zone": 3.0
+    },
+    "din_categories": [
+      "CONTACTOR",
+      "MCB",
+      "MOTOR_STARTER",
+      "OVERLOAD",
+      "RELAY",
+      "SPD",
+      "TERMINAL"
+    ],
+    "plate_categories": [
+      "BUSBAR",
+      "EARTH_BAR",
+      "MCCB",
+      "NEUTRAL_BAR"
+    ],
+    "preferred_height": {
+      "MCCB": 0.95,
+      "SPD": 0.9,
+      "BUSBAR": 0.6,
+      "MCB": 0.5,
+      "CONTACTOR": 0.65,
+      "RELAY": 0.55,
+      "OVERLOAD": 0.45,
+      "NEUTRAL_BAR": 0.3,
+      "EARTH_BAR": 0.05,
+      "TERMINAL": 0.0
+    },
+    "zone_names": {
+      "MCCB": "INCOMING",
+      "SPD": "PROTECTION",
+      "BUSBAR": "BUSBAR",
+      "MCB": "DISTRIBUTION",
+      "CONTACTOR": "SWITCHING",
+      "RELAY": "SWITCHING",
+      "OVERLOAD": "SWITCHING",
+      "TERMINAL": "TERMINAL",
+      "NEUTRAL_BAR": "TERMINAL",
+      "EARTH_BAR": "TERMINAL"
+    },
+    "colors": {
+      "MCCB": "#EF4444",
+      "SPD": "#F59E0B",
+      "BUSBAR": "#EAB308",
+      "MCB": "#3B82F6",
+      "CONTACTOR": "#A78BFA",
+      "RELAY": "#22C55E",
+      "OVERLOAD": "#F97316",
+      "TERMINAL": "#8B5CF6",
+      "NEUTRAL_BAR": "#06B6D4",
+      "EARTH_BAR": "#10B981"
+    }
+  },
+  "policy": {
+    "version": "strict-v1",
+    "din_clearance_mm": 4.0,
+    "plate_clearance_mm": 20.0,
+    "wire_clearance_mm": 5.0,
+    "thermal_density_limit_w_per_l": 0.45
+  }
+}

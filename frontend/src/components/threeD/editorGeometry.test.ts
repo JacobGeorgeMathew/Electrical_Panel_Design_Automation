@@ -27,4 +27,23 @@ describe('3D editor geometry warnings', () => {
     const warnings = analyzeEditorGeometry([component('A', 10, 10), component('B', 32, 10)], {}, enclosure);
     expect(warnings.some((warning) => warning.type === 'CLEARANCE')).toBe(true);
   });
+
+  it('enforces four millimetres for the reported terminal pair and accepts the generated gap',()=>{
+    const a={...component('X001',10,10,8.2,48),category:'TERMINAL'};
+    const b={...component('X002',20,10,8.2,48),category:'TERMINAL'};
+    const policy={version:'strict-v1',din_clearance_mm:4,plate_clearance_mm:20,wire_clearance_mm:5,thermal_density_limit_w_per_l:.45};
+    expect(analyzeEditorGeometry([a,b],{},enclosure,policy).some(w=>w.type==='CLEARANCE')).toBe(true);
+    expect(analyzeEditorGeometry([a,{...b,position:{...b.position,x:25}}],{},enclosure,policy)).toEqual([]);
+  });
+
+  it('treats edge contact as a clearance failure rather than an overlapping footprint',()=>{
+    const warnings=analyzeEditorGeometry([component('A',10,10),component('B',30,10)],{},enclosure);
+    expect(warnings.some(w=>w.type==='CLEARANCE')).toBe(true);
+    expect(warnings.some(w=>w.type==='COLLISION')).toBe(false);
+  });
+
+  it('reads the saved policy rather than using a different editor threshold',()=>{
+    const policy={version:'custom',din_clearance_mm:8,plate_clearance_mm:25,wire_clearance_mm:5,thermal_density_limit_w_per_l:.45};
+    expect(analyzeEditorGeometry([component('A',10,10),component('B',36,10)],{},enclosure,policy).some(w=>w.type==='CLEARANCE')).toBe(true);
+  });
 });

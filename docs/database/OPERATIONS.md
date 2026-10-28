@@ -1,5 +1,7 @@
 # PostgreSQL runtime integration
 
+Current migration head is `0003_constraints` (a data-only rule-policy update). Existing installations must run `manage initialize`, `manage import-legacy`, then `manage seed-constraints` before starting the updated backend. See [strict-constraint rollout](../CONSTRAINT_POLICY_UPDATE.md) for Windows/Linux commands, rule versions and preservation of historical designs. Older `0002_app` backups remain restorable but require this forward upgrade with the current code.
+
 The FastAPI application now uses PostgreSQL repositories. The original JSON files remain import sources and explicit unit-test fixtures; HTTP requests do not fall back to them. React continues to call FastAPI and never receives database connection settings.
 
 ## Configuration and startup

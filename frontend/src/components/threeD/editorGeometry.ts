@@ -1,5 +1,5 @@
 import { EditorTransform } from '../../stores/projectStore';
-import { PhysicalComponent } from '../../types/pdm';
+import { PhysicalComponent, DesignValidationPolicy } from '../../types/pdm';
 
 export type EditorWarning = {
   id: string;
@@ -34,6 +34,7 @@ export function analyzeEditorGeometry(
   components: PhysicalComponent[],
   transforms: Record<string, EditorTransform>,
   enclosure: { width: number; height: number; depth: number },
+  policy?: DesignValidationPolicy,
 ): EditorWarning[] {
   const warnings: EditorWarning[] = [];
   const boxes = components.map((component) => ({
@@ -58,21 +59,23 @@ export function analyzeEditorGeometry(
       const gapX = Math.max(0, a.bounds.x0 - b.bounds.x1, b.bounds.x0 - a.bounds.x1);
       const gapY = Math.max(0, a.bounds.y0 - b.bounds.y1, b.bounds.y0 - a.bounds.y1);
       const clearance = Math.hypot(gapX, gapY);
-      if (gapX === 0 && gapY === 0) {
+      const overlapX=Math.min(a.bounds.x1,b.bounds.x1)-Math.max(a.bounds.x0,b.bounds.x0);
+      const overlapY=Math.min(a.bounds.y1,b.bounds.y1)-Math.max(a.bounds.y0,b.bounds.y0);
+      if (overlapX>0&&overlapY>0&&overlapX*overlapY>.01) {
         warnings.push({ id: `collision:${a.component.cem_component_id}:${b.component.cem_component_id}`,
           type: 'COLLISION', componentIds: [a.component.cem_component_id, b.component.cem_component_id],
           message: `${a.component.cem_component_id} overlaps ${b.component.cem_component_id}.` });
         continue;
       }
 
-      let required = 20;
+      let required = policy?.plate_clearance_mm ?? 20;
       if (a.component.rail_id && b.component.rail_id) {
-        required = a.component.rail_id === b.component.rail_id ? 4 : 0;
+        required = a.component.rail_id === b.component.rail_id ? (policy?.din_clearance_mm ?? 4) : 0;
       }
-      if (required > 0 && clearance < required) {
+      if (required > 0 && clearance < required-1e-6) {
         warnings.push({ id: `clearance:${a.component.cem_component_id}:${b.component.cem_component_id}`,
           type: 'CLEARANCE', componentIds: [a.component.cem_component_id, b.component.cem_component_id],
-          message: `${a.component.cem_component_id} is ${clearance.toFixed(1)} mm from ${b.component.cem_component_id}; prototype minimum is ${required} mm.` });
+          message: `${a.component.cem_component_id} is ${clearance.toFixed(1)} mm from ${b.component.cem_component_id}; required minimum is ${required} mm.` });
       }
     }
   }

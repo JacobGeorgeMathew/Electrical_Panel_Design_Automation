@@ -121,7 +121,7 @@ export const Panel3DViewer: React.FC = () => {
   const preview = artifacts.find(a=>a.file_format==='GLB'&&a.status==='READY');
   useEffect(()=>setShowArtifact(false),[currentRevisionId,designStale,editorTransforms]);
   const warnings = useMemo(() => pdm ? analyzeEditorGeometry(pdm.components, editorTransforms,
-    { width: pdm.enclosure_width, height: pdm.enclosure_height, depth: pdm.enclosure_depth }) : [], [pdm, editorTransforms]);
+    { width: pdm.enclosure_width, height: pdm.enclosure_height, depth: pdm.enclosure_depth },pdm.validation_policy) : [], [pdm, editorTransforms]);
   const selectedComponent = pdm?.components.find((component) =>
     component.cem_component_id === selectedObjectId || component.id === selectedObjectId) || null;
   const selectedId = selectedComponent?.cem_component_id;

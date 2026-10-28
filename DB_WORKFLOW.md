@@ -2,6 +2,8 @@
 
 This prototype implements a single DB design flow in the existing FastAPI modular monolith. Runtime catalogs, answers, requirements and project revisions are now PostgreSQL-backed through SQLAlchemy; original JSON files remain explicit import/test fixtures. See [PostgreSQL operations](docs/database/OPERATIONS.md) for migration, import, configuration and packaging instructions.
 
+Generation now requires zero physical validation violations. DIN terminals retain the declared 4 mm minimum, and automatic enclosure selection includes the 0.45 W/L prototype thermal-density limit. See [the strict-constraint migration and team update steps](docs/CONSTRAINT_POLICY_UPDATE.md) before running the new backend against an existing database.
+
 ## Stage map and contracts
 
 | Stage | Existing module | Contract and behavior |

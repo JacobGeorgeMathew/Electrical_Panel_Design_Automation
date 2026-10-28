@@ -28,7 +28,7 @@ def initialize(database):
 
 def main():
     parser=argparse.ArgumentParser()
-    parser.add_argument('action',choices=['initialize','status','import-legacy','import-panel-hardware','verify-baseline','audit-assets'])
+    parser.add_argument('action',choices=['initialize','status','import-legacy','import-panel-hardware','seed-constraints','verify-baseline','audit-assets'])
     args=parser.parse_args()
     database=Database(Settings.load())
     try:
@@ -47,6 +47,10 @@ def main():
             if not database.ready(): raise RuntimeError('Apply migrations before importing.')
             from app.persistence.import_panel_hardware import import_panel_hardware
             print(json.dumps(import_panel_hardware(database)))
+        elif args.action=='seed-constraints':
+            if not database.ready(): raise RuntimeError('Apply migrations before seeding constraints.')
+            from app.persistence.seed_constraints import seed_constraints
+            print(json.dumps(seed_constraints(database)))
         elif args.action=='audit-assets':
             from sqlalchemy import select
             from app.persistence import models as m

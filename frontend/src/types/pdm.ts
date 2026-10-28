@@ -97,6 +97,14 @@ export interface ValidationViolation {
   message: string;
 }
 
+export interface DesignValidationPolicy {
+  version: string;
+  din_clearance_mm: number;
+  plate_clearance_mm: number;
+  wire_clearance_mm: number;
+  thermal_density_limit_w_per_l: number;
+}
+
 export interface PhysicalDesignModel {
   id: string;
   project_id: string;
@@ -119,6 +127,7 @@ export interface PhysicalDesignModel {
   construction?: Record<string,any>;
   routes: WireRoute[];
   validation_results: ValidationViolation[];
+  validation_policy?: DesignValidationPolicy;
   total_heat_loss_watts: number;
   thermal_density_index: number;
 }

@@ -162,4 +162,6 @@ def import_legacy(database):
                 source_kind='IMPORT',source_ref='sample_projects.json',details={'original':project,'source_sha256':content_hash(project)})
     from app.persistence.import_panel_hardware import import_panel_hardware
     hardware = import_panel_hardware(database)
-    return {'components':len(components),'enclosures':len(enclosures),'archetypes':len(templates),'source_files_unchanged':True,**hardware}
+    from app.persistence.seed_constraints import seed_constraints
+    policy = seed_constraints(database)
+    return {'components':len(components),'enclosures':len(enclosures),'archetypes':len(templates),'source_files_unchanged':True,**hardware,'constraints':policy}
