@@ -29,7 +29,15 @@ export const ProjectPage: React.FC = () => {
         {activeTab === 'layout2d' && <Layout2DViewer />}
         {activeTab === 'threeD' && <Panel3DViewer />}
         {activeTab === 'validation' && <ValidationPanel />}
-        {activeTab === 'bom' && <BOMTable />}
+        {activeTab === 'bom' && (
+          <section
+            aria-label="Bill of materials"
+            tabIndex={0}
+            className="flex-1 min-h-0 min-w-0 overflow-y-auto"
+          >
+            <BOMTable />
+          </section>
+        )}
         {activeTab === 'catalog' && <CatalogBrowser />}
       </main>
 
