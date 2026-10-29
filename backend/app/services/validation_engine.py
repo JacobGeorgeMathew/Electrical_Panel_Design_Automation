@@ -126,9 +126,12 @@ class ValidationEngine:
                         object_b=component_id, required_value=1, actual_value=0, unit="references",
                         message=f"Route {route.id} has no valid {side} terminal reference."))
                     continue
-                expected = (component.position.x + float(terminal.get("x", component.width / 2)),
-                            component.position.y + float(terminal.get("y", component.height / 2)),
-                            component.position.z + float(terminal.get("z", component.depth / 2)))
+                from app.algorithms.jps_theta_star import JPSThetaStarRouter
+                try:expected=JPSThetaStarRouter()._component_terminal(component,terminal_id)
+                except ValueError:
+                    violations.append(ValidationViolation(type='TERMINAL',severity='CRITICAL',object_a=route.id,
+                        required_value=1,actual_value=0,unit='coordinates',message='Terminal coordinates are missing or invalid.'))
+                    continue
                 actual = (waypoint.x, waypoint.y, waypoint.z)
                 deviation = max(abs(expected[i] - actual[i]) for i in range(3))
                 if deviation > 0.11:
@@ -206,7 +209,10 @@ class ValidationEngine:
                     problem('DUCT_ROUTING',route.id,'Route has no valid duct-trunk references or indices.');continue
                 points=route.waypoints[start:end+1]
                 path=LineString([(p.x,p.y) for p in points]) if len(points)>1 else Point(points[0].x,points[0].y)
-                if not network.buffer(.01).covers(path.buffer(route.wire_diameter_mm/2,cap_style='flat',join_style='mitre')):
+                if isinstance(path,LineString) and path.length<1e-9:
+                    path=Point(points[0].x,points[0].y)
+                envelope=path.buffer(route.wire_diameter_mm/2) if isinstance(path,Point) else path.buffer(route.wire_diameter_mm/2,cap_style='flat',join_style='mitre')
+                if not network.buffer(.01).covers(envelope):
                     problem('DUCT_ROUTING',route.id,'A trunk segment leaves the physical wiring-duct network.')
                 if any(not any(d.id in route.duct_ids and d.x-.01<=p.x<=d.x+d.width+.01 and d.y-.01<=p.y<=d.y+d.height+.01
                     and d.z+d.wall_mm-.01<=p.z<=d.z+d.depth-d.wall_mm+.01 for d in pdm.ducts) for p in points):

@@ -5,6 +5,7 @@ from app.services.panel_geometry import assembly_geometry, placed_component_geom
 
 class CADEngine:
     def generate_parametric_geometry(self, pdm: PhysicalDesignModel):
+        warnings=[]
         primitives=assembly_geometry(pdm)
         for comp in pdm.components:
             primitives.extend(placed_component_geometry(comp))
@@ -14,12 +15,18 @@ class CADEngine:
                 dimensions={'width':comp.width,'height':comp.height,'depth':comp.depth},
                 cem_component_id=comp.cem_component_id,pdm_component_id=comp.id))
         for route in pdm.routes:
+            if route.geometry is None or route.geometry.status!='PASS':
+                warnings.append({'id':'CAD-'+route.id,'status':'UNRESOLVED','message':'No validated wire geometry; regenerate this revision before export.'})
+                continue  # Historic/unvalidated routes never become final CAD solids.
             primitives.append(dict(id='CAD-'+route.id,type='TUBE',name='Wire '+route.net_name,
-                route_id=route.id,net_id=route.net_id,points=[p.model_dump() for p in route.waypoints],
+                route_id=route.id,net_id=route.net_id,conductor_id=route.conductor_id,points=[p.model_dump() for p in route.geometry.centerline],
                 radius=route.wire_diameter_mm/2,color=route.color_hex,opacity=1))
-        return {'panel_id':pdm.panel_id,'units':'mm','primitives':primitives}
+        return {'panel_id':pdm.panel_id,'units':'mm','primitives':primitives,'validation_results':warnings}
 
     def export_freecad_script(self, pdm: PhysicalDesignModel):
+        from app.services.design_errors import DesignError
+        invalid=[r.id for r in pdm.routes if r.geometry is None or r.geometry.status!='PASS']
+        if invalid:raise DesignError('WIRE_GEOMETRY_UNVALIDATED','Regenerate validated wire geometry before exporting.',{'route_ids':invalid})
         script=['# Electrical panel assembly; all lengths in millimetres',
             'import FreeCAD as App','import Part',"doc = App.newDocument('ElectricalPanel')"]
         for index,p in enumerate(self.generate_parametric_geometry(pdm)['primitives']):
@@ -29,12 +36,12 @@ class CADEngine:
             script.append('# '+p.get('name',name).replace('\n',' '))
             if kind=='TUBE':
                 points=', '.join(f"App.Vector({v['x']},{v['y']},{v['z']})" for v in p['points'])
-                script += [f'points = [{points}]', 'segments = []',
-                    'for a, b in zip(points, points[1:]):',
-                    '    vector = b - a',
-                    '    if vector.Length > 0.001:',
-                    f"        segments.append(Part.makeCylinder({p['radius']}, vector.Length, a, vector))",
-                    'shape = Part.makeCompound(segments)']
+                script += [f'points = [{points}]',
+                    'spine = Part.Wire(Part.makePolygon(points).Edges)',
+                    'direction = points[1] - points[0]',
+                    f"profile = Part.Wire([Part.makeCircle({p['radius']}, points[0], direction)])",
+                    'shape = spine.makePipeShell([profile], True, False, 2)',
+                    "if shape.isNull() or not shape.isValid(): raise RuntimeError('Wire sweep failed validation')"]
             else:
                 pos=p['position']
                 if kind=='BOX':

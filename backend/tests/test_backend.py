@@ -138,7 +138,7 @@ def test_pipeline_uses_consistent_cem_pdm_schematic_routes_bom_and_cad_ids():
     cad_by_route = {primitive["route_id"]: primitive for primitive in result["cad"]["primitives"]
                     if primitive.get("route_id")}
     for route in pdm["routes"]:
-        assert cad_by_route[route["id"]]["points"] == route["waypoints"]
+        assert cad_by_route[route["id"]]["points"] == route["geometry"]["centerline"]
     assert not any(v["severity"] == "CRITICAL" for v in pdm["validation_results"])
     assert len(pdm["routes"]) == len(connection_ids)
     placed = {component["cem_component_id"]: component for component in pdm["components"]}

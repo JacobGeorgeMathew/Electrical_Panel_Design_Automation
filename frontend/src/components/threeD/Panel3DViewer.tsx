@@ -148,7 +148,7 @@ export const Panel3DViewer: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-1 min-h-0 min-w-0 flex-col h-full bg-slate-950 p-3 md:p-4 space-y-3">
+    <div className="flex flex-1 min-h-0 min-w-0 flex-col h-full overflow-y-auto bg-slate-950 p-3 md:p-4 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900 border border-slate-800 p-3 rounded-2xl">
         <div className="flex min-w-0 items-center gap-3">
           <div className="p-2 bg-blue-500/10 text-blue-400 rounded-xl"><Box className="w-5 h-5" /></div>
@@ -169,8 +169,8 @@ export const Panel3DViewer: React.FC = () => {
             Grid <input aria-label="Snap grid in millimeters" type="number" min="1" max="100" value={editorGridMm}
               onChange={(event) => setEditorGridMm(Number(event.target.value))} className="w-12 bg-slate-950 text-center text-slate-100 outline-none" /> mm
           </label>
-          <button onClick={undoEditorTransform} disabled={!editorUndoStack.length} title="Undo transform" className="editor-tool disabled:opacity-40"><Undo2 className="h-3.5 w-3.5" />Undo</button>
-          <button onClick={redoEditorTransform} disabled={!editorRedoStack.length} title="Redo transform" className="editor-tool disabled:opacity-40"><Redo2 className="h-3.5 w-3.5" />Redo</button>
+          <button onClick={()=>{undoEditorTransform();void useProjectStore.getState().validateCurrentPlacement();}} disabled={!editorUndoStack.length} title="Undo transform" className="editor-tool disabled:opacity-40"><Undo2 className="h-3.5 w-3.5" />Undo</button>
+          <button onClick={()=>{redoEditorTransform();void useProjectStore.getState().validateCurrentPlacement();}} disabled={!editorRedoStack.length} title="Redo transform" className="editor-tool disabled:opacity-40"><Redo2 className="h-3.5 w-3.5" />Redo</button>
           <button onClick={toggleExplodedView} aria-pressed={explodedView} className="editor-tool"><Sparkles className="h-3.5 w-3.5" />Explode</button>
           <button onClick={toggleWireVisibility} aria-pressed={wireVisibility} className="editor-tool"><Layers className="h-3.5 w-3.5" />Routes</button>
           <button onClick={resetEditorDraft} disabled={!hasDraftEdits} title="Discard local editor changes" className="editor-tool disabled:opacity-40"><RotateCcw className="h-3.5 w-3.5" />Reset</button>
@@ -194,11 +194,11 @@ export const Panel3DViewer: React.FC = () => {
       {hasDraftEdits && (
         <div role="status" className="flex items-start gap-2 rounded-xl border border-amber-700 bg-amber-950/40 px-3 py-2 text-xs text-amber-200">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>Local 3D draft edits are not applied to the generated 2D layout, wire routes, validation report, BOM or FreeCAD export. Generate Design restores the validated assembly.</span>
+          <span>Draft placement reroutes on release using saved connectivity. Saved project revisions, BOM and FreeCAD exports change only after Generate Design.</span>
         </div>
       )}
 
-      <div className="grid flex-1 min-h-0 grid-cols-1 grid-rows-[minmax(110px,0.25fr)_minmax(220px,1fr)_minmax(150px,0.4fr)] gap-3 overflow-hidden xl:grid-cols-[220px_minmax(0,1fr)_280px] xl:grid-rows-1">
+      <div className="grid flex-1 min-h-[580px] xl:min-h-0 grid-cols-1 grid-rows-[minmax(110px,0.25fr)_minmax(220px,1fr)_minmax(150px,0.4fr)] gap-3 overflow-hidden xl:grid-cols-[220px_minmax(0,1fr)_280px] xl:grid-rows-1">
         <aside className="min-h-0 overflow-y-auto rounded-xl border border-slate-800 bg-slate-900/80 p-3" aria-label="Component tree">
           <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-300">Component tree ({pdm.components.length})</h4>
           <ul className="space-y-1">
@@ -258,10 +258,11 @@ export const Panel3DViewer: React.FC = () => {
                 exploded={explodedView} hidden={editorHiddenComponentIds.includes(id)}
                 mode={selectedId === id && editorMode !== 'select' ? editorMode : null}
                 snapEnabled={editorSnapEnabled} gridMm={editorGridMm}
-                onSelect={selectObject} onHover={hoverObject} onTransform={updateEditorTransform} onCommit={commitEditorTransform} />;
+                onSelect={selectObject} onHover={hoverObject} onTransform={updateEditorTransform} onCommit={()=>{commitEditorTransform();void useProjectStore.getState().validateCurrentPlacement();}} />;
             })}
             {wireVisibility && pdm.routes.map((route) => <WireMesh key={route.id} route={route} draft={hasDraftEdits}
-              highlighted={!!selectedDuct&&!!route.duct_ids?.includes(selectedDuct.id)}
+              onSelect={selectObject}
+              highlighted={selectedObjectId===route.conductor_id||selectedObjectId===route.id||selectedObjectId===route.net_id||selectedObjectId===route.from_component||selectedObjectId===route.to_component||!!selectedDuct&&!!route.duct_ids?.includes(selectedDuct.id)}
               dimmed={!!selectedDuct&&!route.duct_ids?.includes(selectedDuct.id)}/>)}
             </>}
           </Canvas>
@@ -286,12 +287,12 @@ export const Panel3DViewer: React.FC = () => {
               {(['x', 'y', 'z'] as const).map((field) => <label key={field} className="text-[10px] text-slate-400">
                 Position {field.toUpperCase()} (mm)
                 <input aria-label={`Position ${field.toUpperCase()} in millimeters`} type="number" value={Number(selectedTransform[field].toFixed(1))}
-                  onChange={(event) => updateNumeric(field, Number(event.target.value))} onBlur={commitEditorTransform}
+                  onChange={(event) => updateNumeric(field, Number(event.target.value))} onBlur={()=>{commitEditorTransform();void useProjectStore.getState().validateCurrentPlacement();}}
                   className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-100" />
               </label>)}
               <label className="text-[10px] text-slate-400">Rotation Z (°)
                 <input aria-label="Rotation Z in degrees" type="number" value={Number(selectedTransform.rotation_deg.toFixed(1))}
-                  onChange={(event) => updateNumeric('rotation_deg', Number(event.target.value))} onBlur={commitEditorTransform}
+                  onChange={(event) => updateNumeric('rotation_deg', Number(event.target.value))} onBlur={()=>{commitEditorTransform();void useProjectStore.getState().validateCurrentPlacement();}}
                   className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-100" />
               </label>
             </div>

@@ -217,4 +217,12 @@ class DesignOrchestrator:
         if violations:
             raise DesignError("PHYSICAL_VALIDATION_FAILED", "The generated physical design does not satisfy all physical constraints.",
                               {"violations": [v.model_dump() for v in violations]})
+        from app.services.wire_geometry import build_wire_geometry
+        for route in pdm.routes:
+            try:
+                route.geometry=build_wire_geometry(route,pdm)
+                route.validation_checks=route.geometry.checks
+            except ValueError as exc:
+                raise DesignError('ROUTING_INFEASIBLE','Wire geometry validation failed.',
+                    {'route_id':route.id,'reason':str(exc)}) from exc
         return pdm,violations

@@ -8,10 +8,10 @@ export type SchematicSymbol = {
 };
 export type SchematicWire = {
   id: string; net_id: string; net_name: string; from: string; from_terminal: string;
-  to: string; to_terminal: string; wire_class: string; color?: string;
+  to: string; to_terminal: string; wire_class: string; color?: string; svg_path?: string; waypoints?: {x:number;y:number}[]; crossings?: {x:number;y:number;connected:boolean;axis?:'VERTICAL'|'HORIZONTAL'}[]; junctions?: {x:number;y:number;connected:boolean;axis?:'VERTICAL'|'HORIZONTAL'}[];
 };
 export type SchematicGraphData = {
-  width: number; height: number; symbols: SchematicSymbol[]; wires: SchematicWire[];
+  width: number; height: number; symbols: SchematicSymbol[]; wires: SchematicWire[]; validation_results?: {id:string;message:string;status:string}[];
 };
 export type SchematicNodeData = {
   symbolId: string; label: string; name: string; symbolType: string; category: string;
@@ -19,7 +19,7 @@ export type SchematicNodeData = {
   junction?: boolean; netId?: string;
 };
 export type SchematicEdgeData = {
-  net_id: string; net_name: string; wire_class: string; color: string; draft?: boolean;
+  net_id: string; net_name: string; wire_class: string; color: string; draft?: boolean; svg_path?: string; waypoints?: {x:number;y:number}[]; crossings?: {x:number;y:number;connected:boolean;axis?:'VERTICAL'|'HORIZONTAL'}[]; junctions?: {x:number;y:number;connected:boolean;axis?:'VERTICAL'|'HORIZONTAL'}[];
 };
 export type SchematicNode = Node<SchematicNodeData, 'symbol' | 'junction'>;
 export type SchematicEdge = Edge<SchematicEdgeData, 'wire'>;
@@ -32,7 +32,7 @@ export function buildSchematicGraph(data: SchematicGraphData): { nodes: Schemati
   const symbolById = new Map(data.symbols.map((symbol) => [symbol.id, symbol]));
   const nodes: SchematicNode[] = data.symbols.map((symbol) => ({
     id: symbol.id,
-    type: 'symbol',
+    type: 'symbol', draggable: false, style: {width:symbol.width,height:symbol.height},
     position: { x: symbol.x, y: symbol.y },
     data: {
       symbolId: symbol.id, label: symbol.label, name: symbol.name, symbolType: symbol.type,
@@ -42,47 +42,15 @@ export function buildSchematicGraph(data: SchematicGraphData): { nodes: Schemati
     },
   }));
 
-  const wiresByNet = new Map<string, SchematicWire[]>();
-  for (const wire of data.wires) wiresByNet.set(wire.net_id, [...(wiresByNet.get(wire.net_id) || []), wire]);
-  const edges: SchematicEdge[] = [];
-
-  for (const [netId, wires] of wiresByNet) {
-    const endpoints = new Map<string, { componentId: string; terminalId: string; x: number; y: number }>();
-    for (const wire of wires) {
-      for (const [componentId, terminalId] of [[wire.from, wire.from_terminal], [wire.to, wire.to_terminal]]) {
-        const key = `${componentId}:${terminalId}`;
-        const symbol = symbolById.get(componentId);
-        const terminal = symbol?.terminals.find((item) => item.id === terminalId);
-        if (symbol && terminal) endpoints.set(key, { componentId, terminalId, x: terminal.x, y: terminal.y });
-      }
-    }
-
-    const first = wires[0];
-    const color = first.color || (first.wire_class === 'POWER' ? '#EF4444' : first.wire_class === 'NEUTRAL' ? '#3B82F6' : first.wire_class === 'PE' ? '#22C55E' : '#A78BFA');
-    if (endpoints.size > 2) {
-      const junctionId = `JUNCTION:${netId}`;
-      const points = [...endpoints.values()];
-      nodes.push({ id: junctionId, type: 'junction', position: {
-        x: points.reduce((sum, item) => sum + item.x, 0) / points.length,
-        y: points.reduce((sum, item) => sum + item.y, 0) / points.length,
-      }, data: { symbolId: junctionId, label: first.net_name || netId, name: 'Net junction',
-        symbolType: 'JUNCTION', category: 'JUNCTION', width: 12, height: 12, terminals: [],
-        properties: { net_id: netId, net_name: first.net_name, wire_class: first.wire_class }, junction: true, netId } });
-      for (const endpoint of points) edges.push({
-        id: `EDGE:${netId}:${endpoint.componentId}:${endpoint.terminalId}`,
-        source: endpoint.componentId, sourceHandle: sourceHandle(endpoint.terminalId),
-        target: junctionId, targetHandle: 'target:net', type: 'wire',
-        data: { net_id: netId, net_name: first.net_name, wire_class: first.wire_class, color },
-      });
-    } else {
-      for (const wire of wires) edges.push({
-        id: wire.id, source: wire.from, sourceHandle: sourceHandle(wire.from_terminal),
-        target: wire.to, targetHandle: targetHandle(wire.to_terminal), type: 'wire',
-        data: { net_id: wire.net_id, net_name: wire.net_name, wire_class: wire.wire_class,
-          color: wire.color || (wire.wire_class === 'POWER' ? '#EF4444' : wire.wire_class === 'NEUTRAL' ? '#3B82F6' : wire.wire_class === 'PE' ? '#22C55E' : '#A78BFA') },
-      });
-    }
-  }
+  // Draw exactly the CEM connections. A multi-terminal net is not a licence
+  // to replace its topology with an invented centroid junction.
+  const edges: SchematicEdge[] = data.wires.map(wire => ({
+    id: wire.id, source: wire.from, sourceHandle: sourceHandle(wire.from_terminal),
+    target: wire.to, targetHandle: targetHandle(wire.to_terminal), type: 'wire',
+    data: {net_id: wire.net_id, net_name: wire.net_name, wire_class: wire.wire_class,
+      color: wire.color || '#94A3B8', svg_path: wire.svg_path, waypoints: wire.waypoints,
+      crossings: wire.crossings, junctions: wire.junctions},
+  }));
   return { nodes, edges };
 }
 

@@ -83,7 +83,9 @@ def write_revision(session,project,template,req_set,answers,result,manifest,file
             members.update(ends)
             conductor=uuid4()
             session.execute(insert(m.cem_conductors).values(id=conductor,net_id=ni,conductor_code=connection['id'],
-                conductor_type=connection.get('wire_class','POWER'),properties={'source_connection':connection},
+                conductor_type=connection.get('wire_class','POWER'),cross_section_mm2=connection.get('cross_section_mm2'),
+                insulation={k:connection[k] for k in ('insulation_type','insulation_diameter_mm','minimum_bend_radius_mm') if connection.get(k) is not None},
+                properties={'source_connection':connection},
                 from_terminal_instance_id=ends[0],to_terminal_instance_id=ends[1]))
             conductors[connection['id']]=conductor
         for terminal in members:
@@ -139,7 +141,8 @@ def write_revision(session,project,template,req_set,answers,result,manifest,file
             conductor_id=conductors[route['id'].removeprefix('ROUTE-')],waypoints_mm=route['waypoints'],length_mm=route['length_mm'],
             routing_constraints={'engine_version':manifest['engine_version'],'wire_class':route['wire_class'],
                 'duct_ids':route.get('duct_ids',[]),'duct_entry_index':route.get('duct_entry_index'),'duct_exit_index':route.get('duct_exit_index'),
-                'wire_diameter_mm':route.get('wire_diameter_mm')}))
+                'wire_diameter_mm':route.get('wire_diameter_mm'),
+                **{key:route.get(key) for key in ('conductor_id','dimension_source','minimum_bend_radius_mm','routing_algorithm','routing_config','status','geometry','validation_checks')}}))
     for i,clearance in enumerate(pdm.get('clearances',[])):
         session.execute(insert(m.pdm_clearance_regions).values(project_revision_id=rid,stable_key=f'CLEARANCE-{i}',
             owner_component_instance_id=physical.get(clearance['component_id']),region_kind='CLEARANCE',geometry_ref=clearance))

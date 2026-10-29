@@ -78,11 +78,13 @@ export interface WireRoute {
   from_terminal: string;
   to_component: string;
   to_terminal: string;
-  wire_class: 'POWER' | 'CONTROL' | 'PE' | 'NEUTRAL';
+  wire_class: 'POWER' | 'CONTROL' | 'SIGNAL' | 'PE' | 'NEUTRAL';
   waypoints: Waypoint3D[];
   length_mm: number;
   bend_count: number;
   color_hex: string;
+  conductor_id?: string; dimension_source?: string; status?: string; routing_algorithm?: string;
+  geometry?: { id:string; route_id:string; centerline:Waypoint3D[]; centerline_length_mm?:number; diameter_mm:number; status:string; bend_radii_mm:number[]; checks:{status:string;message:string;type:string}[] };
   duct_ids?: string[]; duct_entry_index?: number; duct_exit_index?: number; wire_diameter_mm?: number;
 }
 

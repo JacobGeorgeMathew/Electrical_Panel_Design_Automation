@@ -15,23 +15,16 @@ const graphFixture: SchematicGraphData = {
 };
 
 describe('schematic graph mapping and rules', () => {
-  it('maps stable CEM connection IDs to terminal handles and creates fan-out junctions', () => {
-    const result = buildSchematicGraph(graphFixture);
-    expect(result.nodes.map((node) => node.id)).toContain('QF001');
-    expect(result.nodes.some((node) => node.id === 'JUNCTION:NET-L1')).toBe(true);
-    expect(result.edges).toHaveLength(3);
+  it('preserves backend topology and never invents junctions for fan-out', () => {
+    const result=buildSchematicGraph(graphFixture);
+    expect(result.nodes.map(n=>n.id)).toEqual(graphFixture.symbols.map(s=>s.id));
+    expect(result.edges.map(e=>e.id)).toEqual(['CONN-01','CONN-02']);
     expect(result.edges[0].sourceHandle).toBe('source:OUT');
-    expect(validateSchematicGraph(result.nodes, result.edges)).toEqual([]);
-
-    const fanout = buildSchematicGraph({ ...graphFixture, wires: [
-      ...graphFixture.wires,
-      { id: 'CONN-03', net_id: 'NET-L1', net_name: 'L1', from: 'QF001', from_terminal: 'OUT', to: 'QF002', to_terminal: 'IN', wire_class: 'POWER' },
-    ] });
-    expect(fanout.nodes.some((node) => node.id === 'JUNCTION:NET-L1')).toBe(true);
-    expect(fanout.edges).toHaveLength(3);
-    expect(validateSchematicGraph(fanout.nodes, fanout.edges)).toEqual([]);
-    const splitNet = fanout.edges.map((edge, index) => index === 0 ? { ...edge, data: { ...edge.data!, net_id: 'NET-L2' } } : edge);
-    expect(validateSchematicGraph(fanout.nodes, splitNet).map((error) => error.code)).toContain('MIXED_NET_JUNCTION');
+    expect(validateSchematicGraph(result.nodes,result.edges)).toEqual([]);
+    const path='M 130 100 L 130 125 L 140 125 L 140 150';
+    const routed=buildSchematicGraph({...graphFixture,wires:[{...graphFixture.wires[0],svg_path:path,waypoints:[{x:130,y:100},{x:130,y:125},{x:140,y:125},{x:140,y:150}]}]});
+    expect(routed.edges[0].data?.svg_path).toBe(path);
+    expect(routed.nodes[0].style).toEqual({width:60,height:80});
   });
 
   it('reports invalid terminal references, missing labels, and mixed-class rule violations', () => {

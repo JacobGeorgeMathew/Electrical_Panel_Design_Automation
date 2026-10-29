@@ -20,7 +20,7 @@ from app.services.change_propagation import ChangePropagationEngine
 from app.services.design_errors import DesignError
 from app.services.panel_assembly import assembly_bom
 
-ENGINE_VERSION='db-pipeline-3'
+ENGINE_VERSION='db-pipeline-4'
 
 
 class ProjectService:
@@ -152,16 +152,16 @@ class ProjectService:
             'cad_model_versions':{c['id']:c['cad_model_version_id'] for c in result['cem']['components']},
             'enclosure_component_version_id':enclosure['component_version_id'],'enclosure_cad_model_version_id':enc_model['id'] if enc_model else None,
             'hardware_component_versions':{h['code']:h['component_version_id'] for h in hardware},
-            'generator':{'name':'panelstudio-primitives','version':'2'},'input_sha256':content_hash({'requirements':values,'configuration':project['configuration']})}
+            'generator':{'name':'panelstudio-primitives','version':'3'},'input_sha256':content_hash({'requirements':values,'configuration':project['configuration']})}
         files=self.generate_files(result)
         with self.db.sessions.begin() as s:
             saved=write_revision(s,project,template,reqs,values,result,manifest,files,project['lock_version'])
         return self.load_revision(project['id'],saved['revision_id'])
 
     def generate_files(self,result):
-        preview=self.assets.put(primitive_glb(result['cad']['primitives']),'glb')
+        preview=self.assets.put(primitive_glb(result['cad']['primitives'],generator_version='3'),'glb')
         script=self.assets.put(CADEngine().export_freecad_script(PhysicalDesignModel(**result['pdm'])).encode('utf-8'),'py')
-        return [{**preview,'artifact_type':'CAD_PREVIEW','file_format':'GLB','generator_name':'panelstudio-primitives','generator_version':'2'},
+        return [{**preview,'artifact_type':'CAD_PREVIEW','file_format':'GLB','generator_name':'panelstudio-primitives','generator_version':'3'},
                 {**script,'artifact_type':'FREECAD_SCRIPT','file_format':'PY','generator_name':'existing-freecad-script','generator_version':ENGINE_VERSION}]
 
     def load_revision(self,key,revision_id=None):
@@ -228,7 +228,7 @@ class ProjectService:
 
     def queue_artifact(self,key,file_format,expected_version):
         result=self.load_revision(key)
-        if result['manifest'].get('generator')!={'name':'panelstudio-primitives','version':'2'} or result['manifest'].get('engine_version')!=ENGINE_VERSION:
+        if result['manifest'].get('generator')!={'name':'panelstudio-primitives','version':'3'} or result['manifest'].get('engine_version')!=ENGINE_VERSION:
             raise PersistenceError('GENERATOR_VERSION_UNAVAILABLE','This saved revision requires a different CAD generator version.',409)
         if result['is_stale'] or result['lock_version']!=expected_version:
             raise PersistenceError('REVISION_CONFLICT','Generate a revision from the current requirements before exporting.',409)
@@ -237,7 +237,7 @@ class ProjectService:
         with self.db.sessions.begin() as s:
             ProjectRepository(s).check_version(key,expected_version)
             s.execute(insert(m.generated_artifacts).values(id=job,project_revision_id=identifier(result['revision_id']),artifact_type='CAD_PREVIEW' if file_format=='GLB' else 'FREECAD_SCRIPT',
-                file_format='GLB' if file_format=='GLB' else 'PY',generator_name='panelstudio-primitives' if file_format=='GLB' else 'existing-freecad-script',generator_version='2' if file_format=='GLB' else ENGINE_VERSION,
+                file_format='GLB' if file_format=='GLB' else 'PY',generator_name='panelstudio-primitives' if file_format=='GLB' else 'existing-freecad-script',generator_version='3' if file_format=='GLB' else ENGINE_VERSION,
                 source_model_kind='PDM',source_model_sha256=content_hash(result['pdm']),generation_status='PENDING'))
         self.executor.submit(self._artifact_worker,key,result['revision_id'],str(job),file_format)
         return {'id':str(job),'status':'PENDING','project_revision_id':result['revision_id']}
@@ -245,7 +245,7 @@ class ProjectService:
     def _artifact_worker(self,key,rid,job,file_format):
         try:
             result=self.load_revision(key,rid)
-            data=primitive_glb(result['cad']['primitives']) if file_format=='GLB' else CADEngine().export_freecad_script(PhysicalDesignModel(**result['pdm'])).encode()
+            data=primitive_glb(result['cad']['primitives'],generator_version='3') if file_format=='GLB' else CADEngine().export_freecad_script(PhysicalDesignModel(**result['pdm'])).encode()
             file=self.assets.put(data,'glb' if file_format=='GLB' else 'py')
             with self.db.sessions.begin() as s:
                 s.execute(update(m.generated_artifacts).where(m.generated_artifacts.c.id==identifier(job),m.generated_artifacts.c.generation_status=='PENDING')

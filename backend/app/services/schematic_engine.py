@@ -1,205 +1,98 @@
-from typing import Any, Dict, List
-from app.models.cem import CanonicalEngineeringModel
+"""DB template layout and port-based orthogonal routes, independent of PDM geometry."""
+from dataclasses import dataclass
+from shapely.geometry import LineString
+from app.algorithms.schematic_routing import orthogonal_route, simplify
+from app.services.design_errors import DesignError
+
+
+@dataclass(frozen=True)
+class SchematicConfig:
+    column_pitch: int = 180
+    row_pitch: int = 240
+    symbol_width: int = 110
+    symbol_height: int = 72
+    port_stub: int = 24
 
 
 class SchematicEngine:
-    """Generates structured SVG schematic layout representations."""
+    def __init__(self, config=None): self.cfg=config or SchematicConfig()
 
-    def generate_schematic_data(self, cem: CanonicalEngineeringModel) -> Dict[str, Any]:
-        symbols = []
-        wires = []
-        components, nets = cem.components, cem.nets
-
-        # 1. Sugiyama/Hierarchical Grouping into Vertical Layers
-        # Layer 1 (y=50): Panel Incomer MCCB
-        # Layer 2 (y=180): SPD (left) & Main Busbar (center)
-        # Layer 3 (y=320): Outgoing MCBs (horizontal row)
-        # Layer 4 (y=460): Neutral / Earth Bars
-        # Layer 5 (y=580): Outgoing Terminal Strip
-
-        comp_dict = {c.id: c for c in components}
-        incomer = comp_dict.get("QF001")
-        busbar = comp_dict.get("BUS001")
-        spd = comp_dict.get("SPD001")
-        nbar = comp_dict.get("NBAR01")
-        pebar = comp_dict.get("PEBAR01")
-
-        canvas_width = 1200
-        canvas_height = 700
-
-        symbols.append({"id": "PANEL_ROOT", "name": cem.panel_id, "category": "PANEL", "type": "PANEL",
-                        "x": 20, "y": 20, "width": 40, "height": 30, "label": cem.panel_id,
-                        "terminals": [{"id": "EARTH_STUD", "x": 40, "y": 35}]})
-
-        if incomer:
-            symbols.append({
-                "id": incomer.id,
-                "name": incomer.name,
-                "category": incomer.category,
-                "type": "MCCB",
-                "x": canvas_width / 2 - 50,
-                "y": 50,
-                "width": 100,
-                "height": 70,
-                "label": f"{incomer.id}\n{incomer.current_rating}A 3P",
-                "terminals": [
-                    {"id": "L1_IN", "x": canvas_width / 2 - 30, "y": 50},
-                    {"id": "L2_IN", "x": canvas_width / 2, "y": 50},
-                    {"id": "L3_IN", "x": canvas_width / 2 + 30, "y": 50},
-                    {"id": "L1_OUT", "x": canvas_width / 2 - 30, "y": 120},
-                    {"id": "L2_OUT", "x": canvas_width / 2, "y": 120},
-                    {"id": "L3_OUT", "x": canvas_width / 2 + 30, "y": 120}
-                ]
-            })
-
-        if busbar:
-            symbols.append({
-                "id": busbar.id,
-                "name": busbar.name,
-                "category": busbar.category,
-                "type": "BUSBAR",
-                "x": 200,
-                "y": 180,
-                "width": 800,
-                "height": 30,
-                "label": f"MAIN BUSBAR SYSTEM {busbar.current_rating}A (L1, L2, L3, N)",
-                "terminals": [
-                    {"id": "IN_L1", "x": canvas_width / 2 - 30, "y": 180},
-                    {"id": "IN_L2", "x": canvas_width / 2, "y": 180},
-                    {"id": "IN_L3", "x": canvas_width / 2 + 30, "y": 180},
-                    {"id": "IN_N", "x": canvas_width / 2 + 60, "y": 180}
-                ]
-            })
-
-        if spd:
-            spd_terminals = []
-            for terminal in spd.terminals:
-                spd_terminals.append({"id": terminal["id"],
-                                      "x": 80 + 80 * float(terminal.get("x", spd.width / 2)) / max(1, spd.width),
-                                      "y": 180 if float(terminal.get("y", 0)) > spd.height / 2 else 240})
-            symbols.append({
-                "id": spd.id,
-                "name": spd.name,
-                "category": spd.category,
-                "type": "SPD",
-                "x": 80,
-                "y": 180,
-                "width": 80,
-                "height": 60,
-                "label": "SPD Type 2",
-                "terminals": spd_terminals
-            })
-
-        # MCBs in Layer 3 (y=320)
-        mcbs = [c for c in components if c.category == "MCB"]
-        mcb_start_x = 100
-        mcb_spacing = (canvas_width - 200) / max(1, len(mcbs))
-        mcb_symbol_width = min(36, max(12, mcb_spacing * 0.75))
-
-        for i, mcb in enumerate(mcbs):
-            m_x = mcb_start_x + i * mcb_spacing
-            symbols.append({
-                "id": mcb.id,
-                "name": mcb.name,
-                "category": mcb.category,
-                "type": "MCB",
-                "x": m_x,
-                "y": 320,
-                "width": mcb_symbol_width,
-                "height": 60,
-                "label": f"{mcb.id}\n{mcb.current_rating}A",
-                "terminals": ([{"id": f"L{p}_IN", "x": m_x + mcb_symbol_width * p / 4, "y": 320}
-                               for p in range(1, min(3, mcb.poles) + 1)] +
-                              [{"id": f"L{p}_OUT", "x": m_x + mcb_symbol_width * p / 4, "y": 380}
-                               for p in range(1, min(3, mcb.poles) + 1)] if mcb.poles > 1 else [
-                                  {"id": "IN", "x": m_x + mcb_symbol_width / 2, "y": 320},
-                                  {"id": "OUT", "x": m_x + mcb_symbol_width / 2, "y": 380}])
-            })
-
-        # Terminals in Layer 5 (y=560)
-        terms = [c for c in components if c.category == "TERMINAL"]
-        terminal_symbol_width = min(30, max(8, mcb_spacing * 0.75))
-        for i, term in enumerate(terms):
-            t_x = mcb_start_x + i * mcb_spacing
-            symbols.append({
-                "id": term.id,
-                "name": term.name,
-                "category": term.category,
-                "type": "TERMINAL",
-                "x": t_x,
-                "y": 540,
-                "width": terminal_symbol_width,
-                "height": 40,
-                "label": term.id,
-                "terminals": [{'id':t['id'],'x':t_x+terminal_symbol_width*float(t['x'])/max(1,term.width),
-                    'y':540 if float(t['y'])>term.height/2 else 580} for t in term.terminals]
-            })
-
-        if nbar:
-            symbols.append({
-                "id": nbar.id,
-                "name": nbar.name,
-                "category": nbar.category,
-                "type": "BAR",
-                "x": 100,
-                "y": 450,
-                "width": 450,
-                "height": 20,
-                "label": "NEUTRAL BAR (N)",
-                "terminals": [{"id": "MAIN_N", "x": 325, "y": 450}]
-            })
-
-        if pebar:
-            symbols.append({
-                "id": pebar.id,
-                "name": pebar.name,
-                "category": pebar.category,
-                "type": "BAR",
-                "x": 600,
-                "y": 450,
-                "width": 450,
-                "height": 20,
-                "label": "EARTH BAR (PE)",
-                "terminals": [{"id": "MAIN_PE", "x": 825, "y": 450}]
-            })
-
-        # Generate Orthogonal SVG Wire Paths
-        sym_map = {s["id"]: s for s in symbols}
-
-        for net in nets:
+    def generate_schematic_data(self,cem):
+        cfg=self.cfg
+        feeders=sorted((c for c in cem.components if c.category=='MCB'),key=lambda c:c.id)
+        terminals=sorted((c for c in cem.components if c.category=='TERMINAL'),key=lambda c:c.id)
+        others=sorted((c for c in cem.components if c.category not in {'MCB','TERMINAL'}),key=lambda c:({'MCCB':0,'BUSBAR':1,'SPD':2,'NEUTRAL_BAR':3,'EARTH_BAR':4}.get(c.category,5),c.id))
+        # DB functional columns preserve feeder order; paired terminal blocks align below.
+        width=max(1200,(max(len(feeders),len(others))+2)*cfg.column_pitch)
+        symbols=[]
+        for group,row in ((others,0),(feeders,1),(terminals,2)):
+            for index,c in enumerate(group):
+                x=100+index*cfg.column_pitch;y=100+row*cfg.row_pitch
+                ports=[]
+                top=[t for t in c.terminals if 'OUT' not in t['id'] and 'RIGHT' not in t['id']]
+                bottom=[t for t in c.terminals if t not in top]
+                for side,items in (('TOP',top),('BOTTOM',bottom)):
+                    for k,t in enumerate(items):
+                        ports.append(dict(id=t['id'],port_id=c.id+':'+t['id'],x=x+cfg.symbol_width*(k+1)/(len(items)+1),
+                            y=y if side=='TOP' else y+cfg.symbol_height,direction=side))
+                symbols.append(dict(id=c.id,name=c.name,category=c.category,type=c.category,x=x,y=y,
+                    width=cfg.symbol_width,height=cfg.symbol_height,label=f'{c.id}\n{c.current_rating:g}A',terminals=ports))
+        symbols.append(dict(id='PANEL_ROOT',name=cem.panel_id,category='PANEL',type='PANEL',x=40,y=820,width=110,height=72,
+            label=cem.panel_id,terminals=[dict(id='EARTH_STUD',port_id='PANEL_ROOT:EARTH_STUD',x=95,y=820,direction='TOP')]))
+        by_id={s['id']:s for s in symbols};obstacles=[]
+        for s in symbols:
+            obstacles.extend([(s['x']-8,s['y']-8,s['x']+s['width']+8,s['y']+s['height']+8)])
+        ports={(s['id'],t['id']):t for s in symbols for t in s['terminals']}
+        wires=[];occupied=[];checks=[]
+        for net in cem.nets:
             for conn in net.connections:
-                from_sym = sym_map.get(conn.from_component)
-                to_sym = sym_map.get(conn.to_component)
-
-                if from_sym and to_sym:
-                    # Compute orthogonal path coordinates
-                    from_terminal = next((t for t in from_sym["terminals"] if t["id"] == conn.from_terminal), None)
-                    to_terminal = next((t for t in to_sym["terminals"] if t["id"] == conn.to_terminal), None)
-                    if from_terminal is None or to_terminal is None:
-                        continue
-                    x1, y1 = from_terminal["x"], from_terminal["y"]
-                    x2, y2 = to_terminal["x"], to_terminal["y"]
-
-                    # Orthogonal routing: M x1 y1 -> V (y1+y2)/2 -> H x2 -> V y2
-                    mid_y = (y1 + y2) / 2
-                    svg_path = f"M {x1} {y1} V {mid_y} H {x2} V {y2}"
-
-                    wires.append({
-                        "id": conn.id,
-                        "net_id": net.id,
-                        "net_name": net.name,
-                        "from": conn.from_component,
-                        "from_terminal": conn.from_terminal,
-                        "to": conn.to_component,
-                        "to_terminal": conn.to_terminal,
-                        "wire_class": conn.wire_class,
-                        "svg_path": svg_path,
-                        "color": "#EF4444" if conn.wire_class == "POWER" else ("#3B82F6" if conn.wire_class == "NEUTRAL" else "#10B981")
-                    })
-
-        return {
-            "width": canvas_width,
-            "height": canvas_height,
-            "symbols": symbols,
-            "wires": wires
-        }
+                a=ports.get((conn.from_component,conn.from_terminal));b=ports.get((conn.to_component,conn.to_terminal))
+                if a is None or b is None:raise DesignError('SCHEMATIC_PORT_MISSING','A CEM terminal has no symbol port.',{'connection_id':conn.id})
+                start=(a['x'],a['y']);end=(b['x'],b['y'])
+                stub=lambda t:(t['x'],t['y']+(-cfg.port_stub if t['direction']=='TOP' else cfg.port_stub))
+                try:points=simplify([start]+orthogonal_route(stub(a),stub(b),obstacles,
+                    tracks=[30,60,220,250,280,460,490,520,700,730,780,940],occupied=occupied)+[end])
+                except ValueError as exc:raise DesignError('SCHEMATIC_ROUTING_FAILED',str(exc),{'connection_id':conn.id}) from exc
+                occupied.extend(zip(points,points[1:]))
+                color='#3B82F6' if conn.wire_class=='NEUTRAL' else '#22C55E' if conn.wire_class=='PE' else '#EF4444'
+                wires.append(dict(id=conn.id,conductor_id=conn.id,net_id=net.id,net_name=net.name,
+                    **{'from':conn.from_component,'to':conn.to_component},from_terminal=conn.from_terminal,to_terminal=conn.to_terminal,
+                    source_port_id=a['port_id'],target_port_id=b['port_id'],wire_class=conn.wire_class,color=color,
+                    waypoints=[dict(x=x,y=y) for x,y in points],svg_path='M '+' L '.join(f'{x} {y}' for x,y in points),
+                    status='PASS',layer='WIRING',crossings=[],junctions=[]))
+        # Only a shared CEM net can have a junction. Distinct nets have explicit non-connected crossings.
+        for i,a in enumerate(wires):
+            for b in wires[i+1:]:
+                intersection=LineString([(p['x'],p['y']) for p in a['waypoints']]).intersection(LineString([(p['x'],p['y']) for p in b['waypoints']]))
+                parts=list(intersection.geoms) if hasattr(intersection,'geoms') else [intersection]
+                for part in parts:
+                    if part.is_empty:continue
+                    if part.geom_type=='Point':
+                        ends=lambda w:{(w['from'],w['from_terminal']),(w['to'],w['to_terminal'])}
+                        shared=ends(a)&ends(b)
+                        connected=a['net_id']==b['net_id'] and any(
+                            abs(ports[k]['x']-part.x)<1e-6 and abs(ports[k]['y']-part.y)<1e-6 for k in shared)
+                        point=dict(x=part.x,y=part.y,other_id=b['id'],connected=connected)
+                        if connected:a['junctions'].append(point)
+                        else:
+                            # Paint the gap on the later SVG edge, otherwise a
+                            # subsequent wire would paint over the crossing mask.
+                            point['other_id']=a['id']
+                            point['axis']='VERTICAL' if any(abs(p['x']-q['x'])<1e-6 and abs(p['x']-part.x)<1e-6
+                                and min(p['y'],q['y'])<part.y<max(p['y'],q['y']) for p,q in zip(b['waypoints'],b['waypoints'][1:])) else 'HORIZONTAL'
+                            b['crossings'].append(point)
+                    elif part.geom_type=='LineString' and part.length>0.01:
+                        checks.append(dict(id=f"OVERLAP:{a['id']}:{b['id']}",status='WARNING',type='COINCIDENT_SEGMENTS',
+                            object_ids=[a['id'],b['id']],message='Drawing tracks overlap; connectivity remains defined by CEM, never by geometry.'))
+        memberships={}
+        for wire in wires:
+            for key in ((wire['from'],wire['from_terminal']),(wire['to'],wire['to_terminal'])):
+                memberships.setdefault((wire['net_id'],key),[]).append(wire)
+        for (net_id,key),members in memberships.items():
+            if len(members)>1:
+                port=ports[key]
+                if not any(abs(p['x']-port['x'])<1e-6 and abs(p['y']-port['y'])<1e-6 for p in members[0]['junctions']):
+                    members[0]['junctions'].append(dict(id=f'JUNCTION:{net_id}:{port["port_id"]}',
+                        x=port['x'],y=port['y'],connected=True,port_id=port['port_id']))
+        return dict(width=width,height=1000,symbols=symbols,wires=wires,validation_results=checks,
+            coordinate_system='schematic-mm-top-left',layout_algorithm='DB-functional-template/orthogonal-A*-bend-congestion-cost')

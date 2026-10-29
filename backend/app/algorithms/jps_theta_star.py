@@ -258,9 +258,13 @@ class JPSThetaStarRouter:
         terminal = next((t for t in comp.terminals if t.get("id") == terminal_name), None)
         if terminal is None:
             raise ValueError(f"Terminal '{terminal_name}' is missing on component {comp.cem_component_id}")
-        x = comp.position.x + float(terminal.get("x", comp.width / 2.0))
-        y = comp.position.y + float(terminal.get("y", comp.height / 2.0))
-        z = comp.position.z + float(terminal.get("z", comp.depth / 2.0))
+        if not all(k in terminal and math.isfinite(float(terminal[k])) for k in ('x','y','z')):
+            raise ValueError('Terminal coordinates are missing or invalid.')
+        angle=math.radians(comp.rotation_deg);co,si=math.cos(angle),math.sin(angle)
+        tx=float(terminal['x'])-comp.width/2;ty=float(terminal['y'])-comp.height/2
+        x=comp.position.x+comp.width/2+tx*co-ty*si
+        y=comp.position.y+comp.height/2+tx*si+ty*co
+        z=comp.position.z+float(terminal['z'])
 
         # Keep the catalog terminal exactly. Grid snapping is only for search;
         # the returned route must begin and end at this physical terminal.

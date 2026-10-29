@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  addEdge, Background, BaseEdge, Controls, EdgeLabelRenderer, getBezierPath,
+  addEdge, Background, BaseEdge, Controls, EdgeLabelRenderer, getSmoothStepPath,
   Handle, MiniMap, Position, ReactFlow, ReactFlowProvider, useEdgesState, useNodesState,
   type Connection, type EdgeProps, type NodeProps, type NodeTypes, type EdgeTypes,
 } from '@xyflow/react';
@@ -23,7 +23,7 @@ const SymbolNode: React.FC<NodeProps<SchematicNode>> = ({ data, selected }) => {
     });
   const lines = data.label.split('\n');
   return <div className={`relative flex h-full w-full flex-col items-center justify-center rounded-md border bg-slate-900 px-2 text-center shadow-lg ${selected ? 'border-blue-400 ring-2 ring-blue-500/40' : 'border-slate-600'}`}
-    style={{ minWidth: Math.max(72, Math.min(data.width, 190)), minHeight: Math.max(46, Math.min(data.height, 110)) }}>
+    style={{ width:data.width, height:data.height }}>
     {handles(top, Position.Top, 'target')}{handles(top, Position.Top, 'source')}
     {handles(bottom, Position.Bottom, 'target')}{handles(bottom, Position.Bottom, 'source')}
     <span className="text-[11px] font-bold text-slate-100">{lines[0]}</span>
@@ -41,12 +41,15 @@ const JunctionNode: React.FC<NodeProps<SchematicNode>> = ({ data, selected }) =>
 
 const WireEdge: React.FC<EdgeProps<SchematicEdge>> = ({ id, sourceX, sourceY, targetX, targetY, sourcePosition,
   targetPosition, data, selected }) => {
-  const [path, labelX, labelY] = getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition });
+  const [draftPath, labelX, labelY] = getSmoothStepPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, borderRadius:0 });
+  const path = data?.svg_path || draftPath;
   return <>
     <BaseEdge id={id} path={path} style={{ stroke: selected ? '#F8FAFC' : data?.color || '#64748B', strokeWidth: selected ? 3 : 2 }} />
+    {data?.crossings?.map((p,i)=><g key={'cross-'+i} pointerEvents="none"><circle cx={p.x} cy={p.y} r={5} fill="#020617"/><path d={p.axis==='VERTICAL'?`M ${p.x} ${p.y-5} V ${p.y+5}`:`M ${p.x-5} ${p.y} H ${p.x+5}`} stroke={data.color} strokeWidth={2}/></g>)}
+    {data?.junctions?.map((p,i)=><circle key={'junction-'+i} cx={p.x} cy={p.y} r={3} fill={data.color} pointerEvents="none"/>)}
     <EdgeLabelRenderer><div className="nodrag nopan absolute rounded bg-slate-950/90 px-1.5 py-0.5 font-mono text-[9px] text-slate-200"
       style={{ transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`, pointerEvents: 'all' }}>
-      {data?.net_name || 'Unlabelled'} <span className="text-slate-500">{data?.wire_class || ''}</span>
+      {selected ? data?.net_name || 'Unlabelled' : ''} <span className="text-slate-500">{selected ? data?.wire_class || '' : ''}</span>
     </div></EdgeLabelRenderer>
   </>;
 };
@@ -57,7 +60,7 @@ const wireClasses: WireClass[] = ['POWER', 'CONTROL', 'SIGNAL', 'NEUTRAL', 'PE']
 const colors: Record<WireClass, string> = { POWER: '#EF4444', CONTROL: '#A78BFA', SIGNAL: '#F59E0B', NEUTRAL: '#3B82F6', PE: '#22C55E' };
 
 const SchematicCanvas: React.FC<{ data: SchematicGraphData }> = ({ data }) => {
-  const { selectObject } = useProjectStore();
+  const { selectObject, selectedObjectId } = useProjectStore();
   const initial = useMemo(() => buildSchematicGraph(data), [data]);
   const [nodes, setNodes, onNodesChange] = useNodesState<SchematicNode>(initial.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState<SchematicEdge>(initial.edges);
@@ -75,7 +78,8 @@ const SchematicCanvas: React.FC<{ data: SchematicGraphData }> = ({ data }) => {
   const violations = useMemo(() => validateSchematicGraph(nodes, edges), [nodes, edges]);
   const selectedNode = nodes.find((node) => node.selected) || null;
   const selectedEdge = edges.find((edge) => edge.id === selectedEdgeId) || null;
-  const visibleEdges = edges.filter((edge) => wireFilter === 'ALL' || edge.data?.wire_class === wireFilter);
+  const selectedNet=edges.find(e=>e.id===selectedObjectId||e.data?.net_id===selectedObjectId)?.data?.net_id;
+  const visibleEdges = edges.filter((edge) => wireFilter === 'ALL' || edge.data?.wire_class === wireFilter).map(edge=>({...edge,selected:edge.selected||edge.id===selectedObjectId||!!selectedNet&&edge.data?.net_id===selectedNet}));
 
   const onConnect = useCallback((connection: Connection) => {
     if (!connection.source || !connection.target || !connection.sourceHandle || !connection.targetHandle) return;
@@ -121,10 +125,10 @@ const SchematicCanvas: React.FC<{ data: SchematicGraphData }> = ({ data }) => {
     <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(0,1fr)_260px]">
       <div className="relative min-h-[420px] overflow-hidden rounded-2xl border border-slate-800 bg-slate-950">
         <div className="absolute left-3 top-3 z-10 rounded-lg border border-amber-500/30 bg-slate-950/90 px-2.5 py-1.5 text-[10px] text-amber-200">Draft graph · CEM connections and exports are unchanged</div>
-        <ReactFlow nodes={nodes} edges={visibleEdges} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
+        <ReactFlow nodes={nodes.map(n=>({...n,selected:n.selected||n.id===selectedObjectId}))} edges={visibleEdges} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
           onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect}
           onNodeClick={(_, node) => { selectObject(node.id); setSelectedEdgeId(null); }}
-          onEdgeClick={(_, edge) => setSelectedEdgeId(edge.id)}
+          onEdgeClick={(_, edge) => {setSelectedEdgeId(edge.id);selectObject(edge.id);}}
           onPaneClick={() => { setSelectedEdgeId(null); selectObject(null); }}
           onSelectionChange={({ nodes: chosenNodes, edges: chosenEdges }) => {
             if (chosenNodes[0]) selectObject(chosenNodes[0].id);
@@ -160,7 +164,7 @@ const SchematicCanvas: React.FC<{ data: SchematicGraphData }> = ({ data }) => {
         </> : <p className="text-xs leading-5 text-slate-400">Select a component or wire to inspect stable IDs, terminals, net labels, and electrical class.</p>}
 
         <div className="mt-auto border-t border-slate-800 pt-3"><div className="mb-2 flex items-center gap-2 text-xs font-semibold text-slate-300"><TriangleAlert className="h-3.5 w-3.5 text-amber-400" />Draft rule checks <span className="ml-auto font-mono text-slate-500">{violations.length}</span></div>
-          <div className="max-h-36 space-y-1 overflow-auto">{violations.length ? violations.slice(0, 8).map((violation, index) => <div key={`${violation.objectId}-${violation.code}-${index}`} className={`rounded px-2 py-1.5 text-[10px] ${violation.severity === 'ERROR' ? 'bg-red-950/60 text-red-200' : 'bg-amber-950/50 text-amber-200'}`}>{violation.message}</div>) : <div className="text-[10px] text-emerald-300">No draft graph rule issues found.</div>}</div>
+          <div className="max-h-36 space-y-1 overflow-auto">{data.validation_results?.slice(0,4).map(v=><p key={v.id} className="text-amber-300">{v.message}</p>)}{violations.length ? violations.slice(0, 8).map((violation, index) => <div key={`${violation.objectId}-${violation.code}-${index}`} className={`rounded px-2 py-1.5 text-[10px] ${violation.severity === 'ERROR' ? 'bg-red-950/60 text-red-200' : 'bg-amber-950/50 text-amber-200'}`}>{violation.message}</div>) : <div className="text-[10px] text-emerald-300">No draft graph rule issues found.</div>}</div>
         </div>
       </aside>
     </div>
@@ -170,5 +174,5 @@ const SchematicCanvas: React.FC<{ data: SchematicGraphData }> = ({ data }) => {
 export const SchematicViewer: React.FC = () => {
   const schematicData = useProjectStore((state) => state.schematicData) as SchematicGraphData | null;
   if (!schematicData) return <div className="p-12 text-center text-slate-500 font-mono text-sm">No schematic data loaded. Click "Generate Design" to build the schematic diagram.</div>;
-  return <div className="flex h-full min-h-0 flex-col bg-slate-950 p-4 md:p-6"><ReactFlowProvider><SchematicCanvas data={schematicData} /></ReactFlowProvider></div>;
+  return <div className="flex h-full min-h-0 flex-col overflow-y-auto bg-slate-950 p-4 md:p-6"><ReactFlowProvider><SchematicCanvas data={schematicData} /></ReactFlowProvider></div>;
 };

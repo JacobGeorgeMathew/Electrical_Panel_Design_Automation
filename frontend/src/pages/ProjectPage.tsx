@@ -9,6 +9,7 @@ import { ValidationPanel } from '../components/validation/ValidationPanel';
 import { BOMTable } from '../components/bom/BOMTable';
 import { ChangePropagationModal } from '../components/common/ChangePropagationModal';
 import { ProjectPersistenceBar } from '../components/projects/ProjectPersistenceBar';
+import { WireInspector } from '../components/common/WireInspector';
 import { CatalogBrowser } from '../components/catalog/CatalogBrowser';
 
 export const ProjectPage: React.FC = () => {
@@ -41,6 +42,7 @@ export const ProjectPage: React.FC = () => {
         {activeTab === 'catalog' && <CatalogBrowser />}
       </main>
 
+      <WireInspector />
       <ChangePropagationModal />
     </div>
   );

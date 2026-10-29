@@ -20,7 +20,7 @@ export function screenToPanelPoint(svg: SVGSVGElement, clientX: number, clientY:
 
 export const Layout2DViewer: React.FC = () => {
   const {
-    pdm, selectedObjectId, selectObject, hoveredObjectId, hoverObject,
+    pdm, wireVisibility, selectedObjectId, selectObject, hoveredObjectId, hoverObject,
     editorTransforms, editorSnapEnabled, editorGridMm, toggleEditorSnap, setEditorGridMm,
     updateEditorTransform, commitEditorTransform, validateCurrentPlacement, isValidatingPlacement,
     resetEditorDraft, errorMessage,
@@ -96,7 +96,7 @@ export const Layout2DViewer: React.FC = () => {
       </div>
     </div>
 
-    <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(0,1fr)_270px]">
+    <div className="grid min-h-[600px] xl:min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(0,1fr)_270px]">
       <div className="flex min-h-[420px] min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/60">
         <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 bg-slate-900 p-2.5">
           <button aria-pressed={editorSnapEnabled} onClick={toggleEditorSnap} className={`rounded-lg border px-2.5 py-1.5 text-xs ${editorSnapEnabled ? 'border-blue-500 bg-blue-600 text-white' : 'border-slate-700 text-slate-300'}`}>Snap {editorSnapEnabled ? 'On' : 'Off'}</button>
@@ -120,7 +120,7 @@ export const Layout2DViewer: React.FC = () => {
             {showZones && zones.map((zone, index) => <g key={zone.name} pointerEvents="none"><rect x={zone.x_min} y={height - zone.y_max} width={zone.x_max - zone.x_min} height={zone.y_max - zone.y_min} fill={`hsla(${index * 60},70%,50%,0.08)`} stroke={`hsla(${index * 60},70%,50%,0.3)`} strokeDasharray="5,5" /><text x={zone.x_min + 10} y={height - zone.y_max + 18} fill={`hsla(${index * 60},70%,65%,0.9)`} fontSize="10">ZONE: {zone.name}</text></g>)}
             {(pdm.ducts||[]).map(d=><g key={d.id} onClick={()=>selectObject(d.id)} className="cursor-pointer"><rect x={d.x} y={height-d.y-d.height} width={d.width} height={d.height} fill={selectedObjectId===d.id?'#3B82F6':'#64748B'} fillOpacity={.65} stroke="#CBD5E1" strokeWidth={1}/><title>{d.label}: {d.capacity_pct}% fill, {d.route_ids.length} wires</title></g>)}
             {rails.map((rail) => <g key={rail.id} pointerEvents="none"><rect x={rail.x} y={height - rail.y - rail.profile_height / 2} width={rail.length} height={rail.profile_height} fill="#475569" stroke="#64748B" rx={2} /><text x={rail.x + 10} y={height - rail.y - 3} fill="#94A3B8" fontSize="9">{rail.label}</text></g>)}
-            {showRoutes && routes.map((route) => route.waypoints.length < 2 ? null : <polyline key={route.id} points={route.waypoints.map((point) => `${point.x},${height - point.y}`).join(' ')} fill="none" stroke={route.color_hex} strokeWidth={2.5} strokeOpacity={0.7} strokeDasharray={route.wire_class === 'NEUTRAL' ? '4,4' : 'none'} pointerEvents="none" />)}
+            {showRoutes && wireVisibility && routes.map((route) => route.waypoints.length < 2 ? null : <polyline key={route.id} points={(route.geometry?.centerline||route.waypoints).map((point) => `${point.x},${height - point.y}`).join(' ')} fill="none" stroke={route.color_hex} strokeWidth={selectedObjectId===route.conductor_id||selectedObjectId===route.id||selectedObjectId===route.net_id||selectedObjectId===route.from_component||selectedObjectId===route.to_component?5:2.5} strokeOpacity={0.8} strokeDasharray={route.wire_class === 'NEUTRAL' ? '4,4' : 'none'} onClick={()=>selectObject(route.conductor_id||route.id)} className="cursor-pointer"><title>{route.conductor_id||route.id} | {route.from_component}:{route.from_terminal} to {route.to_component}:{route.to_terminal} | {route.length_mm} mm | {route.bend_count} bends | {route.status||'UNRESOLVED'} | {route.dimension_source||'legacy estimate'}</title></polyline>)}
             {showClearances && warnings.map((warning) => {
               if (warning.type === 'CLEARANCE') return warning.componentIds.map((id) => {
                 const component = components.find((item) => item.cem_component_id === id);
@@ -163,6 +163,6 @@ export const Layout2DViewer: React.FC = () => {
         </div>
       </aside>
     </div>
-    <div className="flex items-center gap-2 rounded-xl border border-amber-700/30 bg-amber-950/20 px-3 py-2 text-[10px] text-amber-100"><Eye className="h-3.5 w-3.5" />Prototype clearance checks are advisory; moving components can make existing wire routes stale. Run design generation to regenerate routes and downstream artifacts.</div>
+    <div className="flex items-center gap-2 rounded-xl border border-amber-700/30 bg-amber-950/20 px-3 py-2 text-[10px] text-amber-100"><Eye className="h-3.5 w-3.5" />Prototype clearance checks are advisory; Apply & Validate reroutes the draft from saved CEM connectivity. Draft placement is not saved to the project revision or CAD export.</div>
   </div>;
 };

@@ -63,6 +63,11 @@ class ConnectionRef(BaseModel):
     to_terminal: str
     net_id: str
     wire_class: str = "POWER"
+    conductor_material: Optional[str] = None
+    cross_section_mm2: Optional[float] = Field(default=None, gt=0, allow_inf_nan=False)
+    insulation_diameter_mm: Optional[float] = Field(default=None, gt=0, allow_inf_nan=False)
+    insulation_type: Optional[str] = None
+    minimum_bend_radius_mm: Optional[float] = Field(default=None, gt=0, allow_inf_nan=False)
 
 
 class NetRef(BaseModel):

@@ -2,18 +2,20 @@ import React, {useEffect,useMemo} from 'react';
 import * as THREE from 'three';
 import { PhysicalDesignModel, PanelPrimitive, WireRoute } from '../../types/pdm';
 
-export function WireMesh({route,draft,highlighted,dimmed}:{route:WireRoute;draft:boolean;highlighted:boolean;dimmed:boolean}){
+export function WireMesh({route,draft,highlighted,dimmed,onSelect}:{route:WireRoute;draft:boolean;highlighted:boolean;dimmed:boolean;onSelect?:(id:string)=>void}){
   const geometry=useMemo(()=>{
-    if(route.waypoints.length<2)return null;
+    if(!route.geometry || route.geometry.status!=='PASS')return null;
+    const points=route.geometry.centerline;
+    if(points.length<2)return null;
     const path=new THREE.CurvePath<THREE.Vector3>();
-    for(let i=1;i<route.waypoints.length;i++){
-      const a=route.waypoints[i-1],b=route.waypoints[i];
+    for(let i=1;i<points.length;i++){
+      const a=points[i-1],b=points[i];
       path.add(new THREE.LineCurve3(new THREE.Vector3(a.x*.01,a.y*.01,a.z*.01),new THREE.Vector3(b.x*.01,b.y*.01,b.z*.01)));
     }
-    return new THREE.TubeGeometry(path,Math.max(16,route.waypoints.length*3),(route.wire_diameter_mm||3)*.005,8,false);
-  },[route.waypoints,route.wire_diameter_mm]);
+    return new THREE.TubeGeometry(path,Math.max(16,points.length*2),(route.wire_diameter_mm||3)*.005,8,false);
+  },[route.geometry,route.wire_diameter_mm]);
   useEffect(()=>()=>geometry?.dispose(),[geometry]);
-  return geometry?<mesh geometry={geometry}><meshStandardMaterial color={draft?'#F59E0B':highlighted?'#60A5FA':route.color_hex}
+  return geometry?<mesh geometry={geometry} onClick={event=>{event.stopPropagation();onSelect?.(route.conductor_id||route.id);}}><meshStandardMaterial color={draft?'#F59E0B':highlighted?'#60A5FA':route.color_hex}
     roughness={.65} transparent={draft||dimmed} opacity={draft ? 0.35 : dimmed ? 0.18 : 1}/></mesh>:null;
 }
 

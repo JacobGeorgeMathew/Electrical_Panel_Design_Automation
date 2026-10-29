@@ -1,8 +1,9 @@
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class Position3D(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
     x: float
     y: float
     z: float
@@ -85,6 +86,7 @@ class CableDuct(BaseModel):
     max_fill_pct: float = 40.0
     wire_area_mm2: float = 0.0
     route_ids: List[str] = Field(default_factory=list)
+    allowed_wire_classes: List[str] = Field(default_factory=list)
 
 
 class PanelAccessory(BaseModel):
@@ -116,9 +118,25 @@ class BusbarAssembly(BaseModel):
 
 
 class Waypoint3D(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
     x: float
     y: float
     z: float
+
+
+class WireGeometry(BaseModel):
+    id: str
+    route_id: str
+    cad_object_id: str
+    centerline: List[Waypoint3D]
+    diameter_mm: float = Field(gt=0, allow_inf_nan=False)
+    centerline_length_mm: float = Field(default=0,ge=0,allow_inf_nan=False)
+    duct_entry_index: Optional[int] = None
+    duct_exit_index: Optional[int] = None
+    backend: str = 'sampled-circular-fillets-v1'
+    status: str = 'UNRESOLVED'
+    bend_radii_mm: List[float] = Field(default_factory=list)
+    checks: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class WireRoute(BaseModel):
@@ -137,7 +155,15 @@ class WireRoute(BaseModel):
     duct_ids: List[str] = Field(default_factory=list)
     duct_entry_index: Optional[int] = None
     duct_exit_index: Optional[int] = None
-    wire_diameter_mm: float = 3.0
+    wire_diameter_mm: float = Field(default=3.0,gt=0,allow_inf_nan=False)
+    conductor_id: Optional[str] = None
+    dimension_source: str = 'legacy-estimate'
+    minimum_bend_radius_mm: Optional[float] = Field(default=None, gt=0, allow_inf_nan=False)
+    routing_algorithm: str = 'legacy-jps-theta'
+    routing_config: Dict[str, Any] = Field(default_factory=dict)
+    status: str = 'UNRESOLVED'
+    geometry: Optional[WireGeometry] = None
+    validation_checks: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class ClearanceEnvelope(BaseModel):

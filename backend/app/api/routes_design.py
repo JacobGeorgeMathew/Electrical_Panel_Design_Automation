@@ -28,3 +28,17 @@ def validate_placement(project_id:str,pdm:PhysicalDesignModel):
     pdm.validation_results=violations
     return {'pdm':pdm.model_dump(),'validation_results':[v.model_dump() for v in violations],
             'is_valid':not violations}
+
+@router.post('/reroute-placement')
+def reroute_edited_placement(project_id:str,pdm:PhysicalDesignModel,service=Depends(get_service)):
+    from app.models.cem import CanonicalEngineeringModel
+    from app.services.physical_routing import reroute_placement
+    if pdm.project_id!=project_id:
+        raise DesignError('PROJECT_MISMATCH','The placement model does not belong to this project.')
+    saved=service.load_revision(project_id)
+    cem=CanonicalEngineeringModel(**saved['cem'])
+    if {c.cem_component_id for c in pdm.components}!={c.id for c in cem.components}:
+        raise DesignError('COMPONENT_MISMATCH','Draft component IDs must match the saved CEM.')
+    pdm=reroute_placement(pdm,cem)
+    return {'pdm':pdm.model_dump(),'validation_results':[v.model_dump() for v in pdm.validation_results],
+        'is_valid':not pdm.validation_results,'persisted':False}

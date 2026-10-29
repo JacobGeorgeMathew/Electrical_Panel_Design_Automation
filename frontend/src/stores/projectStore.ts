@@ -6,6 +6,7 @@ import { createProject, generateDesign, propagateChange, validatePlacement, vali
 import type { Artifact, Archetype, DesignPackage, ProjectConfiguration, ProjectRecord, RevisionSummary } from '../types/api';
 
 let projectRequest = 0;
+let routingRequest = 0;
 let openController: AbortController | null = null;
 
 export type ViewTab = 'requirements' | 'schematic' | 'layout2d' | 'threeD' | 'validation' | 'bom' | 'catalog';
@@ -104,7 +105,7 @@ const emptyDesign = { cem: null, pdm: null, pdmBaseline: null, schematicData: nu
 const projectFields = (p: ProjectRecord) => ({ projectId: p.id, projectName: p.name, archetype: p.archetype,
   requirementValues: p.requirements, savedRequirementValues: p.requirements, projectConfiguration: p.configuration,
   savedConfiguration: p.configuration, lockVersion: p.lock_version, hasUnsavedChanges: false });
-const designFields = (d: DesignPackage) => ({ cem: d.cem, pdm: d.pdm, pdmBaseline: d.pdm, schematicData: d.schematic,
+const designFields = (d: DesignPackage) => ({ isValidatingPlacement:false, cem: d.cem, pdm: d.pdm, pdmBaseline: d.pdm, schematicData: d.schematic,
   cadData: d.cad, currentRevisionId: d.revision_id, currentRevisionNo: d.revision_no, artifacts: d.artifacts,
   lockVersion: d.lock_version, designStale: d.is_stale, editorTransforms: {}, editorHiddenComponentIds: [],
   editorUndoStack: [], editorRedoStack: [], pendingEditorEdit: null });
@@ -179,6 +180,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     };
     const current = state.editorTransforms[componentId] || base;
     return {
+      pdm: state.pdm ? {...state.pdm,routes:[]} : null,
       pendingEditorEdit: state.pendingEditorEdit || { ...state.editorTransforms },
       editorTransforms: { ...state.editorTransforms, [componentId]: { ...current, ...transform } },
     };
@@ -211,8 +213,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       pendingEditorEdit: null,
     };
   }),
-  resetEditorDraft: () => set((state) => ({ pdm: state.pdmBaseline || state.pdm,
-    editorTransforms: {}, editorHiddenComponentIds: [], editorUndoStack: [], editorRedoStack: [], pendingEditorEdit: null, editorMode: 'select' })),
+  resetEditorDraft: () => { routingRequest++;set((state) => ({ isValidatingPlacement:false, pdm: state.pdmBaseline || state.pdm,
+    editorTransforms: {}, editorHiddenComponentIds: [], editorUndoStack: [], editorRedoStack: [], pendingEditorEdit: null, editorMode: 'select' })); },
   validateCurrentRequirements: async () => {
     try {
       const result = await validateRequirements(get().projectId, get().requirementValues);
@@ -225,6 +227,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
   },
   validateCurrentPlacement: async () => {
+    const token=++routingRequest;
+    const revision=get().currentRevisionId;
     const { pdmBaseline, pdm, editorTransforms, projectId } = get();
     const source = pdmBaseline || pdm;
     if (!source) return;
@@ -236,12 +240,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           rotation_deg: transform.rotation_deg } : component;
       }),
     };
-    set({ pdm: updatedPdm, isValidatingPlacement: true, errorMessage: null });
+    set({ pdm: {...updatedPdm,routes:[]}, isValidatingPlacement: true, errorMessage: null });
     try {
       const result = await validatePlacement(projectId, updatedPdm);
-      set({ pdm: { ...updatedPdm, validation_results: result.validation_results || [] }, isValidatingPlacement: false });
+      if(token!==routingRequest||get().projectId!==projectId||get().currentRevisionId!==revision||get().editorTransforms!==editorTransforms)return;
+      set({ pdm: result.pdm || { ...updatedPdm, validation_results: result.validation_results || [] }, isValidatingPlacement: false });
     } catch (err) {
-      set({ isValidatingPlacement: false, errorMessage: err instanceof Error ? err.message : String(err) });
+      if(token===routingRequest&&get().projectId===projectId&&get().currentRevisionId===revision&&get().editorTransforms===editorTransforms) set({ isValidatingPlacement: false, errorMessage: err instanceof Error ? err.message : String(err) });
     }
   },
   initializeProjects: async () => {

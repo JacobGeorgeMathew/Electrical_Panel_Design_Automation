@@ -61,7 +61,7 @@ export const propagateChange = (projectId: string, modifiedField: string, newVal
     json('POST', { modified_field: modifiedField, new_value: newValue, expected_version: version }), 90000);
 export const fetchFreeCADScript = (projectId: string) => request<{ script: string; revision_id: string }>('/projects/' + id(projectId) + '/cad/freecad-script');
 export const validatePlacement = (projectId: string, pdm: PhysicalDesignModel) =>
-  request<{ pdm: PhysicalDesignModel; validation_results: any[]; is_valid: boolean }>('/projects/' + id(projectId) + '/design/validate-placement', json('POST', pdm));
+  request<{ pdm: PhysicalDesignModel; validation_results: any[]; is_valid: boolean }>('/projects/' + id(projectId) + '/design/reroute-placement', json('POST', pdm));
 export const searchCatalog = (params: URLSearchParams, signal?: AbortSignal) => request<CatalogPage>('/components?' + params, { signal });
 export const fetchCatalogComponent = (key: string, signal?: AbortSignal) => request<CatalogComponent>('/components/' + id(key), { signal });
 export const fetchAccessories = (key: string, signal?: AbortSignal) => request<CatalogComponent[]>('/components/' + id(key) + '/accessories', { signal });

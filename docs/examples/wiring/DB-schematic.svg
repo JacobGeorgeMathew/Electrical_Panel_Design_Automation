@@ -1,0 +1,460 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2520 1000" role="img" aria-label="Generated DB schematic">
+<rect width="100%" height="100%" fill="#020617"/>
+<path d="M 127.5 172 L 127.5 196 L 260 196 L 260 76 L 302.0 76 L 302.0 100" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-MAIN-L1-C01 | Main L1 Feed</title></path>
+<path d="M 155.0 172 L 155.0 192 L 230 192 L 230 80 L 324.0 80 L 324.0 100" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-MAIN-L2-C01 | Main L2 Feed</title></path>
+<circle cx="260.0" cy="80.0" r="5" fill="#020617"/><path d="M 255.0 80.0 H 265.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="302.0" cy="80.0" r="5" fill="#020617"/><path d="M 297.0 80.0 H 307.0" stroke="#EF4444" stroke-width="2"/>
+<path d="M 182.5 172 L 182.5 220 L 410 220 L 410 76 L 346.0 76 L 346.0 100" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-MAIN-L3-C01 | Main L3 Feed</title></path>
+<circle cx="182.5" cy="196.0" r="5" fill="#020617"/><path d="M 182.5 191.0 V 201.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="182.5" cy="192.0" r="5" fill="#020617"/><path d="M 182.5 187.0 V 197.0" stroke="#EF4444" stroke-width="2"/>
+<path d="M 302.0 100 L 302.0 60 L 478.3333333333333 60 L 478.3333333333333 100" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-SPD-L1-C01 | Surge Protection L1</title></path>
+<circle cx="302.0" cy="80.0" r="5" fill="#020617"/><path d="M 302.0 75.0 V 85.0" stroke="#EF4444" stroke-width="2"/>
+<path d="M 324.0 100 L 324.0 80 L 496.6666666666667 80 L 496.6666666666667 100" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-SPD-L2-C01 | Surge Protection L2</title></path>
+<circle cx="410.0" cy="80.0" r="5" fill="#020617"/><path d="M 405.0 80.0 H 415.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="346.0" cy="80.0" r="5" fill="#020617"/><path d="M 341.0 80.0 H 351.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="478.3333333333333" cy="80.0" r="5" fill="#020617"/><path d="M 473.3333333333333 80.0 H 483.3333333333333" stroke="#EF4444" stroke-width="2"/>
+<path d="M 346.0 100 L 346.0 76 L 515.0 76 L 515.0 100" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-SPD-L3-C01 | Surge Protection L3</title></path>
+<circle cx="478.3333333333333" cy="76.0" r="5" fill="#020617"/><path d="M 473.3333333333333 76.0 H 483.3333333333333" stroke="#EF4444" stroke-width="2"/>
+<circle cx="346.0" cy="80.0" r="5" fill="#020617"/><path d="M 346.0 75.0 V 85.0" stroke="#EF4444" stroke-width="2"/>
+<path d="M 302.0 100 L 302.0 76 L 230 76 L 230 316 L 155.0 316 L 155.0 340" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-BRANCH-QF002-L1-IN-C01 | QF002 L1 IN</title></path>
+<circle cx="230.0" cy="196.0" r="5" fill="#020617"/><path d="M 230.0 191.0 V 201.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="302.0" cy="80.0" r="5" fill="#020617"/><path d="M 302.0 75.0 V 85.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="230.0" cy="220.0" r="5" fill="#020617"/><path d="M 230.0 215.0 V 225.0" stroke="#EF4444" stroke-width="2"/>
+<path d="M 155.0 412 L 155.0 580" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-BRANCH-QF002-L1-OUT-C01 | QF002 L1 OUT</title></path>
+<path d="M 324.0 100 L 324.0 30 L 440 30 L 440 316 L 335.0 316 L 335.0 340" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-BRANCH-QF003-L2-IN-C01 | QF003 L2 IN</title></path>
+<circle cx="324.0" cy="60.0" r="5" fill="#020617"/><path d="M 324.0 55.0 V 65.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="440.0" cy="60.0" r="5" fill="#020617"/><path d="M 440.0 55.0 V 65.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="440.0" cy="80.0" r="5" fill="#020617"/><path d="M 440.0 75.0 V 85.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="440.0" cy="76.0" r="5" fill="#020617"/><path d="M 440.0 71.0 V 81.0" stroke="#EF4444" stroke-width="2"/>
+<path d="M 335.0 412 L 335.0 580" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-BRANCH-QF003-L2-OUT-C01 | QF003 L2 OUT</title></path>
+<path d="M 346.0 100 L 346.0 60 L 410 60 L 410 192 L 515.0 192 L 515.0 340" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-BRANCH-QF004-L3-IN-C01 | QF004 L3 IN</title></path>
+<circle cx="346.0" cy="80.0" r="5" fill="#020617"/><path d="M 346.0 75.0 V 85.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="410.0" cy="80.0" r="5" fill="#020617"/><path d="M 410.0 75.0 V 85.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="410.0" cy="76.0" r="5" fill="#020617"/><path d="M 410.0 71.0 V 81.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="440.0" cy="192.0" r="5" fill="#020617"/><path d="M 435.0 192.0 H 445.0" stroke="#EF4444" stroke-width="2"/>
+<path d="M 515.0 412 L 515.0 580" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-BRANCH-QF004-L3-OUT-C01 | QF004 L3 OUT</title></path>
+<path d="M 302.0 100 L 302.0 76 L 620 76 L 620 316 L 667.5 316 L 667.5 340" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-BRANCH-QF005-L1-IN-C01 | QF005 L1 IN</title></path>
+<circle cx="302.0" cy="80.0" r="5" fill="#020617"/><path d="M 302.0 75.0 V 85.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="478.3333333333333" cy="76.0" r="5" fill="#020617"/><path d="M 473.3333333333333 76.0 H 483.3333333333333" stroke="#EF4444" stroke-width="2"/>
+<circle cx="324.0" cy="76.0" r="5" fill="#020617"/><path d="M 319.0 76.0 H 329.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="440.0" cy="76.0" r="5" fill="#020617"/><path d="M 435.0 76.0 H 445.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="410.0" cy="76.0" r="5" fill="#020617"/><path d="M 405.0 76.0 H 415.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="346.0" cy="76.0" r="5" fill="#020617"/><path d="M 341.0 76.0 H 351.0" stroke="#EF4444" stroke-width="2"/>
+<path d="M 667.5 412 L 667.5 580" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-BRANCH-QF005-L1-OUT-C01 | QF005 L1 OUT</title></path>
+<path d="M 324.0 100 L 324.0 80 L 590 80 L 590 280 L 695.0 280 L 695.0 340" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-BRANCH-QF005-L2-IN-C01 | QF005 L2 IN</title></path>
+<circle cx="410.0" cy="80.0" r="5" fill="#020617"/><path d="M 405.0 80.0 H 415.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="346.0" cy="80.0" r="5" fill="#020617"/><path d="M 341.0 80.0 H 351.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="478.3333333333333" cy="80.0" r="5" fill="#020617"/><path d="M 473.3333333333333 80.0 H 483.3333333333333" stroke="#EF4444" stroke-width="2"/>
+<circle cx="346.0" cy="80.0" r="5" fill="#020617"/><path d="M 341.0 80.0 H 351.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="515.0" cy="80.0" r="5" fill="#020617"/><path d="M 510.0 80.0 H 520.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="440.0" cy="80.0" r="5" fill="#020617"/><path d="M 435.0 80.0 H 445.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="346.0" cy="80.0" r="5" fill="#020617"/><path d="M 341.0 80.0 H 351.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="410.0" cy="80.0" r="5" fill="#020617"/><path d="M 405.0 80.0 H 415.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="620.0" cy="280.0" r="5" fill="#020617"/><path d="M 615.0 280.0 H 625.0" stroke="#EF4444" stroke-width="2"/>
+<path d="M 695.0 412 L 695.0 580" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-BRANCH-QF005-L2-OUT-C01 | QF005 L2 OUT</title></path>
+<path d="M 346.0 100 L 346.0 30 L 770 30 L 770 316 L 722.5 316 L 722.5 340" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-BRANCH-QF005-L3-IN-C01 | QF005 L3 IN</title></path>
+<circle cx="346.0" cy="60.0" r="5" fill="#020617"/><path d="M 346.0 55.0 V 65.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="346.0" cy="80.0" r="5" fill="#020617"/><path d="M 346.0 75.0 V 85.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="346.0" cy="76.0" r="5" fill="#020617"/><path d="M 346.0 71.0 V 81.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="346.0" cy="80.0" r="5" fill="#020617"/><path d="M 346.0 75.0 V 85.0" stroke="#EF4444" stroke-width="2"/>
+<path d="M 722.5 412 L 722.5 580" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-BRANCH-QF005-L3-OUT-C01 | QF005 L3 OUT</title></path>
+<path d="M 324.0 100 L 324.0 80 L 260 80 L 260 192 L 324.0 192 L 324.0 250 L 875.0 250 L 875.0 340" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-BRANCH-QF006-L2-IN-C01 | QF006 L2 IN</title></path>
+<circle cx="302.0" cy="80.0" r="5" fill="#020617"/><path d="M 297.0 80.0 H 307.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="324.0" cy="220.0" r="5" fill="#020617"/><path d="M 324.0 215.0 V 225.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="302.0" cy="80.0" r="5" fill="#020617"/><path d="M 297.0 80.0 H 307.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="302.0" cy="80.0" r="5" fill="#020617"/><path d="M 297.0 80.0 H 307.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="440.0" cy="250.0" r="5" fill="#020617"/><path d="M 435.0 250.0 H 445.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="515.0" cy="250.0" r="5" fill="#020617"/><path d="M 510.0 250.0 H 520.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="302.0" cy="80.0" r="5" fill="#020617"/><path d="M 297.0 80.0 H 307.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="620.0" cy="250.0" r="5" fill="#020617"/><path d="M 615.0 250.0 H 625.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="590.0" cy="250.0" r="5" fill="#020617"/><path d="M 585.0 250.0 H 595.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="770.0" cy="250.0" r="5" fill="#020617"/><path d="M 765.0 250.0 H 775.0" stroke="#EF4444" stroke-width="2"/>
+<path d="M 875.0 412 L 875.0 580" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-BRANCH-QF006-L2-OUT-C01 | QF006 L2 OUT</title></path>
+<path d="M 346.0 100 L 346.0 60 L 1055.0 60 L 1055.0 340" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-BRANCH-QF007-L3-IN-C01 | QF007 L3 IN</title></path>
+<circle cx="346.0" cy="80.0" r="5" fill="#020617"/><path d="M 346.0 75.0 V 85.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="440.0" cy="60.0" r="5" fill="#020617"/><path d="M 435.0 60.0 H 445.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="346.0" cy="76.0" r="5" fill="#020617"/><path d="M 346.0 71.0 V 81.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="346.0" cy="80.0" r="5" fill="#020617"/><path d="M 346.0 75.0 V 85.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="770.0" cy="60.0" r="5" fill="#020617"/><path d="M 765.0 60.0 H 775.0" stroke="#EF4444" stroke-width="2"/>
+<path d="M 1055.0 412 L 1055.0 580" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-BRANCH-QF007-L3-OUT-C01 | QF007 L3 OUT</title></path>
+<path d="M 302.0 100 L 302.0 60 L 80 60 L 80 320 L 1235.0 320 L 1235.0 340" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-BRANCH-QF008-L1-IN-C01 | QF008 L1 IN</title></path>
+<circle cx="302.0" cy="80.0" r="5" fill="#020617"/><path d="M 302.0 75.0 V 85.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="155.0" cy="320.0" r="5" fill="#020617"/><path d="M 150.0 320.0 H 160.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="335.0" cy="320.0" r="5" fill="#020617"/><path d="M 330.0 320.0 H 340.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="515.0" cy="320.0" r="5" fill="#020617"/><path d="M 510.0 320.0 H 520.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="667.5" cy="320.0" r="5" fill="#020617"/><path d="M 662.5 320.0 H 672.5" stroke="#EF4444" stroke-width="2"/>
+<circle cx="695.0" cy="320.0" r="5" fill="#020617"/><path d="M 690.0 320.0 H 700.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="722.5" cy="320.0" r="5" fill="#020617"/><path d="M 717.5 320.0 H 727.5" stroke="#EF4444" stroke-width="2"/>
+<circle cx="302.0" cy="80.0" r="5" fill="#020617"/><path d="M 302.0 75.0 V 85.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="875.0" cy="320.0" r="5" fill="#020617"/><path d="M 870.0 320.0 H 880.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="1055.0" cy="320.0" r="5" fill="#020617"/><path d="M 1050.0 320.0 H 1060.0" stroke="#EF4444" stroke-width="2"/>
+<path d="M 1235.0 412 L 1235.0 580" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-BRANCH-QF008-L1-OUT-C01 | QF008 L1 OUT</title></path>
+<path d="M 302.0 100 L 302.0 76 L 590 76 L 590 80 L 1387.5 80 L 1387.5 340" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-BRANCH-QF009-L1-IN-C01 | QF009 L1 IN</title></path>
+<circle cx="302.0" cy="80.0" r="5" fill="#020617"/><path d="M 302.0 75.0 V 85.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="478.3333333333333" cy="76.0" r="5" fill="#020617"/><path d="M 473.3333333333333 76.0 H 483.3333333333333" stroke="#EF4444" stroke-width="2"/>
+<circle cx="324.0" cy="76.0" r="5" fill="#020617"/><path d="M 319.0 76.0 H 329.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="440.0" cy="76.0" r="5" fill="#020617"/><path d="M 435.0 76.0 H 445.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="410.0" cy="76.0" r="5" fill="#020617"/><path d="M 405.0 76.0 H 415.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="346.0" cy="76.0" r="5" fill="#020617"/><path d="M 341.0 76.0 H 351.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="620.0" cy="80.0" r="5" fill="#020617"/><path d="M 615.0 80.0 H 625.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="590.0" cy="80.0" r="5" fill="#020617"/><path d="M 585.0 80.0 H 595.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="346.0" cy="76.0" r="5" fill="#020617"/><path d="M 341.0 76.0 H 351.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="770.0" cy="80.0" r="5" fill="#020617"/><path d="M 765.0 80.0 H 775.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="302.0" cy="80.0" r="5" fill="#020617"/><path d="M 302.0 75.0 V 85.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="346.0" cy="76.0" r="5" fill="#020617"/><path d="M 341.0 76.0 H 351.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="1055.0" cy="80.0" r="5" fill="#020617"/><path d="M 1050.0 80.0 H 1060.0" stroke="#EF4444" stroke-width="2"/>
+<path d="M 1387.5 412 L 1387.5 580" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-BRANCH-QF009-L1-OUT-C01 | QF009 L1 OUT</title></path>
+<path d="M 324.0 100 L 324.0 80 L 410 80 L 410 220 L 1415.0 220 L 1415.0 340" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-BRANCH-QF009-L2-IN-C01 | QF009 L2 IN</title></path>
+<circle cx="346.0" cy="80.0" r="5" fill="#020617"/><path d="M 341.0 80.0 H 351.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="346.0" cy="80.0" r="5" fill="#020617"/><path d="M 341.0 80.0 H 351.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="440.0" cy="220.0" r="5" fill="#020617"/><path d="M 435.0 220.0 H 445.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="346.0" cy="80.0" r="5" fill="#020617"/><path d="M 341.0 80.0 H 351.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="515.0" cy="220.0" r="5" fill="#020617"/><path d="M 510.0 220.0 H 520.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="620.0" cy="220.0" r="5" fill="#020617"/><path d="M 615.0 220.0 H 625.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="590.0" cy="220.0" r="5" fill="#020617"/><path d="M 585.0 220.0 H 595.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="346.0" cy="80.0" r="5" fill="#020617"/><path d="M 341.0 80.0 H 351.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="770.0" cy="220.0" r="5" fill="#020617"/><path d="M 765.0 220.0 H 775.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="346.0" cy="80.0" r="5" fill="#020617"/><path d="M 341.0 80.0 H 351.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="1055.0" cy="220.0" r="5" fill="#020617"/><path d="M 1050.0 220.0 H 1060.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="1387.5" cy="220.0" r="5" fill="#020617"/><path d="M 1382.5 220.0 H 1392.5" stroke="#EF4444" stroke-width="2"/>
+<path d="M 1415.0 412 L 1415.0 580" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-BRANCH-QF009-L2-OUT-C01 | QF009 L2 OUT</title></path>
+<path d="M 346.0 100 L 346.0 76 L 440 76 L 440 192 L 1442.5 192 L 1442.5 340" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-BRANCH-QF009-L3-IN-C01 | QF009 L3 IN</title></path>
+<circle cx="346.0" cy="80.0" r="5" fill="#020617"/><path d="M 346.0 75.0 V 85.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="440.0" cy="80.0" r="5" fill="#020617"/><path d="M 440.0 75.0 V 85.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="410.0" cy="76.0" r="5" fill="#020617"/><path d="M 405.0 76.0 H 415.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="620.0" cy="192.0" r="5" fill="#020617"/><path d="M 615.0 192.0 H 625.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="346.0" cy="80.0" r="5" fill="#020617"/><path d="M 346.0 75.0 V 85.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="440.0" cy="80.0" r="5" fill="#020617"/><path d="M 440.0 75.0 V 85.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="590.0" cy="192.0" r="5" fill="#020617"/><path d="M 585.0 192.0 H 595.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="770.0" cy="192.0" r="5" fill="#020617"/><path d="M 765.0 192.0 H 775.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="1055.0" cy="192.0" r="5" fill="#020617"/><path d="M 1050.0 192.0 H 1060.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="1387.5" cy="192.0" r="5" fill="#020617"/><path d="M 1382.5 192.0 H 1392.5" stroke="#EF4444" stroke-width="2"/>
+<circle cx="346.0" cy="80.0" r="5" fill="#020617"/><path d="M 346.0 75.0 V 85.0" stroke="#EF4444" stroke-width="2"/>
+<path d="M 1442.5 412 L 1442.5 580" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-BRANCH-QF009-L3-OUT-C01 | QF009 L3 OUT</title></path>
+<path d="M 346.0 100 L 346.0 30 L 620 30 L 620 76 L 1595.0 76 L 1595.0 340" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-BRANCH-QF010-L3-IN-C01 | QF010 L3 IN</title></path>
+<circle cx="346.0" cy="60.0" r="5" fill="#020617"/><path d="M 346.0 55.0 V 65.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="346.0" cy="80.0" r="5" fill="#020617"/><path d="M 346.0 75.0 V 85.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="346.0" cy="76.0" r="5" fill="#020617"/><path d="M 346.0 71.0 V 81.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="620.0" cy="76.0" r="5" fill="#020617"/><path d="M 615.0 76.0 H 625.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="346.0" cy="80.0" r="5" fill="#020617"/><path d="M 346.0 75.0 V 85.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="770.0" cy="76.0" r="5" fill="#020617"/><path d="M 765.0 76.0 H 775.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="620.0" cy="60.0" r="5" fill="#020617"/><path d="M 620.0 55.0 V 65.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="1055.0" cy="76.0" r="5" fill="#020617"/><path d="M 1050.0 76.0 H 1060.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="346.0" cy="76.0" r="5" fill="#020617"/><path d="M 346.0 71.0 V 81.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="346.0" cy="80.0" r="5" fill="#020617"/><path d="M 346.0 75.0 V 85.0" stroke="#EF4444" stroke-width="2"/>
+<path d="M 1595.0 412 L 1595.0 580" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-BRANCH-QF010-L3-OUT-C01 | QF010 L3 OUT</title></path>
+<path d="M 302.0 100 L 302.0 76 L 260 76 L 260 280 L 590 280 L 590 316 L 620 316 L 620 320 L 770 320 L 770 316 L 1775.0 316 L 1775.0 340" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-BRANCH-QF011-L1-IN-C01 | QF011 L1 IN</title></path>
+<circle cx="260.0" cy="80.0" r="5" fill="#020617"/><path d="M 260.0 75.0 V 85.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="302.0" cy="80.0" r="5" fill="#020617"/><path d="M 302.0 75.0 V 85.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="260.0" cy="220.0" r="5" fill="#020617"/><path d="M 260.0 215.0 V 225.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="440.0" cy="280.0" r="5" fill="#020617"/><path d="M 435.0 280.0 H 445.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="515.0" cy="280.0" r="5" fill="#020617"/><path d="M 510.0 280.0 H 520.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="667.5" cy="320.0" r="5" fill="#020617"/><path d="M 662.5 320.0 H 672.5" stroke="#EF4444" stroke-width="2"/>
+<circle cx="620.0" cy="316.0" r="5" fill="#020617"/><path d="M 615.0 316.0 H 625.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="590.0" cy="280.0" r="5" fill="#020617"/><path d="M 585.0 280.0 H 595.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="695.0" cy="320.0" r="5" fill="#020617"/><path d="M 690.0 320.0 H 700.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="770.0" cy="316.0" r="5" fill="#020617"/><path d="M 765.0 316.0 H 775.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="722.5" cy="320.0" r="5" fill="#020617"/><path d="M 717.5 320.0 H 727.5" stroke="#EF4444" stroke-width="2"/>
+<circle cx="302.0" cy="80.0" r="5" fill="#020617"/><path d="M 302.0 75.0 V 85.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="875.0" cy="316.0" r="5" fill="#020617"/><path d="M 870.0 316.0 H 880.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="1055.0" cy="316.0" r="5" fill="#020617"/><path d="M 1050.0 316.0 H 1060.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="1387.5" cy="316.0" r="5" fill="#020617"/><path d="M 1382.5 316.0 H 1392.5" stroke="#EF4444" stroke-width="2"/>
+<circle cx="1415.0" cy="316.0" r="5" fill="#020617"/><path d="M 1410.0 316.0 H 1420.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="1442.5" cy="316.0" r="5" fill="#020617"/><path d="M 1437.5 316.0 H 1447.5" stroke="#EF4444" stroke-width="2"/>
+<circle cx="1595.0" cy="316.0" r="5" fill="#020617"/><path d="M 1590.0 316.0 H 1600.0" stroke="#EF4444" stroke-width="2"/>
+<path d="M 1775.0 412 L 1775.0 580" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-BRANCH-QF011-L1-OUT-C01 | QF011 L1 OUT</title></path>
+<path d="M 324.0 100 L 324.0 80 L 800 80 L 800 280 L 1955.0 280 L 1955.0 340" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-BRANCH-QF012-L2-IN-C01 | QF012 L2 IN</title></path>
+<circle cx="410.0" cy="80.0" r="5" fill="#020617"/><path d="M 405.0 80.0 H 415.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="346.0" cy="80.0" r="5" fill="#020617"/><path d="M 341.0 80.0 H 351.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="478.3333333333333" cy="80.0" r="5" fill="#020617"/><path d="M 473.3333333333333 80.0 H 483.3333333333333" stroke="#EF4444" stroke-width="2"/>
+<circle cx="346.0" cy="80.0" r="5" fill="#020617"/><path d="M 341.0 80.0 H 351.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="515.0" cy="80.0" r="5" fill="#020617"/><path d="M 510.0 80.0 H 520.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="440.0" cy="80.0" r="5" fill="#020617"/><path d="M 435.0 80.0 H 445.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="346.0" cy="80.0" r="5" fill="#020617"/><path d="M 341.0 80.0 H 351.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="410.0" cy="80.0" r="5" fill="#020617"/><path d="M 405.0 80.0 H 415.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="620.0" cy="80.0" r="5" fill="#020617"/><path d="M 615.0 80.0 H 625.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="346.0" cy="80.0" r="5" fill="#020617"/><path d="M 341.0 80.0 H 351.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="770.0" cy="80.0" r="5" fill="#020617"/><path d="M 765.0 80.0 H 775.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="800.0" cy="250.0" r="5" fill="#020617"/><path d="M 800.0 245.0 V 255.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="875.0" cy="280.0" r="5" fill="#020617"/><path d="M 870.0 280.0 H 880.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="346.0" cy="80.0" r="5" fill="#020617"/><path d="M 341.0 80.0 H 351.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="1055.0" cy="280.0" r="5" fill="#020617"/><path d="M 1050.0 280.0 H 1060.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="1387.5" cy="280.0" r="5" fill="#020617"/><path d="M 1382.5 280.0 H 1392.5" stroke="#EF4444" stroke-width="2"/>
+<circle cx="800.0" cy="220.0" r="5" fill="#020617"/><path d="M 800.0 215.0 V 225.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="1415.0" cy="280.0" r="5" fill="#020617"/><path d="M 1410.0 280.0 H 1420.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="346.0" cy="80.0" r="5" fill="#020617"/><path d="M 341.0 80.0 H 351.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="440.0" cy="80.0" r="5" fill="#020617"/><path d="M 435.0 80.0 H 445.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="800.0" cy="192.0" r="5" fill="#020617"/><path d="M 800.0 187.0 V 197.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="1442.5" cy="280.0" r="5" fill="#020617"/><path d="M 1437.5 280.0 H 1447.5" stroke="#EF4444" stroke-width="2"/>
+<circle cx="346.0" cy="80.0" r="5" fill="#020617"/><path d="M 341.0 80.0 H 351.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="1595.0" cy="280.0" r="5" fill="#020617"/><path d="M 1590.0 280.0 H 1600.0" stroke="#EF4444" stroke-width="2"/>
+<path d="M 1955.0 412 L 1955.0 580" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-BRANCH-QF012-L2-OUT-C01 | QF012 L2 OUT</title></path>
+<path d="M 302.0 100 L 302.0 30 L 20 30 L 20 432 L 2060 432 L 2060 316 L 2107.5 316 L 2107.5 340" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-BRANCH-QF013-L1-IN-C01 | QF013 L1 IN</title></path>
+<circle cx="302.0" cy="80.0" r="5" fill="#020617"/><path d="M 302.0 75.0 V 85.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="155.0" cy="432.0" r="5" fill="#020617"/><path d="M 150.0 432.0 H 160.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="335.0" cy="432.0" r="5" fill="#020617"/><path d="M 330.0 432.0 H 340.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="515.0" cy="432.0" r="5" fill="#020617"/><path d="M 510.0 432.0 H 520.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="667.5" cy="432.0" r="5" fill="#020617"/><path d="M 662.5 432.0 H 672.5" stroke="#EF4444" stroke-width="2"/>
+<circle cx="695.0" cy="432.0" r="5" fill="#020617"/><path d="M 690.0 432.0 H 700.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="722.5" cy="432.0" r="5" fill="#020617"/><path d="M 717.5 432.0 H 727.5" stroke="#EF4444" stroke-width="2"/>
+<circle cx="302.0" cy="80.0" r="5" fill="#020617"/><path d="M 302.0 75.0 V 85.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="875.0" cy="432.0" r="5" fill="#020617"/><path d="M 870.0 432.0 H 880.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="1055.0" cy="432.0" r="5" fill="#020617"/><path d="M 1050.0 432.0 H 1060.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="1235.0" cy="432.0" r="5" fill="#020617"/><path d="M 1230.0 432.0 H 1240.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="1387.5" cy="432.0" r="5" fill="#020617"/><path d="M 1382.5 432.0 H 1392.5" stroke="#EF4444" stroke-width="2"/>
+<circle cx="1415.0" cy="432.0" r="5" fill="#020617"/><path d="M 1410.0 432.0 H 1420.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="1442.5" cy="432.0" r="5" fill="#020617"/><path d="M 1437.5 432.0 H 1447.5" stroke="#EF4444" stroke-width="2"/>
+<circle cx="1595.0" cy="432.0" r="5" fill="#020617"/><path d="M 1590.0 432.0 H 1600.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="1775.0" cy="432.0" r="5" fill="#020617"/><path d="M 1770.0 432.0 H 1780.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="1955.0" cy="432.0" r="5" fill="#020617"/><path d="M 1950.0 432.0 H 1960.0" stroke="#EF4444" stroke-width="2"/>
+<path d="M 2107.5 412 L 2107.5 580" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-BRANCH-QF013-L1-OUT-C01 | QF013 L1 OUT</title></path>
+<path d="M 324.0 100 L 324.0 60 L 800 60 L 800 30 L 2135.0 30 L 2135.0 340" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-BRANCH-QF013-L2-IN-C01 | QF013 L2 IN</title></path>
+<circle cx="440.0" cy="60.0" r="5" fill="#020617"/><path d="M 435.0 60.0 H 445.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="324.0" cy="76.0" r="5" fill="#020617"/><path d="M 324.0 71.0 V 81.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="346.0" cy="60.0" r="5" fill="#020617"/><path d="M 341.0 60.0 H 351.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="770.0" cy="60.0" r="5" fill="#020617"/><path d="M 765.0 60.0 H 775.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="324.0" cy="76.0" r="5" fill="#020617"/><path d="M 324.0 71.0 V 81.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="620.0" cy="60.0" r="5" fill="#020617"/><path d="M 615.0 60.0 H 625.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="346.0" cy="60.0" r="5" fill="#020617"/><path d="M 341.0 60.0 H 351.0" stroke="#EF4444" stroke-width="2"/>
+<path d="M 2135.0 412 L 2135.0 580" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-BRANCH-QF013-L2-OUT-C01 | QF013 L2 OUT</title></path>
+<path d="M 346.0 100 L 346.0 76 L 410 76 L 410 460 L 2030 460 L 2030 320 L 2162.5 320 L 2162.5 340" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-BRANCH-QF013-L3-IN-C01 | QF013 L3 IN</title></path>
+<circle cx="346.0" cy="80.0" r="5" fill="#020617"/><path d="M 346.0 75.0 V 85.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="410.0" cy="80.0" r="5" fill="#020617"/><path d="M 410.0 75.0 V 85.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="410.0" cy="316.0" r="5" fill="#020617"/><path d="M 410.0 311.0 V 321.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="515.0" cy="460.0" r="5" fill="#020617"/><path d="M 510.0 460.0 H 520.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="667.5" cy="460.0" r="5" fill="#020617"/><path d="M 662.5 460.0 H 672.5" stroke="#EF4444" stroke-width="2"/>
+<circle cx="346.0" cy="80.0" r="5" fill="#020617"/><path d="M 346.0 75.0 V 85.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="410.0" cy="80.0" r="5" fill="#020617"/><path d="M 410.0 75.0 V 85.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="695.0" cy="460.0" r="5" fill="#020617"/><path d="M 690.0 460.0 H 700.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="722.5" cy="460.0" r="5" fill="#020617"/><path d="M 717.5 460.0 H 727.5" stroke="#EF4444" stroke-width="2"/>
+<circle cx="410.0" cy="250.0" r="5" fill="#020617"/><path d="M 410.0 245.0 V 255.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="875.0" cy="460.0" r="5" fill="#020617"/><path d="M 870.0 460.0 H 880.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="1055.0" cy="460.0" r="5" fill="#020617"/><path d="M 1050.0 460.0 H 1060.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="410.0" cy="320.0" r="5" fill="#020617"/><path d="M 410.0 315.0 V 325.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="1235.0" cy="460.0" r="5" fill="#020617"/><path d="M 1230.0 460.0 H 1240.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="1387.5" cy="460.0" r="5" fill="#020617"/><path d="M 1382.5 460.0 H 1392.5" stroke="#EF4444" stroke-width="2"/>
+<circle cx="346.0" cy="80.0" r="5" fill="#020617"/><path d="M 346.0 75.0 V 85.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="1415.0" cy="460.0" r="5" fill="#020617"/><path d="M 1410.0 460.0 H 1420.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="1442.5" cy="460.0" r="5" fill="#020617"/><path d="M 1437.5 460.0 H 1447.5" stroke="#EF4444" stroke-width="2"/>
+<circle cx="1595.0" cy="460.0" r="5" fill="#020617"/><path d="M 1590.0 460.0 H 1600.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="410.0" cy="280.0" r="5" fill="#020617"/><path d="M 410.0 275.0 V 285.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="1775.0" cy="460.0" r="5" fill="#020617"/><path d="M 1770.0 460.0 H 1780.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="346.0" cy="80.0" r="5" fill="#020617"/><path d="M 346.0 75.0 V 85.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="410.0" cy="80.0" r="5" fill="#020617"/><path d="M 410.0 75.0 V 85.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="1955.0" cy="460.0" r="5" fill="#020617"/><path d="M 1950.0 460.0 H 1960.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="2060.0" cy="320.0" r="5" fill="#020617"/><path d="M 2055.0 320.0 H 2065.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="410.0" cy="432.0" r="5" fill="#020617"/><path d="M 410.0 427.0 V 437.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="2030.0" cy="432.0" r="5" fill="#020617"/><path d="M 2030.0 427.0 V 437.0" stroke="#EF4444" stroke-width="2"/>
+<circle cx="2107.5" cy="320.0" r="5" fill="#020617"/><path d="M 2102.5 320.0 H 2112.5" stroke="#EF4444" stroke-width="2"/>
+<circle cx="2135.0" cy="320.0" r="5" fill="#020617"/><path d="M 2130.0 320.0 H 2140.0" stroke="#EF4444" stroke-width="2"/>
+<path d="M 2162.5 412 L 2162.5 580" stroke="#EF4444" stroke-width="2" fill="none"><title>NET-BRANCH-QF013-L3-OUT-C01 | QF013 L3 OUT</title></path>
+<path d="M 368.0 100 L 368.0 30 L 590 30 L 590 76 L 695.0 76 L 695.0 100" stroke="#3B82F6" stroke-width="2" fill="none"><title>NET-NEUTRAL-MAIN-C01 | Main Neutral Trunk</title></path>
+<circle cx="368.0" cy="76.0" r="5" fill="#020617"/><path d="M 368.0 71.0 V 81.0" stroke="#3B82F6" stroke-width="2"/>
+<circle cx="368.0" cy="60.0" r="5" fill="#020617"/><path d="M 368.0 55.0 V 65.0" stroke="#3B82F6" stroke-width="2"/>
+<circle cx="368.0" cy="80.0" r="5" fill="#020617"/><path d="M 368.0 75.0 V 85.0" stroke="#3B82F6" stroke-width="2"/>
+<circle cx="368.0" cy="76.0" r="5" fill="#020617"/><path d="M 368.0 71.0 V 81.0" stroke="#3B82F6" stroke-width="2"/>
+<circle cx="368.0" cy="60.0" r="5" fill="#020617"/><path d="M 368.0 55.0 V 65.0" stroke="#3B82F6" stroke-width="2"/>
+<circle cx="368.0" cy="76.0" r="5" fill="#020617"/><path d="M 368.0 71.0 V 81.0" stroke="#3B82F6" stroke-width="2"/>
+<circle cx="368.0" cy="80.0" r="5" fill="#020617"/><path d="M 368.0 75.0 V 85.0" stroke="#3B82F6" stroke-width="2"/>
+<circle cx="368.0" cy="60.0" r="5" fill="#020617"/><path d="M 368.0 55.0 V 65.0" stroke="#3B82F6" stroke-width="2"/>
+<circle cx="590.0" cy="60.0" r="5" fill="#020617"/><path d="M 590.0 55.0 V 65.0" stroke="#3B82F6" stroke-width="2"/>
+<circle cx="368.0" cy="76.0" r="5" fill="#020617"/><path d="M 368.0 71.0 V 81.0" stroke="#3B82F6" stroke-width="2"/>
+<circle cx="590.0" cy="76.0" r="5" fill="#020617"/><path d="M 585.0 76.0 H 595.0" stroke="#3B82F6" stroke-width="2"/>
+<circle cx="695.0" cy="80.0" r="5" fill="#020617"/><path d="M 695.0 75.0 V 85.0" stroke="#3B82F6" stroke-width="2"/>
+<circle cx="368.0" cy="80.0" r="5" fill="#020617"/><path d="M 368.0 75.0 V 85.0" stroke="#3B82F6" stroke-width="2"/>
+<circle cx="368.0" cy="76.0" r="5" fill="#020617"/><path d="M 368.0 71.0 V 81.0" stroke="#3B82F6" stroke-width="2"/>
+<circle cx="368.0" cy="80.0" r="5" fill="#020617"/><path d="M 368.0 75.0 V 85.0" stroke="#3B82F6" stroke-width="2"/>
+<circle cx="695.0" cy="80.0" r="5" fill="#020617"/><path d="M 695.0 75.0 V 85.0" stroke="#3B82F6" stroke-width="2"/>
+<circle cx="590.0" cy="60.0" r="5" fill="#020617"/><path d="M 590.0 55.0 V 65.0" stroke="#3B82F6" stroke-width="2"/>
+<circle cx="368.0" cy="60.0" r="5" fill="#020617"/><path d="M 368.0 55.0 V 65.0" stroke="#3B82F6" stroke-width="2"/>
+<circle cx="368.0" cy="76.0" r="5" fill="#020617"/><path d="M 368.0 71.0 V 81.0" stroke="#3B82F6" stroke-width="2"/>
+<path d="M 95 820 L 95 796 L 950 796 L 950 76 L 875.0 76 L 875.0 100" stroke="#22C55E" stroke-width="2" fill="none"><title>NET-PE-MAIN-C01 | Main Protective Earth Bus</title></path>
+<circle cx="950.0" cy="320.0" r="5" fill="#020617"/><path d="M 950.0 315.0 V 325.0" stroke="#22C55E" stroke-width="2"/>
+<circle cx="875.0" cy="80.0" r="5" fill="#020617"/><path d="M 875.0 75.0 V 85.0" stroke="#22C55E" stroke-width="2"/>
+<circle cx="950.0" cy="80.0" r="5" fill="#020617"/><path d="M 950.0 75.0 V 85.0" stroke="#22C55E" stroke-width="2"/>
+<circle cx="950.0" cy="220.0" r="5" fill="#020617"/><path d="M 950.0 215.0 V 225.0" stroke="#22C55E" stroke-width="2"/>
+<circle cx="950.0" cy="192.0" r="5" fill="#020617"/><path d="M 950.0 187.0 V 197.0" stroke="#22C55E" stroke-width="2"/>
+<circle cx="950.0" cy="316.0" r="5" fill="#020617"/><path d="M 950.0 311.0 V 321.0" stroke="#22C55E" stroke-width="2"/>
+<circle cx="950.0" cy="280.0" r="5" fill="#020617"/><path d="M 950.0 275.0 V 285.0" stroke="#22C55E" stroke-width="2"/>
+<circle cx="950.0" cy="432.0" r="5" fill="#020617"/><path d="M 950.0 427.0 V 437.0" stroke="#22C55E" stroke-width="2"/>
+<circle cx="950.0" cy="460.0" r="5" fill="#020617"/><path d="M 950.0 455.0 V 465.0" stroke="#22C55E" stroke-width="2"/>
+<rect x="100" y="100" width="110" height="72" fill="#0f172a" stroke="#64748b"/>
+<text x="155.0" y="128" text-anchor="middle" font-family="monospace" font-size="12" fill="white">QF001</text>
+<text x="155.0" y="144" text-anchor="middle" font-family="monospace" font-size="12" fill="white">250A</text>
+<circle cx="127.5" cy="100" r="2.5" fill="#cbd5e1"><title>QF001:L1_IN</title></circle>
+<circle cx="155.0" cy="100" r="2.5" fill="#cbd5e1"><title>QF001:L2_IN</title></circle>
+<circle cx="182.5" cy="100" r="2.5" fill="#cbd5e1"><title>QF001:L3_IN</title></circle>
+<circle cx="127.5" cy="172" r="2.5" fill="#cbd5e1"><title>QF001:L1_OUT</title></circle>
+<circle cx="155.0" cy="172" r="2.5" fill="#cbd5e1"><title>QF001:L2_OUT</title></circle>
+<circle cx="182.5" cy="172" r="2.5" fill="#cbd5e1"><title>QF001:L3_OUT</title></circle>
+<rect x="280" y="100" width="110" height="72" fill="#0f172a" stroke="#64748b"/>
+<text x="335.0" y="128" text-anchor="middle" font-family="monospace" font-size="12" fill="white">BUS001</text>
+<text x="335.0" y="144" text-anchor="middle" font-family="monospace" font-size="12" fill="white">400A</text>
+<circle cx="302.0" cy="100" r="2.5" fill="#cbd5e1"><title>BUS001:IN_L1</title></circle>
+<circle cx="324.0" cy="100" r="2.5" fill="#cbd5e1"><title>BUS001:IN_L2</title></circle>
+<circle cx="346.0" cy="100" r="2.5" fill="#cbd5e1"><title>BUS001:IN_L3</title></circle>
+<circle cx="368.0" cy="100" r="2.5" fill="#cbd5e1"><title>BUS001:IN_N</title></circle>
+<rect x="460" y="100" width="110" height="72" fill="#0f172a" stroke="#64748b"/>
+<text x="515.0" y="128" text-anchor="middle" font-family="monospace" font-size="12" fill="white">SPD001</text>
+<text x="515.0" y="144" text-anchor="middle" font-family="monospace" font-size="12" fill="white">40A</text>
+<circle cx="478.3333333333333" cy="100" r="2.5" fill="#cbd5e1"><title>SPD001:L1</title></circle>
+<circle cx="496.6666666666667" cy="100" r="2.5" fill="#cbd5e1"><title>SPD001:L2</title></circle>
+<circle cx="515.0" cy="100" r="2.5" fill="#cbd5e1"><title>SPD001:L3</title></circle>
+<circle cx="533.3333333333334" cy="100" r="2.5" fill="#cbd5e1"><title>SPD001:N</title></circle>
+<circle cx="551.6666666666666" cy="100" r="2.5" fill="#cbd5e1"><title>SPD001:PE</title></circle>
+<rect x="640" y="100" width="110" height="72" fill="#0f172a" stroke="#64748b"/>
+<text x="695.0" y="128" text-anchor="middle" font-family="monospace" font-size="12" fill="white">NBAR01</text>
+<text x="695.0" y="144" text-anchor="middle" font-family="monospace" font-size="12" fill="white">250A</text>
+<circle cx="695.0" cy="100" r="2.5" fill="#cbd5e1"><title>NBAR01:MAIN_N</title></circle>
+<rect x="820" y="100" width="110" height="72" fill="#0f172a" stroke="#64748b"/>
+<text x="875.0" y="128" text-anchor="middle" font-family="monospace" font-size="12" fill="white">PEBAR01</text>
+<text x="875.0" y="144" text-anchor="middle" font-family="monospace" font-size="12" fill="white">250A</text>
+<circle cx="875.0" cy="100" r="2.5" fill="#cbd5e1"><title>PEBAR01:MAIN_PE</title></circle>
+<rect x="100" y="340" width="110" height="72" fill="#0f172a" stroke="#64748b"/>
+<text x="155.0" y="368" text-anchor="middle" font-family="monospace" font-size="12" fill="white">QF002</text>
+<text x="155.0" y="384" text-anchor="middle" font-family="monospace" font-size="12" fill="white">16A</text>
+<circle cx="155.0" cy="340" r="2.5" fill="#cbd5e1"><title>QF002:IN</title></circle>
+<circle cx="155.0" cy="412" r="2.5" fill="#cbd5e1"><title>QF002:OUT</title></circle>
+<rect x="280" y="340" width="110" height="72" fill="#0f172a" stroke="#64748b"/>
+<text x="335.0" y="368" text-anchor="middle" font-family="monospace" font-size="12" fill="white">QF003</text>
+<text x="335.0" y="384" text-anchor="middle" font-family="monospace" font-size="12" fill="white">32A</text>
+<circle cx="335.0" cy="340" r="2.5" fill="#cbd5e1"><title>QF003:IN</title></circle>
+<circle cx="335.0" cy="412" r="2.5" fill="#cbd5e1"><title>QF003:OUT</title></circle>
+<rect x="460" y="340" width="110" height="72" fill="#0f172a" stroke="#64748b"/>
+<text x="515.0" y="368" text-anchor="middle" font-family="monospace" font-size="12" fill="white">QF004</text>
+<text x="515.0" y="384" text-anchor="middle" font-family="monospace" font-size="12" fill="white">16A</text>
+<circle cx="515.0" cy="340" r="2.5" fill="#cbd5e1"><title>QF004:IN</title></circle>
+<circle cx="515.0" cy="412" r="2.5" fill="#cbd5e1"><title>QF004:OUT</title></circle>
+<rect x="640" y="340" width="110" height="72" fill="#0f172a" stroke="#64748b"/>
+<text x="695.0" y="368" text-anchor="middle" font-family="monospace" font-size="12" fill="white">QF005</text>
+<text x="695.0" y="384" text-anchor="middle" font-family="monospace" font-size="12" fill="white">40A</text>
+<circle cx="667.5" cy="340" r="2.5" fill="#cbd5e1"><title>QF005:L1_IN</title></circle>
+<circle cx="695.0" cy="340" r="2.5" fill="#cbd5e1"><title>QF005:L2_IN</title></circle>
+<circle cx="722.5" cy="340" r="2.5" fill="#cbd5e1"><title>QF005:L3_IN</title></circle>
+<circle cx="667.5" cy="412" r="2.5" fill="#cbd5e1"><title>QF005:L1_OUT</title></circle>
+<circle cx="695.0" cy="412" r="2.5" fill="#cbd5e1"><title>QF005:L2_OUT</title></circle>
+<circle cx="722.5" cy="412" r="2.5" fill="#cbd5e1"><title>QF005:L3_OUT</title></circle>
+<rect x="820" y="340" width="110" height="72" fill="#0f172a" stroke="#64748b"/>
+<text x="875.0" y="368" text-anchor="middle" font-family="monospace" font-size="12" fill="white">QF006</text>
+<text x="875.0" y="384" text-anchor="middle" font-family="monospace" font-size="12" fill="white">16A</text>
+<circle cx="875.0" cy="340" r="2.5" fill="#cbd5e1"><title>QF006:IN</title></circle>
+<circle cx="875.0" cy="412" r="2.5" fill="#cbd5e1"><title>QF006:OUT</title></circle>
+<rect x="1000" y="340" width="110" height="72" fill="#0f172a" stroke="#64748b"/>
+<text x="1055.0" y="368" text-anchor="middle" font-family="monospace" font-size="12" fill="white">QF007</text>
+<text x="1055.0" y="384" text-anchor="middle" font-family="monospace" font-size="12" fill="white">32A</text>
+<circle cx="1055.0" cy="340" r="2.5" fill="#cbd5e1"><title>QF007:IN</title></circle>
+<circle cx="1055.0" cy="412" r="2.5" fill="#cbd5e1"><title>QF007:OUT</title></circle>
+<rect x="1180" y="340" width="110" height="72" fill="#0f172a" stroke="#64748b"/>
+<text x="1235.0" y="368" text-anchor="middle" font-family="monospace" font-size="12" fill="white">QF008</text>
+<text x="1235.0" y="384" text-anchor="middle" font-family="monospace" font-size="12" fill="white">16A</text>
+<circle cx="1235.0" cy="340" r="2.5" fill="#cbd5e1"><title>QF008:IN</title></circle>
+<circle cx="1235.0" cy="412" r="2.5" fill="#cbd5e1"><title>QF008:OUT</title></circle>
+<rect x="1360" y="340" width="110" height="72" fill="#0f172a" stroke="#64748b"/>
+<text x="1415.0" y="368" text-anchor="middle" font-family="monospace" font-size="12" fill="white">QF009</text>
+<text x="1415.0" y="384" text-anchor="middle" font-family="monospace" font-size="12" fill="white">40A</text>
+<circle cx="1387.5" cy="340" r="2.5" fill="#cbd5e1"><title>QF009:L1_IN</title></circle>
+<circle cx="1415.0" cy="340" r="2.5" fill="#cbd5e1"><title>QF009:L2_IN</title></circle>
+<circle cx="1442.5" cy="340" r="2.5" fill="#cbd5e1"><title>QF009:L3_IN</title></circle>
+<circle cx="1387.5" cy="412" r="2.5" fill="#cbd5e1"><title>QF009:L1_OUT</title></circle>
+<circle cx="1415.0" cy="412" r="2.5" fill="#cbd5e1"><title>QF009:L2_OUT</title></circle>
+<circle cx="1442.5" cy="412" r="2.5" fill="#cbd5e1"><title>QF009:L3_OUT</title></circle>
+<rect x="1540" y="340" width="110" height="72" fill="#0f172a" stroke="#64748b"/>
+<text x="1595.0" y="368" text-anchor="middle" font-family="monospace" font-size="12" fill="white">QF010</text>
+<text x="1595.0" y="384" text-anchor="middle" font-family="monospace" font-size="12" fill="white">16A</text>
+<circle cx="1595.0" cy="340" r="2.5" fill="#cbd5e1"><title>QF010:IN</title></circle>
+<circle cx="1595.0" cy="412" r="2.5" fill="#cbd5e1"><title>QF010:OUT</title></circle>
+<rect x="1720" y="340" width="110" height="72" fill="#0f172a" stroke="#64748b"/>
+<text x="1775.0" y="368" text-anchor="middle" font-family="monospace" font-size="12" fill="white">QF011</text>
+<text x="1775.0" y="384" text-anchor="middle" font-family="monospace" font-size="12" fill="white">32A</text>
+<circle cx="1775.0" cy="340" r="2.5" fill="#cbd5e1"><title>QF011:IN</title></circle>
+<circle cx="1775.0" cy="412" r="2.5" fill="#cbd5e1"><title>QF011:OUT</title></circle>
+<rect x="1900" y="340" width="110" height="72" fill="#0f172a" stroke="#64748b"/>
+<text x="1955.0" y="368" text-anchor="middle" font-family="monospace" font-size="12" fill="white">QF012</text>
+<text x="1955.0" y="384" text-anchor="middle" font-family="monospace" font-size="12" fill="white">16A</text>
+<circle cx="1955.0" cy="340" r="2.5" fill="#cbd5e1"><title>QF012:IN</title></circle>
+<circle cx="1955.0" cy="412" r="2.5" fill="#cbd5e1"><title>QF012:OUT</title></circle>
+<rect x="2080" y="340" width="110" height="72" fill="#0f172a" stroke="#64748b"/>
+<text x="2135.0" y="368" text-anchor="middle" font-family="monospace" font-size="12" fill="white">QF013</text>
+<text x="2135.0" y="384" text-anchor="middle" font-family="monospace" font-size="12" fill="white">40A</text>
+<circle cx="2107.5" cy="340" r="2.5" fill="#cbd5e1"><title>QF013:L1_IN</title></circle>
+<circle cx="2135.0" cy="340" r="2.5" fill="#cbd5e1"><title>QF013:L2_IN</title></circle>
+<circle cx="2162.5" cy="340" r="2.5" fill="#cbd5e1"><title>QF013:L3_IN</title></circle>
+<circle cx="2107.5" cy="412" r="2.5" fill="#cbd5e1"><title>QF013:L1_OUT</title></circle>
+<circle cx="2135.0" cy="412" r="2.5" fill="#cbd5e1"><title>QF013:L2_OUT</title></circle>
+<circle cx="2162.5" cy="412" r="2.5" fill="#cbd5e1"><title>QF013:L3_OUT</title></circle>
+<rect x="100" y="580" width="110" height="72" fill="#0f172a" stroke="#64748b"/>
+<text x="155.0" y="608" text-anchor="middle" font-family="monospace" font-size="12" fill="white">X001</text>
+<text x="155.0" y="624" text-anchor="middle" font-family="monospace" font-size="12" fill="white">41A</text>
+<circle cx="155.0" cy="580" r="2.5" fill="#cbd5e1"><title>X001:LEFT</title></circle>
+<circle cx="155.0" cy="652" r="2.5" fill="#cbd5e1"><title>X001:RIGHT</title></circle>
+<rect x="280" y="580" width="110" height="72" fill="#0f172a" stroke="#64748b"/>
+<text x="335.0" y="608" text-anchor="middle" font-family="monospace" font-size="12" fill="white">X002</text>
+<text x="335.0" y="624" text-anchor="middle" font-family="monospace" font-size="12" fill="white">41A</text>
+<circle cx="335.0" cy="580" r="2.5" fill="#cbd5e1"><title>X002:LEFT</title></circle>
+<circle cx="335.0" cy="652" r="2.5" fill="#cbd5e1"><title>X002:RIGHT</title></circle>
+<rect x="460" y="580" width="110" height="72" fill="#0f172a" stroke="#64748b"/>
+<text x="515.0" y="608" text-anchor="middle" font-family="monospace" font-size="12" fill="white">X003</text>
+<text x="515.0" y="624" text-anchor="middle" font-family="monospace" font-size="12" fill="white">41A</text>
+<circle cx="515.0" cy="580" r="2.5" fill="#cbd5e1"><title>X003:LEFT</title></circle>
+<circle cx="515.0" cy="652" r="2.5" fill="#cbd5e1"><title>X003:RIGHT</title></circle>
+<rect x="640" y="580" width="110" height="72" fill="#0f172a" stroke="#64748b"/>
+<text x="695.0" y="608" text-anchor="middle" font-family="monospace" font-size="12" fill="white">X004</text>
+<text x="695.0" y="624" text-anchor="middle" font-family="monospace" font-size="12" fill="white">41A</text>
+<circle cx="667.5" cy="580" r="2.5" fill="#cbd5e1"><title>X004:L1_LEFT</title></circle>
+<circle cx="695.0" cy="580" r="2.5" fill="#cbd5e1"><title>X004:L2_LEFT</title></circle>
+<circle cx="722.5" cy="580" r="2.5" fill="#cbd5e1"><title>X004:L3_LEFT</title></circle>
+<circle cx="667.5" cy="652" r="2.5" fill="#cbd5e1"><title>X004:L1_RIGHT</title></circle>
+<circle cx="695.0" cy="652" r="2.5" fill="#cbd5e1"><title>X004:L2_RIGHT</title></circle>
+<circle cx="722.5" cy="652" r="2.5" fill="#cbd5e1"><title>X004:L3_RIGHT</title></circle>
+<rect x="820" y="580" width="110" height="72" fill="#0f172a" stroke="#64748b"/>
+<text x="875.0" y="608" text-anchor="middle" font-family="monospace" font-size="12" fill="white">X005</text>
+<text x="875.0" y="624" text-anchor="middle" font-family="monospace" font-size="12" fill="white">41A</text>
+<circle cx="875.0" cy="580" r="2.5" fill="#cbd5e1"><title>X005:LEFT</title></circle>
+<circle cx="875.0" cy="652" r="2.5" fill="#cbd5e1"><title>X005:RIGHT</title></circle>
+<rect x="1000" y="580" width="110" height="72" fill="#0f172a" stroke="#64748b"/>
+<text x="1055.0" y="608" text-anchor="middle" font-family="monospace" font-size="12" fill="white">X006</text>
+<text x="1055.0" y="624" text-anchor="middle" font-family="monospace" font-size="12" fill="white">41A</text>
+<circle cx="1055.0" cy="580" r="2.5" fill="#cbd5e1"><title>X006:LEFT</title></circle>
+<circle cx="1055.0" cy="652" r="2.5" fill="#cbd5e1"><title>X006:RIGHT</title></circle>
+<rect x="1180" y="580" width="110" height="72" fill="#0f172a" stroke="#64748b"/>
+<text x="1235.0" y="608" text-anchor="middle" font-family="monospace" font-size="12" fill="white">X007</text>
+<text x="1235.0" y="624" text-anchor="middle" font-family="monospace" font-size="12" fill="white">41A</text>
+<circle cx="1235.0" cy="580" r="2.5" fill="#cbd5e1"><title>X007:LEFT</title></circle>
+<circle cx="1235.0" cy="652" r="2.5" fill="#cbd5e1"><title>X007:RIGHT</title></circle>
+<rect x="1360" y="580" width="110" height="72" fill="#0f172a" stroke="#64748b"/>
+<text x="1415.0" y="608" text-anchor="middle" font-family="monospace" font-size="12" fill="white">X008</text>
+<text x="1415.0" y="624" text-anchor="middle" font-family="monospace" font-size="12" fill="white">41A</text>
+<circle cx="1387.5" cy="580" r="2.5" fill="#cbd5e1"><title>X008:L1_LEFT</title></circle>
+<circle cx="1415.0" cy="580" r="2.5" fill="#cbd5e1"><title>X008:L2_LEFT</title></circle>
+<circle cx="1442.5" cy="580" r="2.5" fill="#cbd5e1"><title>X008:L3_LEFT</title></circle>
+<circle cx="1387.5" cy="652" r="2.5" fill="#cbd5e1"><title>X008:L1_RIGHT</title></circle>
+<circle cx="1415.0" cy="652" r="2.5" fill="#cbd5e1"><title>X008:L2_RIGHT</title></circle>
+<circle cx="1442.5" cy="652" r="2.5" fill="#cbd5e1"><title>X008:L3_RIGHT</title></circle>
+<rect x="1540" y="580" width="110" height="72" fill="#0f172a" stroke="#64748b"/>
+<text x="1595.0" y="608" text-anchor="middle" font-family="monospace" font-size="12" fill="white">X009</text>
+<text x="1595.0" y="624" text-anchor="middle" font-family="monospace" font-size="12" fill="white">41A</text>
+<circle cx="1595.0" cy="580" r="2.5" fill="#cbd5e1"><title>X009:LEFT</title></circle>
+<circle cx="1595.0" cy="652" r="2.5" fill="#cbd5e1"><title>X009:RIGHT</title></circle>
+<rect x="1720" y="580" width="110" height="72" fill="#0f172a" stroke="#64748b"/>
+<text x="1775.0" y="608" text-anchor="middle" font-family="monospace" font-size="12" fill="white">X010</text>
+<text x="1775.0" y="624" text-anchor="middle" font-family="monospace" font-size="12" fill="white">41A</text>
+<circle cx="1775.0" cy="580" r="2.5" fill="#cbd5e1"><title>X010:LEFT</title></circle>
+<circle cx="1775.0" cy="652" r="2.5" fill="#cbd5e1"><title>X010:RIGHT</title></circle>
+<rect x="1900" y="580" width="110" height="72" fill="#0f172a" stroke="#64748b"/>
+<text x="1955.0" y="608" text-anchor="middle" font-family="monospace" font-size="12" fill="white">X011</text>
+<text x="1955.0" y="624" text-anchor="middle" font-family="monospace" font-size="12" fill="white">41A</text>
+<circle cx="1955.0" cy="580" r="2.5" fill="#cbd5e1"><title>X011:LEFT</title></circle>
+<circle cx="1955.0" cy="652" r="2.5" fill="#cbd5e1"><title>X011:RIGHT</title></circle>
+<rect x="2080" y="580" width="110" height="72" fill="#0f172a" stroke="#64748b"/>
+<text x="2135.0" y="608" text-anchor="middle" font-family="monospace" font-size="12" fill="white">X012</text>
+<text x="2135.0" y="624" text-anchor="middle" font-family="monospace" font-size="12" fill="white">41A</text>
+<circle cx="2107.5" cy="580" r="2.5" fill="#cbd5e1"><title>X012:L1_LEFT</title></circle>
+<circle cx="2135.0" cy="580" r="2.5" fill="#cbd5e1"><title>X012:L2_LEFT</title></circle>
+<circle cx="2162.5" cy="580" r="2.5" fill="#cbd5e1"><title>X012:L3_LEFT</title></circle>
+<circle cx="2107.5" cy="652" r="2.5" fill="#cbd5e1"><title>X012:L1_RIGHT</title></circle>
+<circle cx="2135.0" cy="652" r="2.5" fill="#cbd5e1"><title>X012:L2_RIGHT</title></circle>
+<circle cx="2162.5" cy="652" r="2.5" fill="#cbd5e1"><title>X012:L3_RIGHT</title></circle>
+<rect x="40" y="820" width="110" height="72" fill="#0f172a" stroke="#64748b"/>
+<text x="95.0" y="848" text-anchor="middle" font-family="monospace" font-size="12" fill="white">DB-PROJ_DB_DEMO_001</text>
+<circle cx="95" cy="820" r="2.5" fill="#cbd5e1"><title>PANEL_ROOT:EARTH_STUD</title></circle>
+</svg>
