@@ -52,6 +52,14 @@ def archetypes(session=Depends(get_session),service=Depends(get_service)):
 def archetype(archetype_id:str,version_id:str|None=None,session=Depends(get_session),service=Depends(get_service)):
     return CatalogRepository(session,service.assets).template(archetype_id,version_id)
 
+@router.post('/archetypes/{archetype_id}/suggestions')
+def archetype_suggestions(archetype_id:str,values:dict,session=Depends(get_session),service=Depends(get_service)):
+    from app.services.questionnaire_choices import suggest_requirements
+    catalog=CatalogRepository(session,service.assets)
+    template=catalog.template(archetype_id)
+    if template['archetype']!='DB':raise PersistenceError('UNSUPPORTED_ARCHETYPE','Only DB suggestions are supported.')
+    return suggest_requirements(template,catalog.engine_catalog(),values)
+
 @router.get('/archetypes/{archetype_id}/electrical-templates')
 def electrical_templates(archetype_id:str,version_id:str|None=None,session=Depends(get_session),service=Depends(get_service)):
     catalog=CatalogRepository(session,service.assets)

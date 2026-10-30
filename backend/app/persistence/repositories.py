@@ -179,7 +179,7 @@ class CatalogRepository:
             .order_by(m.panel_archetypes.c.code,m.panel_archetype_versions.c.version_no.desc())).mappings()
         return [{**serial(dict(r)),'supported':r['code']=='DB'} for r in rows]
 
-    def template(self, code='DB', version_id=None):
+    def template(self, code='DB', version_id=None, resolve_capabilities=True):
         match=next((a for a in self.archetypes() if (a['code']==code or a['id']==code) and
                     (version_id is None or a['version_id']==str(version_id))),None)
         if match is None:
@@ -206,8 +206,12 @@ class CatalogRepository:
             m.functional_module_versions.c.id==m.archetype_modules.c.module_version_id).join(m.functional_modules,
             m.functional_modules.c.id==m.functional_module_versions.c.module_id).where(m.archetype_modules.c.archetype_version_id==av)).mappings():
             mods.append({'name':row['code'],'required':row['required'],'category':row['configuration'].get('category','OTHER')})
-        return {**match,'archetype':match['code'],'archetype_version_id':str(av),'questionnaire_version_id':str(qv) if qv else None,
+        template={**match,'archetype':match['code'],'archetype_version_id':str(av),'questionnaire_version_id':str(qv) if qv else None,
                 'questions':serial(questions),'modules':mods}
+        if resolve_capabilities and match.get('supported'):
+            from app.services.questionnaire_choices import resolve_choices
+            template=resolve_choices(template,self.engine_catalog())
+        return template
 
     def electrical_templates(self, archetype_version_id):
         rows=self.s.execute(select(m.electrical_template_versions).join(m.archetype_electrical_templates,

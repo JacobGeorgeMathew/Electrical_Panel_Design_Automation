@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { DesignViewport, type DesignViewportHandle } from '../common/DesignViewport';
 import { AssetObject } from './AssetObject';
 import { PanelAssembly, PrimitiveMesh, WireMesh } from './PanelAssembly';
 import { assetUrl } from '../../api/client';
@@ -104,6 +105,8 @@ const snapValue = (value: number, enabled: boolean, step: number) =>
   enabled ? Math.round(value / step) * step : value;
 
 export const Panel3DViewer: React.FC = () => {
+  const viewportRef=useRef<DesignViewportHandle>(null);
+  const [drawer,setDrawer]=useState<'tree'|'properties'|null>(null);
   const {
     pdm, selectedObjectId, selectObject, hoveredObjectId, hoverObject, explodedView,
     toggleExplodedView, wireVisibility, toggleWireVisibility,
@@ -164,6 +167,7 @@ export const Panel3DViewer: React.FC = () => {
             className={`editor-tool ${editorMode === 'translate' ? 'editor-tool-active' : ''}`}><Move3D className="h-3.5 w-3.5" />Move</button>
           <button onClick={() => setEditorMode('rotate')} aria-pressed={editorMode === 'rotate'} title="Rotate selected component"
             className={`editor-tool ${editorMode === 'rotate' ? 'editor-tool-active' : ''}`}><Rotate3D className="h-3.5 w-3.5" />Rotate</button>
+          <button type="button" aria-label="Open 3D panel fullscreen" onClick={()=>void viewportRef.current?.enterFullscreen()} className="editor-tool">Fullscreen</button>
           <button onClick={toggleEditorSnap} aria-pressed={editorSnapEnabled} className={`editor-tool ${editorSnapEnabled ? 'editor-tool-active' : ''}`}>Snap {editorSnapEnabled ? 'On' : 'Off'}</button>
           <label className="flex items-center gap-1.5 rounded-lg border border-slate-700 px-2 py-1.5 text-slate-300">
             Grid <input aria-label="Snap grid in millimeters" type="number" min="1" max="100" value={editorGridMm}
@@ -198,8 +202,9 @@ export const Panel3DViewer: React.FC = () => {
         </div>
       )}
 
-      <div className="grid flex-1 min-h-[580px] xl:min-h-0 grid-cols-1 grid-rows-[minmax(110px,0.25fr)_minmax(220px,1fr)_minmax(150px,0.4fr)] gap-3 overflow-hidden xl:grid-cols-[220px_minmax(0,1fr)_280px] xl:grid-rows-1">
-        <aside className="min-h-0 overflow-y-auto rounded-xl border border-slate-800 bg-slate-900/80 p-3" aria-label="Component tree">
+      <div className="flex gap-2 xl:hidden"><button className="editor-tool" onClick={()=>setDrawer(v=>v==='tree'?null:'tree')}>Components</button><button className="editor-tool" onClick={()=>setDrawer(v=>v==='properties'?null:'properties')}>Properties</button></div>
+      <div className="relative grid flex-1 min-h-0 grid-cols-1 grid-rows-1 gap-3 overflow-hidden xl:grid-cols-[220px_minmax(0,1fr)_280px] xl:grid-rows-1">
+        <aside className={`${drawer==='tree'?'block':'hidden xl:block'} absolute left-0 top-0 z-40 h-full w-64 xl:static xl:w-auto min-h-0 overflow-y-auto rounded-xl border border-slate-800 bg-slate-900 p-3`} aria-label="Component tree">
           <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-300">Component tree ({pdm.components.length})</h4>
           <ul className="space-y-1">
             {pdm.components.map((component) => {
@@ -223,6 +228,7 @@ export const Panel3DViewer: React.FC = () => {
         </aside>
 
         <div className="relative min-h-0 min-w-0 overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60">
+          <DesignViewport controlRef={viewportRef} name="3D panel">
           <Canvas camera={{ fov: 45, near: 0.01, far: Math.max(encW, encH, encD) * 20 }} className="h-full w-full">
             <ResponsiveCamera width={encW} height={encH} depth={doorOpen&&pdm.accessories?.length?encD+encW*.7:encD} />
             <ambientLight intensity={0.7} />
@@ -266,12 +272,13 @@ export const Panel3DViewer: React.FC = () => {
               dimmed={!!selectedDuct&&!route.duct_ids?.includes(selectedDuct.id)}/>)}
             </>}
           </Canvas>
+          </DesignViewport>
           {warnings.length > 0 && <div className="absolute bottom-3 left-3 rounded-lg border border-amber-700 bg-slate-950/90 px-3 py-2 text-xs text-amber-200">
             {warnings.length} placement warning{warnings.length === 1 ? '' : 's'}
           </div>}
         </div>
 
-        <aside className="min-h-0 overflow-y-auto rounded-xl border border-slate-800 bg-slate-900/80 p-3" aria-label="Properties inspector">
+        <aside className={`${drawer==='properties'?'block':'hidden xl:block'} absolute right-0 top-0 z-40 h-full w-64 xl:static xl:w-auto min-h-0 overflow-y-auto rounded-xl border border-slate-800 bg-slate-900 p-3`} aria-label="Properties inspector">
           <h4 className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-300">Properties inspector</h4>
           {selectedDuct?<div className="space-y-2 text-xs text-slate-300"><p className="font-semibold">{selectedDuct.label}</p><p>{selectedDuct.catalog_id}</p><p>{selectedDuct.width} × {selectedDuct.height} × {selectedDuct.depth} mm</p><p>Estimated fill: {selectedDuct.capacity_pct}% / {selectedDuct.max_fill_pct}% limit</p><p>{selectedDuct.route_ids.length} routed conductors</p><p className="text-slate-500">Trunks follow this trough; terminal leads leave it locally.</p></div>:selectedAccessory?<div className="space-y-2 text-xs text-slate-300"><p className="font-semibold">{selectedAccessory.name}</p><p>{selectedAccessory.catalog_id}</p><p>{selectedAccessory.material}</p><p>{selectedAccessory.width} × {selectedAccessory.height} × {selectedAccessory.depth} mm</p></div>:!selectedComponent || !selectedTransform ? <p className="text-xs text-slate-500">Select a component in the tree or viewport.</p> : <>
             <div className="mb-3 border-b border-slate-800 pb-3">

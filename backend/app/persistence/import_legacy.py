@@ -146,7 +146,7 @@ def import_legacy(database):
             if not s.scalar(select(m.rule_set_members.c.rule_version_id).where(m.rule_set_members.c.rule_set_version_id==rsv,m.rule_set_members.c.rule_version_id==rv)):
                 s.execute(insert(m.rule_set_members).values(rule_set_version_id=rsv,rule_version_id=rv))
         catalog=CatalogRepository(s,assets)
-        template=catalog.template('DB')
+        template=catalog.template('DB',resolve_capabilities=False)
         engine=RequirementEngine(templates={'DB':template})
         repo=ProjectRepository(s)
         for project in json.loads((root/'sample_projects.json').read_text()):

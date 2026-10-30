@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useProjectStore } from '../../stores/projectStore';
-import { fetchQuestionnaire, fetchArchetype } from '../../api/client';
-import type { Question } from '../../types/api';
+import { fetchQuestionnaire, fetchArchetype, fetchRequirementSuggestions } from '../../api/client';
+import type { Question, RequirementSuggestions } from '../../types/api';
 import { EnclosureConfigurator } from '../projects/EnclosureConfigurator';
 import { Sliders, CheckCircle2, AlertTriangle, Zap, ArrowUpRight, Cpu } from 'lucide-react';
 
@@ -32,6 +32,8 @@ export const Questionnaire: React.FC = () => {
     createNewProject, archetypes, isSaving, isLoadingProject
   } = useProjectStore();
 
+  const [suggestions,setSuggestions]=useState<RequirementSuggestions|null>(null);
+  const [suggestionError,setSuggestionError]=useState(false);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loadingQuestions, setLoadingQuestions] = useState(true);
   const [questionAttempt, setQuestionAttempt] = useState(0);
@@ -51,6 +53,16 @@ export const Questionnaire: React.FC = () => {
 
   const effectiveValues = { ...Object.fromEntries(questions.map(q => [q.id, q.default])), ...requirementValues };
   const visibleQuestions = questions.filter(q => q.depends_on.every(dep => dependencyMatches(dep, effectiveValues[dep.field])));
+
+  const suggestionValues=JSON.stringify({num_feeders:effectiveValues.num_feeders,phases:effectiveValues.phases,spare_capacity_pct:effectiveValues.spare_capacity_pct});
+  useEffect(()=>{
+    if(!questions.length)return;
+    const abort=new AbortController();setSuggestions(null);setSuggestionError(false);
+    const timer=setTimeout(()=>fetchRequirementSuggestions(projectId,selectedArchetype,JSON.parse(suggestionValues),abort.signal)
+      .then(result=>{if(!abort.signal.aborted&&result?.suggestions)setSuggestions(result);})
+      .catch(()=>{if(!abort.signal.aborted)setSuggestionError(true);}),200);
+    return()=>{clearTimeout(timer);abort.abort();};
+  },[projectId,selectedArchetype,suggestionValues,questions]);
 
   const handleValueChange = (id: string, val: any) => {
     setRequirementValue(id, val);
@@ -111,13 +123,24 @@ export const Questionnaire: React.FC = () => {
       )}
 
       <EnclosureConfigurator />
+      {suggestions&&<section aria-label="Feeder-based planning estimates" className="rounded-xl border border-blue-900 bg-blue-950/20 p-4 text-xs text-slate-300">
+        <h3 className="mb-2 font-semibold">Suggestions for {effectiveValues.num_feeders} feeders</h3>
+        {suggestions.estimates.estimated_max_phase_demand_a!==undefined&&<p>Estimated maximum phase demand: {suggestions.estimates.estimated_max_phase_demand_a} A · Spare feeder spaces for planning: {suggestions.estimates.spare_feeder_spaces}</p>}
+        <p className="mt-1 text-slate-400">{suggestions.message}</p>
+        {suggestions.estimates.estimated_max_phase_demand_a!==undefined&&effectiveValues.incomer_rating<suggestions.estimates.estimated_max_phase_demand_a&&<p className="mt-2 text-amber-300">Your selected incomer is below this planning estimate. Review the actual connected loads before proceeding.</p>}
+        <details className="mt-2 text-slate-400"><summary>Calculation assumptions</summary>{suggestions.assumptions?.map(a=><p key={a}>{a}</p>)}</details>
+      </section>}
+      {suggestionError&&<p role="status" className="text-xs text-amber-300">Suggestions are unavailable. You can still choose supported values.</p>}
       {loadingQuestions && <p role="status" className="text-sm text-slate-400">Loading questionnaire…</p>}
       {!loadingQuestions && !questions.length && <p className="text-sm text-slate-400">Questionnaire unavailable. <button className="underline" onClick={()=>setQuestionAttempt(v=>v+1)}>Retry</button></p>}
       {/* Grid of Dynamic Questions */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {visibleQuestions.map((q) => {
           const val = effectiveValues[q.id];
-          const isConfirmed = requirementValues[q.id] !== undefined;
+          const choices=Array.isArray(q.options)?q.options:null;
+          const invalidChoice=choices!==null&&!choices.some(option=>option===val);
+          const isConfirmed = requirementValues[q.id] !== undefined&&!invalidChoice;
+          const suggestion=suggestions?.suggestions[q.id];
 
           return (
             <div
@@ -127,7 +150,7 @@ export const Questionnaire: React.FC = () => {
               <div className="flex items-center justify-between">
                 <label className="text-sm font-semibold text-slate-200">{q.label}</label>
                 <div className="flex items-center space-x-1">
-                  {isConfirmed ? (
+                  {invalidChoice ? <span className="text-xs text-red-300">Choose a supported value</span> : isConfirmed ? (
                     <span className="flex items-center space-x-1 px-2 py-0.5 text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full">
                       <CheckCircle2 className="w-3 h-3" />
                       <span>Confirmed</span>
@@ -142,7 +165,7 @@ export const Questionnaire: React.FC = () => {
               </div>
 
               {/* Input Render logic */}
-              {q.type === 'number' && (
+              {q.type === 'number' && choices===null && (
                 <div className="flex items-center space-x-3">
                   <input
                     type="number"
@@ -158,15 +181,16 @@ export const Questionnaire: React.FC = () => {
                 </div>
               )}
 
-              {q.type === 'select' && (
+              {(q.type === 'select'||q.type==='number'&&choices!==null) && (
                 <select
-                  value={String(val ?? '')} disabled={busy} aria-label={q.label}
+                  value={invalidChoice?'':String(val ?? '')} disabled={busy||choices?.length===0} aria-label={q.label} aria-invalid={invalidChoice}
                   onChange={(e) => handleValueChange(q.id, q.options?.find(o=>String(o)===e.target.value) ?? e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2 text-sm text-slate-100 focus:outline-none focus:border-blue-500 font-mono"
                 >
+                  {invalidChoice&&<option value="" disabled>{choices?.length?'Choose a supported value':'No supported choices'}{val!==undefined&&val!==null?` (saved: ${val})`:''}</option>}
                   {q.options?.map((opt: any) => (
                     <option key={opt} value={opt}>
-                      {opt}
+                      {opt}{q.unit?` ${q.unit}`:''}
                     </option>
                   ))}
                 </select>
@@ -202,8 +226,14 @@ export const Questionnaire: React.FC = () => {
                 onChange={e=>handleValueChange(q.id,Array.from(e.target.selectedOptions,o=>q.options?.find(v=>String(v)===o.value)??o.value))}
                 className="w-full rounded border border-slate-700 bg-slate-950 p-2 text-sm">{q.options?.map(o=><option key={String(o)} value={String(o)}>{String(o)}</option>)}</select>}
               {q.type === 'object' && <ObjectAnswer value={val} disabled={busy} onChange={v=>handleValueChange(q.id,v)} onError={setError}/>}
+              {q.help_text&&<p className="text-xs text-slate-400">{q.help_text}</p>}
+              {suggestion&&<div className="rounded-lg border border-blue-900 bg-blue-950/30 p-3 text-xs text-blue-200">
+                <p>Suggested: {suggestion.value} {q.unit} — {suggestion.reason}</p>
+                <button type="button" disabled={busy||val===suggestion.value} onClick={()=>handleValueChange(q.id,suggestion.value)} className="mt-2 rounded bg-blue-700 px-3 py-1.5 disabled:opacity-50" aria-label={`Use suggested ${q.label}`}>{val===suggestion.value?'Suggestion selected':'Use suggestion'}</button>
+                <p className="mt-1 text-slate-400">You can choose any supported option above.</p>
+              </div>}
               <div className="flex justify-end pt-1">
-                <button onClick={() => handleApplyChange(q.id, val)} disabled={busy || !cem}
+                <button onClick={() => handleApplyChange(q.id, val)} disabled={busy || !cem || invalidChoice}
                   className="px-3 py-1.5 bg-blue-600/80 hover:bg-blue-500 disabled:opacity-40 text-white text-[11px] font-semibold rounded-lg">
                   Review & Apply Change
                 </button>

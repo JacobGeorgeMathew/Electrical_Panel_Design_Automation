@@ -15,6 +15,7 @@ from app.models.pdm import WireRoute, Waypoint3D
 
 
 class DuctRouter(JPSThetaStarRouter):
+    MAX_CONDUCTORS = 56
     def route_layout(self, layout, nets, enclosure_w, enclosure_h, enclosure_d=0, ducts=None):
         if not ducts:
             raise ValueError('Physical wiring ducts are required for duct routing.')
@@ -68,7 +69,7 @@ class DuctRouter(JPSThetaStarRouter):
                 # occupy bounded lateral/depth slots. Fill is checked separately.
                 level=duct_z+(len(routes)%8)*6
                 lateral=((len(routes)//8)%7-3)*3.2
-                if len(routes)>=56:
+                if len(routes)>=self.MAX_CONDUCTORS:
                     raise RoutePlanningError(conn.id,net.id,'Configured discrete bundle lanes exhausted; enlarge routing space.')
                 src=self._remove_duplicate_points(src[:-1]+[(src[-1][0],src[-1][1],level),(src[-1][0]+lateral,src[-1][1],level),(src[-1][0]+lateral,src[-1][1]+lateral,level)])
                 dst=self._remove_duplicate_points(dst[:-1]+[(dst[-1][0],dst[-1][1],level),(dst[-1][0]+lateral,dst[-1][1],level),(dst[-1][0]+lateral,dst[-1][1]+lateral,level)])

@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  addEdge, Background, BaseEdge, Controls, EdgeLabelRenderer, getSmoothStepPath,
-  Handle, MiniMap, Position, ReactFlow, ReactFlowProvider, useEdgesState, useNodesState,
+  addEdge, Background, BaseEdge, EdgeLabelRenderer, getSmoothStepPath,
+  Handle, MiniMap, Position, ReactFlow, ReactFlowProvider, useEdgesState, useNodesState, useReactFlow,
   type Connection, type EdgeProps, type NodeProps, type NodeTypes, type EdgeTypes,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { DesignViewport, type DesignViewportHandle } from '../common/DesignViewport';
 import { GitBranch, Plus, TriangleAlert, X } from 'lucide-react';
 import { useProjectStore } from '../../stores/projectStore';
 import { buildSchematicGraph, validateSchematicGraph, type SchematicEdge, type SchematicGraphData,
@@ -61,6 +62,11 @@ const colors: Record<WireClass, string> = { POWER: '#EF4444', CONTROL: '#A78BFA'
 
 const SchematicCanvas: React.FC<{ data: SchematicGraphData }> = ({ data }) => {
   const { selectObject, selectedObjectId } = useProjectStore();
+  const viewportRef=useRef<DesignViewportHandle>(null);
+  const flow=useReactFlow<SchematicNode,SchematicEdge>();
+  const [zoomPercent,setZoomPercent]=useState(100);
+  const [showProperties,setShowProperties]=useState(false);
+  const fit=()=>void flow.fitView({padding:0.15,minZoom:0.02,maxZoom:1,duration:150});
   const initial = useMemo(() => buildSchematicGraph(data), [data]);
   const [nodes, setNodes, onNodesChange] = useNodesState<SchematicNode>(initial.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState<SchematicEdge>(initial.edges);
@@ -113,7 +119,8 @@ const SchematicCanvas: React.FC<{ data: SchematicGraphData }> = ({ data }) => {
       <div className="flex items-center gap-3"><div className="rounded-xl bg-blue-500/10 p-2 text-blue-400"><GitBranch className="h-5 w-5" /></div>
         <div><h3 className="text-sm font-bold text-slate-200">Interactive Electrical Schematic</h3>
           <p className="text-xs text-slate-400">React Flow · CEM IDs · terminal-level nets · schematic edits are drafts</p></div></div>
-      <div className="flex flex-wrap items-center gap-2 text-xs">
+      <div className="flex flex-wrap items-center gap-2 text-xs"><button type="button" aria-label="Open schematic fullscreen" onClick={()=>void viewportRef.current?.enterFullscreen()} className="editor-tool">Fullscreen</button>
+        <button type="button" onClick={()=>setShowProperties(v=>!v)} aria-pressed={showProperties} className="editor-tool lg:hidden">Properties</button>
         <select aria-label="Filter wire class" value={wireFilter} onChange={(event) => setWireFilter(event.target.value as 'ALL' | WireClass)}
           className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-slate-200">
           <option value="ALL">All wires</option>{wireClasses.map((wireClass) => <option key={wireClass} value={wireClass}>{wireClass}</option>)}
@@ -122,8 +129,9 @@ const SchematicCanvas: React.FC<{ data: SchematicGraphData }> = ({ data }) => {
       </div>
     </div>
 
-    <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(0,1fr)_260px]">
-      <div className="relative min-h-[420px] overflow-hidden rounded-2xl border border-slate-800 bg-slate-950">
+    <div className="relative grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_260px]">
+      <div className="relative min-h-0 overflow-hidden rounded-2xl border border-slate-800 bg-slate-950">
+        <DesignViewport controlRef={viewportRef} name="schematic" onExpandedChange={()=>requestAnimationFrame(fit)}>
         <div className="absolute left-3 top-3 z-10 rounded-lg border border-amber-500/30 bg-slate-950/90 px-2.5 py-1.5 text-[10px] text-amber-200">Draft graph · CEM connections and exports are unchanged</div>
         <ReactFlow nodes={nodes.map(n=>({...n,selected:n.selected||n.id===selectedObjectId}))} edges={visibleEdges} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
           onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect}
@@ -134,14 +142,22 @@ const SchematicCanvas: React.FC<{ data: SchematicGraphData }> = ({ data }) => {
             if (chosenNodes[0]) selectObject(chosenNodes[0].id);
             setSelectedEdgeId(chosenEdges[0]?.id || null);
           }}
-          fitView fitViewOptions={{ padding: 0.15 }} minZoom={0.2} maxZoom={2.5} nodesConnectable nodesDraggable
-          selectionOnDrag panOnDrag deleteKeyCode={['Backspace', 'Delete']}>
+          onMove={(_,viewport)=>setZoomPercent(Math.round(viewport.zoom*100))}
+          fitView fitViewOptions={{ padding: 0.15, minZoom:0.02, maxZoom:1 }} minZoom={0.02} maxZoom={8} zoomOnScroll zoomOnPinch zoomOnDoubleClick preventScrolling nodesConnectable nodesDraggable
+          selectionOnDrag={false} panOnDrag deleteKeyCode={['Backspace', 'Delete']}>
           <Background color="#334155" gap={24} size={1} /><MiniMap nodeColor={(node) => node.type === 'junction' ? '#FBBF24' : '#334155'} />
-          <Controls showInteractive={false} />
+
         </ReactFlow>
+        <div role="toolbar" aria-label="Schematic zoom controls" className="absolute bottom-3 left-3 z-20 flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-950/95 p-1 text-xs">
+        <button type="button" aria-label="Zoom in schematic" onClick={()=>void flow.zoomIn({duration:150})} className="editor-tool">+</button>
+        <output aria-label="Schematic zoom" className="w-12 text-center font-mono">{zoomPercent}%</output>
+        <button type="button" aria-label="Zoom out schematic" onClick={()=>void flow.zoomOut({duration:150})} className="editor-tool">−</button>
+        <button type="button" aria-label="Fit schematic" onClick={fit} className="editor-tool">Fit</button>
+        </div>
+        </DesignViewport>
       </div>
 
-      <aside className="flex min-h-[220px] flex-col gap-3 rounded-2xl border border-slate-800 bg-slate-900 p-4">
+      <aside className={`${showProperties?'flex':'hidden lg:flex'} absolute right-0 top-0 z-40 h-full w-64 overflow-auto lg:static lg:w-auto min-h-0 flex-col gap-3 rounded-2xl border border-slate-800 bg-slate-900 p-4`}>
         <div className="flex items-center justify-between"><h4 className="text-sm font-semibold text-slate-100">Electrical properties</h4>
           {selectedEdge && <button aria-label="Delete selected wire" onClick={() => { setEdges((current) => current.filter((edge) => edge.id !== selectedEdgeId)); setSelectedEdgeId(null); }} className="text-slate-400 hover:text-red-300"><X className="h-4 w-4" /></button>}</div>
         {selectedEdge ? <>
@@ -174,5 +190,5 @@ const SchematicCanvas: React.FC<{ data: SchematicGraphData }> = ({ data }) => {
 export const SchematicViewer: React.FC = () => {
   const schematicData = useProjectStore((state) => state.schematicData) as SchematicGraphData | null;
   if (!schematicData) return <div className="p-12 text-center text-slate-500 font-mono text-sm">No schematic data loaded. Click "Generate Design" to build the schematic diagram.</div>;
-  return <div className="flex h-full min-h-0 flex-col overflow-y-auto bg-slate-950 p-4 md:p-6"><ReactFlowProvider><SchematicCanvas data={schematicData} /></ReactFlowProvider></div>;
+  return <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-950 p-4 md:p-6"><ReactFlowProvider><SchematicCanvas data={schematicData} /></ReactFlowProvider></div>;
 };

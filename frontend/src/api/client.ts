@@ -36,6 +36,9 @@ export async function request<T>(path: string, options: RequestInit = {}, timeou
 
 const json = (method: string, body: unknown): RequestInit => ({ method, body: JSON.stringify(body) });
 const id = encodeURIComponent;
+export const fetchRequirementSuggestions=(projectId:string,archetype:string,values:Record<string,unknown>,signal?:AbortSignal)=>
+  request<import('../types/api').RequirementSuggestions>(projectId?'/projects/'+id(projectId)+'/requirements/suggestions':'/archetypes/'+id(archetype)+'/suggestions',
+    {...json('POST',values),signal});
 export const assetUrl = (path: string) => new URL(path, API_BASE).toString();
 export const listProjects = (signal?: AbortSignal) => request<ProjectRecord[]>('/projects?page_size=100', { signal });
 export const fetchArchetypes = () => request<Archetype[]>('/archetypes');

@@ -16,6 +16,12 @@ export interface RevisionSummary { id: string; revision_no: number; parent_revis
 export interface Question {
   id: string; question_id: string; label: string; type: string; unit?: string; default: any; options: any[] | null;
   required: boolean; depends_on: { field: string; operator: string; value: any }[]; validation: { min?: number; max?: number };
+  help_text?: string;
+}
+export interface RequirementSuggestions {
+  suggestions: Record<string,{value:number;reason:string}>;
+  estimates: {phase_connected_current_a?:number[];estimated_max_phase_demand_a?:number;spare_feeder_spaces?:number;planning_total_feeder_spaces?:number};
+  assumptions?:string[];message?:string;
 }
 export interface Archetype { id: string; code: string; name: string; version_id: string; version_no: number; supported: boolean; }
 export interface CadParameter { code: string; value_type: string; unit_code: string | null; default_value: any; min_value: number | null; max_value: number | null; editable: boolean; derived: boolean; }

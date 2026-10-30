@@ -14,6 +14,12 @@ def template_for(project_id,session,service):
 def get_questionnaire(project_id:str,session=Depends(get_session),service=Depends(get_service)):
     return template_for(project_id,session,service)['questions']
 
+@router.post('/suggestions')
+def suggestions(project_id:str,values:dict[str,Any],session=Depends(get_session),service=Depends(get_service)):
+    from app.services.questionnaire_choices import suggest_requirements
+    template=template_for(project_id,session,service)
+    return suggest_requirements(template,CatalogRepository(session,service.assets).engine_catalog(),values)
+
 @router.post('/validate')
 def validate_requirements(project_id:str,values:dict[str,Any],session=Depends(get_session),service=Depends(get_service)):
     template=template_for(project_id,session,service)

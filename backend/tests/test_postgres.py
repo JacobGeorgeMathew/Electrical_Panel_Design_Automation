@@ -138,14 +138,16 @@ def test_background_cad_status_and_missing_assets(api,postgres_database):
 def test_missing_project_does_not_create_it(api):
     assert api.get('/api/projects/nonexistent').status_code==404
 
-def test_conditional_answers_survive_hidden_requirements(api):
+def test_unsupported_phase_cannot_be_saved_and_valid_boolean_answers_survive(api):
     p=create(api)
-    saved=checked(api.put('/api/projects/'+p['id']+'/answers',json={'expected_version':p['lock_version'],'answers':{**VALUES,'phases':1,'neutral_required':False}}))
+    rejected=api.put('/api/projects/'+p['id']+'/answers',json={'expected_version':p['lock_version'],'answers':{**VALUES,'phases':1,'neutral_required':False}})
+    assert rejected.status_code==422
+    assert checked(api.get('/api/projects/'+p['id']))['lock_version']==p['lock_version']
+    saved=checked(api.put('/api/projects/'+p['id']+'/answers',json={'expected_version':p['lock_version'],'answers':{**VALUES,'neutral_required':False}}))
     assert checked(api.get('/api/projects/'+p['id']+'/answers'))['answers']['neutral_required'] is False
-    requirements=checked(api.get('/api/projects/'+p['id']+'/requirements'))['requirements']
-    assert next(r for r in requirements if r['code']=='neutral_required')['value']['value'] is None
-    updated=checked(api.patch('/api/projects/'+p['id'],json={'expected_version':saved['lock_version'],'requirements':{'phases':3}}))
+    updated=checked(api.patch('/api/projects/'+p['id'],json={'expected_version':saved['lock_version'],'requirements':{'num_feeders':16}}))
     assert updated['requirements']['neutral_required'] is False
+
 
 def test_legacy_import_is_idempotent(postgres_database):
     from app.persistence.import_legacy import import_legacy
