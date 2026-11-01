@@ -1,5 +1,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { DesignViewport, type DesignViewportHandle } from '../common/DesignViewport';
+import {ViewportCameraControls} from '../workspace/ViewportCameraControls';
+import {useViewportNavigation} from '../workspace/useViewportNavigation';
 import { AlignCenterHorizontal, AlignStartHorizontal, Eye, EyeOff, Layers, RotateCw, ShieldAlert } from 'lucide-react';
 import { useProjectStore, type EditorTransform } from '../../stores/projectStore';
 import { analyzeEditorGeometry, componentTransform } from '../threeD/editorGeometry';
@@ -19,12 +21,12 @@ export function screenToPanelPoint(svg: SVGSVGElement, clientX: number, clientY:
   return { x: local.x, y: local.y };
 }
 
-export const Layout2DViewer: React.FC = () => {
+export const Layout2DViewer: React.FC<{embedded?:boolean}> = ({embedded=false}) => {
   const {
     pdm, wireVisibility, selectedObjectId, selectObject, hoveredObjectId, hoverObject,
     editorTransforms, editorSnapEnabled, editorGridMm, toggleEditorSnap, setEditorGridMm,
     updateEditorTransform, commitEditorTransform, validateCurrentPlacement, isValidatingPlacement,
-    resetEditorDraft, errorMessage,
+    resetEditorDraft, errorMessage, editorMode,
   } = useProjectStore();
   const viewportRef=useRef<DesignViewportHandle>(null);
   const [showProperties,setShowProperties]=useState(false);
@@ -33,6 +35,7 @@ export const Layout2DViewer: React.FC = () => {
   const [showClearances, setShowClearances] = useState(true);
   const [drag, setDrag] = useState<DragState | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
+  const navigation=useViewportNavigation();
 
   const warnings = useMemo(() => pdm ? analyzeEditorGeometry(pdm.components, editorTransforms,
     { width: pdm.enclosure_width, height: pdm.enclosure_height, depth: pdm.enclosure_depth },pdm.validation_policy) : [], [pdm, editorTransforms]);
@@ -54,6 +57,7 @@ export const Layout2DViewer: React.FC = () => {
   };
 
   const commitLayoutEdit = () => {
+    if(!drag)return;
     setDrag(null);
     commitEditorTransform();
     void validateCurrentPlacement();
@@ -64,6 +68,7 @@ export const Layout2DViewer: React.FC = () => {
     event.preventDefault();
     event.stopPropagation();
     selectObject(id);
+    if(embedded&&editorMode==='select')return;
     const point = screenToPanelPoint(svgRef.current, event.clientX, event.clientY);
     const component = components.find((item) => item.cem_component_id === id);
     if (!component) return;
@@ -87,8 +92,8 @@ export const Layout2DViewer: React.FC = () => {
     void validateCurrentPlacement();
   };
 
-  return <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 bg-slate-950 p-4 md:p-6">
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-900 p-4">
+  return <div className={embedded?"workspace-viewer":"flex min-h-0 min-w-0 flex-1 flex-col gap-3 bg-slate-950 p-4 md:p-6"}>
+    <div data-viewer-chrome className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-900 p-4">
       <div className="flex items-center gap-3"><div className="rounded-xl bg-blue-500/10 p-2 text-blue-400"><Layers className="h-5 w-5" /></div>
         <div><h3 className="text-sm font-bold text-slate-200">Editable 2D Physical Panel Layout</h3>
           <p className="text-xs text-slate-400">Selected enclosure ({width} × {height} mm) · PDM coordinates in millimetres</p></div></div>
@@ -99,9 +104,9 @@ export const Layout2DViewer: React.FC = () => {
       </div>
     </div>
 
-    <div className="relative grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_270px]">
-      <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/60">
-        <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 bg-slate-900 p-2.5">
+    <div className="viewer-grid relative grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_270px]">
+      <div className="viewer-canvas flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/60">
+        <div className="viewer-context-tools flex flex-wrap items-center gap-2 border-b border-slate-800 bg-slate-900 p-2.5">
           <button aria-pressed={editorSnapEnabled} onClick={toggleEditorSnap} className={`rounded-lg border px-2.5 py-1.5 text-xs ${editorSnapEnabled ? 'border-blue-500 bg-blue-600 text-white' : 'border-slate-700 text-slate-300'}`}>Snap {editorSnapEnabled ? 'On' : 'Off'}</button>
           <label className="flex items-center gap-1.5 text-xs text-slate-400">Grid<input aria-label="Snap grid mm" type="number" min="1" step="1" value={editorGridMm} onChange={(event) => setEditorGridMm(Number(event.target.value))} className="w-14 rounded border border-slate-700 bg-slate-950 px-1.5 py-1 text-slate-100" />mm</label>
           <span className="mx-1 h-5 border-l border-slate-700" />
@@ -116,7 +121,7 @@ export const Layout2DViewer: React.FC = () => {
         </div>
         <div className="relative min-h-0 flex-1 overflow-hidden p-3">
           <DesignViewport controlRef={viewportRef} name="2D layout">
-          <svg ref={svgRef} width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet" className="h-full w-full select-none touch-none">
+          <svg ref={svgRef} width="100%" height="100%" viewBox={navigation.viewBox(width,height)} preserveAspectRatio="xMidYMid meet" className="h-full w-full select-none touch-none" onWheel={navigation.onWheel}>
             <defs><pattern id="layout-grid" width={editorGridMm * 4} height={editorGridMm * 4} patternUnits="userSpaceOnUse"><path d={`M ${editorGridMm * 4} 0 L 0 0 0 ${editorGridMm * 4}`} fill="none" stroke="#334155" strokeWidth="1" opacity="0.28" /></pattern></defs>
             <rect x={0} y={0} width={width} height={height} fill="#0B0F19" stroke="#334155" strokeWidth={4} rx={10} />
             <rect x={0} y={0} width={width} height={height} fill="url(#layout-grid)" />
@@ -149,12 +154,13 @@ export const Layout2DViewer: React.FC = () => {
               </g>;
             })}
           </svg>
+          <ViewportCameraControls view="layout2d" viewportRef={viewportRef}/>
           </DesignViewport>
           <div className="pointer-events-none absolute bottom-5 left-5 rounded bg-slate-950/80 px-2 py-1 text-[10px] text-slate-400">Drag footprints · PDM origin at lower left · dimensions in mm</div>
         </div>
       </div>
 
-      <aside className={`${showProperties?'flex':'hidden lg:flex'} absolute right-0 top-0 z-40 h-full w-64 overflow-auto lg:static lg:w-auto min-h-0 flex-col gap-3 rounded-2xl border border-slate-800 bg-slate-900 p-4`}>
+      {!embedded&&<aside className={`${showProperties?'flex':'hidden lg:flex'} absolute right-0 top-0 z-40 h-full w-64 overflow-auto lg:static lg:w-auto min-h-0 flex-col gap-3 rounded-2xl border border-slate-800 bg-slate-900 p-4`}>
         <div className="flex items-center justify-between"><h4 className="text-sm font-semibold text-slate-100">Placement properties</h4>{selected && <span className="text-[10px] text-blue-300">{selected.cem_component_id}</span>}</div>
         {selected && selectedTransform ? <>
           <div className="rounded-lg border border-slate-800 bg-slate-950 p-2.5 text-xs"><div className="font-semibold text-slate-100">{selected.name}</div><div className="mt-1 text-slate-400">{selected.category} · {selected.width} × {selected.height} × {selected.depth} mm</div><div className="text-slate-500">PDM ID {selected.id} · {selected.rail_id || 'Plate mounted'}</div></div>
@@ -166,8 +172,8 @@ export const Layout2DViewer: React.FC = () => {
           {pdm.validation_results.length > 0 && <div className="mt-2 border-t border-slate-800 pt-2"><div className="mb-1 text-[10px] font-semibold text-slate-400">Backend PDM validator</div>{pdm.validation_results.slice(0, 6).map((violation, index) => <div key={`${violation.type}:${violation.object_a}:${index}`} className={`mb-1 rounded px-2 py-1 text-[10px] ${violation.severity === 'CRITICAL' ? 'bg-red-950/60 text-red-200' : 'bg-amber-950/50 text-amber-200'}`}>{violation.message}</div>)}</div>}
           {errorMessage && <div role="alert" className="mt-2 text-[10px] text-red-300">{errorMessage}</div>}
         </div>
-      </aside>
+      </aside>}
     </div>
-    <div className="flex items-center gap-2 rounded-xl border border-amber-700/30 bg-amber-950/20 px-3 py-2 text-[10px] text-amber-100"><Eye className="h-3.5 w-3.5" />Prototype clearance checks are advisory; Apply & Validate reroutes the draft from saved CEM connectivity. Draft placement is not saved to the project revision or CAD export.</div>
+    <div data-viewer-chrome className="flex items-center gap-2 rounded-xl border border-amber-700/30 bg-amber-950/20 px-3 py-2 text-[10px] text-amber-100"><Eye className="h-3.5 w-3.5" />Prototype clearance checks are advisory; Apply & Validate reroutes the draft from saved CEM connectivity. Draft placement is not saved to the project revision or CAD export.</div>
   </div>;
 };

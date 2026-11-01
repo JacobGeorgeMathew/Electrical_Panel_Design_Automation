@@ -1,5 +1,5 @@
 import {beforeEach,describe,expect,it,vi} from 'vitest';
-const api=vi.hoisted(()=>({listProjects:vi.fn(),fetchArchetypes:vi.fn(),fetchProject:vi.fn(),fetchDesign:vi.fn(),fetchRevisions:vi.fn(),updateProject:vi.fn(),generateDesign:vi.fn(),restoreRevision:vi.fn(),startCadJob:vi.fn(),fetchCadJob:vi.fn()}));
+const api=vi.hoisted(()=>({createProject:vi.fn(),saveRecovery:vi.fn(),markProjectOpened:vi.fn(),listProjects:vi.fn(),fetchArchetypes:vi.fn(),fetchProject:vi.fn(),fetchDesign:vi.fn(),fetchRevisions:vi.fn(),updateProject:vi.fn(),generateDesign:vi.fn(),restoreRevision:vi.fn(),startCadJob:vi.fn(),fetchCadJob:vi.fn()}));
 vi.mock('../api/client',async(importOriginal)=>({...await importOriginal<typeof import('../api/client')>(),...api}));
 import {useProjectStore} from './projectStore';
 
@@ -7,14 +7,16 @@ const project={id:'P1',database_id:'uuid',name:'Saved panel',archetype:'DB',arch
 const design={cem:{components:[],requirements:[]},pdm:{components:[]},schematic:{},cad:{},artifacts:[],revision_id:'R1',revision_no:1,lock_version:2,is_stale:false};
 beforeEach(()=>{
   vi.clearAllMocks();
-  useProjectStore.setState({projectId:'',hasUnsavedChanges:false,requirementValues:{},savedRequirementValues:{},projectConfiguration:{},savedConfiguration:{},isGenerating:false,isSaving:false,errorMessage:null});
+  useProjectStore.setState({projectId:'',hasUnsavedChanges:false,requirementValues:{},savedRequirementValues:{},projectConfiguration:{},savedConfiguration:{},isGenerating:false,isSaving:false,errorMessage:null,pendingRecovery:null,editSequence:0});
   api.listProjects.mockResolvedValue([project]);api.fetchArchetypes.mockResolvedValue([{code:'DB'}]);
-  api.fetchProject.mockResolvedValue(project);api.fetchDesign.mockResolvedValue(design);api.fetchRevisions.mockResolvedValue([{id:'R1',revision_no:1}]);
+  api.markProjectOpened.mockResolvedValue(project);api.fetchProject.mockResolvedValue(project);api.fetchDesign.mockResolvedValue(design);api.fetchRevisions.mockResolvedValue([{id:'R1',revision_no:1}]);
 });
 
 describe('persisted project state',()=>{
   it('reopens stored CEM/PDM without regenerating the design',async()=>{
     await useProjectStore.getState().initializeProjects();
+    expect(useProjectStore.getState().projectId).toBe('');
+    await useProjectStore.getState().openProject('P1');
     expect(useProjectStore.getState().projectName).toBe('Saved panel');
     expect(useProjectStore.getState().currentRevisionId).toBe('R1');
     expect(api.generateDesign).not.toHaveBeenCalled();
@@ -48,4 +50,68 @@ describe('persisted project state',()=>{
     expect(useProjectStore.getState().cadJobStatus).toBe('READY');
     expect(useProjectStore.getState().artifacts[0].id).toBe('A1');
   });
+});
+
+it('creates an empty project without inheriting the previous requirements or design',async()=>{
+  useProjectStore.setState({requirementValues:{num_feeders:48},cem:{components:[{id:'OLD'}]} as any});
+  api.createProject.mockResolvedValue({...project,id:'NEW',current_revision_id:null,requirements:{num_feeders:12}});
+  await useProjectStore.getState().createNewProject('New board','DB','v1',{description:'Site board',location:'Site'});
+  expect(api.createProject).toHaveBeenCalledWith('New board',{},'DB','v1',{description:'Site board',location:'Site'});
+  expect(useProjectStore.getState().cem).toBeNull();
+  expect(useProjectStore.getState().pdm).toBeNull();
+});
+it('does not discard newer edits when a save finishes',async()=>{
+  await useProjectStore.getState().openProject('P1');
+  useProjectStore.getState().setRequirementValue('num_feeders',16);
+  let resolve!:(value:any)=>void;
+  api.updateProject.mockImplementation(()=>new Promise(r=>{resolve=r;}));
+  const saving=useProjectStore.getState().saveCurrentProject();
+  useProjectStore.getState().setRequirementValue('num_feeders',20);
+  resolve({...project,lock_version:3,requirements:{num_feeders:16}});
+  await saving;
+  expect(useProjectStore.getState().requirementValues.num_feeders).toBe(20);
+  expect(useProjectStore.getState().hasUnsavedChanges).toBe(true);
+  expect(useProjectStore.getState().lockVersion).toBe(3);
+});
+it('saves before closing and returns to the dashboard',async()=>{
+  await useProjectStore.getState().openProject('P1');
+  useProjectStore.getState().setRequirementValue('num_feeders',16);
+  api.updateProject.mockResolvedValue({...project,lock_version:3});
+  await useProjectStore.getState().saveAndClose();
+  expect(api.updateProject).toHaveBeenCalled();
+  expect(useProjectStore.getState().projectId).toBe('');
+});
+it('offers durable recovery and applies it only when requested',async()=>{
+  api.markProjectOpened.mockResolvedValue({...project,recovery_version:2,recovery:{base_version:2,saved_at:'2026-11-01T00:00:00Z',document:{requirements:{num_feeders:16},configuration:{},workspace:{},baseRevisionId:'R1'}}});
+  await useProjectStore.getState().openProject('P1');
+  expect(useProjectStore.getState().requirementValues.num_feeders).toBeUndefined();
+  useProjectStore.getState().recoverChanges();
+  expect(useProjectStore.getState().requirementValues.num_feeders).toBe(16);
+  expect(useProjectStore.getState().hasUnsavedChanges).toBe(true);
+});
+it('ignores an old project save after another project opens',async()=>{
+  await useProjectStore.getState().openProject('P1');
+  useProjectStore.getState().setRequirementValue('num_feeders',16);
+  let resolve!:(value:any)=>void;
+  api.updateProject.mockImplementation(()=>new Promise(r=>{resolve=r;}));
+  const pending=useProjectStore.getState().saveCurrentProject();
+  api.markProjectOpened.mockResolvedValue({...project,id:'P2',name:'Other project'});
+  await useProjectStore.getState().openProject('P2',true);
+  resolve({...project,lock_version:3});await pending;
+  expect(useProjectStore.getState().projectId).toBe('P2');
+  expect(useProjectStore.getState().projectName).toBe('Other project');
+  expect(useProjectStore.getState().isSaving).toBe(false);
+});
+it('does not attach a late CAD result to a different project',async()=>{
+  await useProjectStore.getState().openProject('P1');
+  api.startCadJob.mockResolvedValue({id:'OLD',status:'PENDING'});
+  let resolve!:(value:any)=>void;
+  api.fetchCadJob.mockImplementation(()=>new Promise(r=>{resolve=r;}));
+  const pending=useProjectStore.getState().refreshCadPreview();
+  await vi.waitFor(()=>expect(api.fetchCadJob).toHaveBeenCalled());
+  api.markProjectOpened.mockResolvedValue({...project,id:'P2'});
+  await useProjectStore.getState().openProject('P2');
+  resolve({id:'OLD',status:'READY',file_format:'GLB'});await pending;
+  expect(useProjectStore.getState().projectId).toBe('P2');
+  expect(useProjectStore.getState().artifacts).toEqual([]);
 });

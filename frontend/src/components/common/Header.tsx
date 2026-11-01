@@ -21,7 +21,7 @@ export const Header: React.FC = () => {
     isGenerating,
     runDesignPipeline,
     cem,
-    selectedObjectId, projectId, isSaving, isLoadingProject
+    selectedObjectId, projectId, isSaving, isLoadingProject, pendingRecovery
   } = useProjectStore();
 
   const tabs: { id: ViewTab; label: string; icon: React.ReactNode }[] = [
@@ -87,7 +87,7 @@ export const Header: React.FC = () => {
           )}
           <button
             onClick={() => runDesignPipeline()}
-            disabled={isGenerating || !projectId || isSaving || isLoadingProject}
+            disabled={isGenerating || !projectId || isSaving || isLoadingProject || !!pendingRecovery}
             className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-blue-600/30 transition-all disabled:opacity-50"
           >
             {isGenerating ? (

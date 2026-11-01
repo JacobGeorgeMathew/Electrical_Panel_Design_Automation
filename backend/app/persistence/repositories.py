@@ -244,7 +244,7 @@ class ProjectRepository:
         self.s=session
 
     def row(self,key,lock=False):
-        stmt=select(m.projects).where(or_(m.projects.c.id==identifier(key),m.projects.c.project_code==key))
+        stmt=select(m.projects).where(or_(m.projects.c.id==identifier(key),m.projects.c.project_code==key),m.projects.c.deleted_at.is_(None))
         if lock:
             stmt=stmt.with_for_update()
         row=self.s.execute(stmt).mappings().first()
@@ -267,7 +267,8 @@ class ProjectRepository:
         return {'id':row['project_code'] or str(row['id']),'database_id':str(row['id']),'name':row['name'],'status':row['status'],
                 'archetype':archetype,'archetype_version_id':serial(row['archetype_version_id']),'requirements':values,
                 'configuration':row['configuration'],'lock_version':row['lock_version'],
-                'current_revision_id':serial(row['current_revision_id']),'created_at':serial(row['created_at'])}
+                'current_revision_id':serial(row['current_revision_id']),'created_at':serial(row['created_at']),
+                **{k:serial(row[k]) for k in ('updated_at','description','location','last_opened_at','workspace','recovery','recovery_version')}}
 
     def answer_values(self,requirement_ids):
         rows=self.s.execute(select(m.project_requirements.c.code,m.question_answers.c.answer_value)
@@ -276,8 +277,11 @@ class ProjectRepository:
             .where(m.project_requirements.c.id.in_(requirement_ids))).mappings()
         return {r['code']:r['answer_value'] for r in rows}
 
-    def list(self,page=1,page_size=50):
-        ids=self.s.scalars(select(m.projects.c.id).order_by(m.projects.c.updated_at.desc(),m.projects.c.id).offset((page-1)*page_size).limit(page_size)).all()
+    def list(self,page=1,page_size=50,q='',recent=False):
+        query=select(m.projects.c.id).where(m.projects.c.deleted_at.is_(None))
+        if q: query=query.where(or_(m.projects.c.name.icontains(q,autoescape=True),m.projects.c.description.icontains(q,autoescape=True),m.projects.c.location.icontains(q,autoescape=True)))
+        if recent: query=query.where(m.projects.c.last_opened_at.is_not(None)).order_by(m.projects.c.last_opened_at.desc())
+        ids=self.s.scalars(query.order_by(m.projects.c.updated_at.desc(),m.projects.c.id).offset((page-1)*page_size).limit(page_size)).all()
         return [self.get(str(i)) for i in ids]
 
     def create(self,name,archetype_version_id,project_code=None):

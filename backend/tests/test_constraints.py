@@ -77,7 +77,7 @@ def test_seed_is_idempotent_and_failed_fixed_generation_preserves_project(api,po
     seed_constraints(postgres_database);seed_constraints(postgres_database)
     with postgres_database.sessions() as s:
         assert s.scalar(select(func.count()).select_from(m.design_rule_versions))==before
-        assert s.scalar(text('SELECT version_num FROM alembic_version'))=='0003_constraints'
+        assert s.scalar(text('SELECT version_num FROM alembic_version'))=='0004_projects'
     p=api.post('/api/projects',json={'name':'Strict constraints'}).json();key=p['id']
     design=api.post('/api/projects/'+key+'/revisions',json={'expected_version':p['lock_version']})
     assert design.status_code==201,design.text

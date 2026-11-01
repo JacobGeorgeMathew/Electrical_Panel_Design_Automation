@@ -40,13 +40,20 @@ export const fetchRequirementSuggestions=(projectId:string,archetype:string,valu
   request<import('../types/api').RequirementSuggestions>(projectId?'/projects/'+id(projectId)+'/requirements/suggestions':'/archetypes/'+id(archetype)+'/suggestions',
     {...json('POST',values),signal});
 export const assetUrl = (path: string) => new URL(path, API_BASE).toString();
-export const listProjects = (signal?: AbortSignal) => request<ProjectRecord[]>('/projects?page_size=100', { signal });
+export const listProjects = async (signal?: AbortSignal, q = '', recent = false) => {
+  const projects: ProjectRecord[] = [];
+  for (let page=1;;page++) {
+    const rows=await request<ProjectRecord[]>('/projects?'+new URLSearchParams({page:String(page),page_size:'100',q,recent:String(recent)}),{signal});
+    projects.push(...rows);
+    if(rows.length<100)return projects;
+  }
+};
 export const fetchArchetypes = () => request<Archetype[]>('/archetypes');
 export const fetchArchetype = (code: string, signal?: AbortSignal) => request<{ questions: Question[] }>('/archetypes/' + id(code) + '/questionnaire', { signal });
-export const createProject = (name: string, requirements: Record<string, any>, archetype = 'DB', archetypeVersionId?: string) =>
-  request<ProjectRecord>('/projects', json('POST', { name, archetype, archetype_version_id: archetypeVersionId, requirements }));
+export const createProject = (name: string, requirements: Record<string, any>, archetype = 'DB', archetypeVersionId?: string, metadata: {description?:string;location?:string} = {}) =>
+  request<ProjectRecord>('/projects', json('POST', { name, archetype, archetype_version_id: archetypeVersionId, requirements, ...metadata }));
 export const fetchProject = (projectId: string, signal?: AbortSignal) => request<ProjectRecord>('/projects/' + id(projectId), { signal });
-export const updateProject = (projectId: string, version: number, values: { name?: string; requirements?: Record<string, any>; configuration?: ProjectConfiguration }) =>
+export const updateProject = (projectId: string, version: number, values: { name?: string; requirements?: Record<string, any>; configuration?: ProjectConfiguration; description?:string; location?:string; workspace?:ProjectRecord['workspace']; expected_recovery_version?:number }) =>
   request<ProjectRecord>('/projects/' + id(projectId), json('PATCH', { expected_version: version, ...values }));
 export const fetchQuestionnaire = (projectId: string, signal?: AbortSignal) =>
   request<Question[]>('/projects/' + id(projectId) + '/requirements/questions', { signal });
@@ -73,3 +80,11 @@ export const fetchEnclosures = () => request<Enclosure[]>('/enclosures');
 export const startCadJob = (projectId: string, version: number) =>
   request<{ id: string; status: string; project_revision_id: string }>('/projects/' + id(projectId) + '/cad-generation', json('POST', { expected_version: version, file_format: 'GLB' }));
 export const fetchCadJob = (projectId: string, jobId: string) => request<Artifact>('/projects/' + id(projectId) + '/cad-generation/' + id(jobId));
+
+export const markProjectOpened=(projectId:string)=>request<ProjectRecord>('/projects/'+id(projectId)+'/open',json('POST',{}));
+export const deleteProject=(projectId:string,version:number)=>request<void>('/projects/'+id(projectId),json('DELETE',{expected_version:version}));
+export const duplicateProject=(projectId:string,version:number,name:string)=>request<ProjectRecord>('/projects/'+id(projectId)+'/duplicate',json('POST',{expected_version:version,name}),90000);
+export const exportProject=(projectId:string)=>request<unknown>('/projects/'+id(projectId)+'/export',{},90000);
+export const importProject=(data:unknown)=>request<ProjectRecord>('/projects/import',json('POST',data),90000);
+export const saveRecovery=(projectId:string,version:number,recoveryVersion:number,document:import('../stores/projectRecovery').RecoveryDocument|null)=>
+  request<ProjectRecord>('/projects/'+id(projectId)+'/recovery',json('PUT',{expected_version:version,expected_recovery_version:recoveryVersion,document}));

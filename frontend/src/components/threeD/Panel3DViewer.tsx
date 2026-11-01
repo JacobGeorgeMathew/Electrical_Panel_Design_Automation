@@ -11,19 +11,38 @@ import { AlertTriangle, Box, Eye, EyeOff, Layers, MousePointer2, Redo2, Rotate3D
 import * as THREE from 'three';
 import { fitPanelCamera } from './cameraFit';
 import { analyzeEditorGeometry, componentTransform } from './editorGeometry';
+import {useWorkspaceStore} from '../../stores/workspaceStore';
+import {ViewportCameraControls} from '../workspace/ViewportCameraControls';
 import { PhysicalComponent } from '../../types/pdm';
 
 export const ResponsiveCamera: React.FC<{ width: number; height: number; depth: number }> = ({ width, height, depth }) => {
-  const { camera, size } = useThree();
+  const { camera, size, controls, invalidate } = useThree();
+  const pose=useWorkspaceStore(state=>state.cameraPose);
+  const command=useWorkspaceStore(state=>state.cameraCommand);
+  const fitSequence=useRef(0);if(command?.action==='fit')fitSequence.current=command.sequence;
   React.useEffect(() => {
     if (size.width < 1 || size.height < 1) return;
     const fit = fitPanelCamera({ width, height, depth }, size.width / size.height, 45);
-    camera.position.set(...fit.position);
+    const distance=Math.hypot(...fit.position.map((v,i)=>v-fit.center[i]));
+    const positions={front:[fit.center[0],fit.center[1],fit.center[2]+distance],top:[fit.center[0],fit.center[1]+distance,fit.center[2]+.001],right:[fit.center[0]+distance,fit.center[1],fit.center[2]],isometric:fit.position};
+    camera.position.set(...positions[pose] as [number,number,number]);
+    const orbit=controls as unknown as {target?:THREE.Vector3;update?:()=>void}|undefined;
+    orbit?.target?.set(...fit.center);orbit?.update?.();
     camera.lookAt(...fit.center);
     camera.near = 0.01;
     camera.far = Math.max(width, height, depth) * 20;
     camera.updateProjectionMatrix();
-  }, [camera, size.width, size.height, width, height, depth]);
+    invalidate?.();
+  }, [camera, size.width, size.height, width, height, depth, pose, fitSequence.current, controls]);
+  React.useEffect(()=>useWorkspaceStore.subscribe((state,previous)=>{
+    const next=state.cameraCommand;
+    if(next===previous.cameraCommand||useProjectStore.getState().activeTab!=='threeD'||!next||!['zoom-in','zoom-out'].includes(next.action))return;
+    const target=new THREE.Vector3(width/2,height/2,depth/2);
+    const orbit=controls as unknown as {target?:THREE.Vector3;update?:()=>void}|undefined;
+    if(orbit?.target)target.copy(orbit.target);
+    camera.position.sub(target).multiplyScalar(next.action==='zoom-in'?.8:1.25).add(target);
+    camera.updateProjectionMatrix();orbit?.update?.();invalidate?.();
+  }),[camera,controls,width,height,depth,invalidate]);
   return null;
 };
 
@@ -104,7 +123,7 @@ const ComponentMesh: React.FC<ComponentMeshProps> = ({ comp, transform, isSelect
 const snapValue = (value: number, enabled: boolean, step: number) =>
   enabled ? Math.round(value / step) * step : value;
 
-export const Panel3DViewer: React.FC = () => {
+export const Panel3DViewer: React.FC<{embedded?:boolean}> = ({embedded=false}) => {
   const viewportRef=useRef<DesignViewportHandle>(null);
   const [drawer,setDrawer]=useState<'tree'|'properties'|null>(null);
   const {
@@ -151,8 +170,8 @@ export const Panel3DViewer: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-1 min-h-0 min-w-0 flex-col h-full overflow-y-auto bg-slate-950 p-3 md:p-4 space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900 border border-slate-800 p-3 rounded-2xl">
+    <div className={embedded?"workspace-viewer":"flex flex-1 min-h-0 min-w-0 flex-col h-full overflow-y-auto bg-slate-950 p-3 md:p-4 space-y-3"}>
+      <div data-viewer-chrome className="flex flex-wrap items-center justify-between gap-3 bg-slate-900 border border-slate-800 p-3 rounded-2xl">
         <div className="flex min-w-0 items-center gap-3">
           <div className="p-2 bg-blue-500/10 text-blue-400 rounded-xl"><Box className="w-5 h-5" /></div>
           <div>
@@ -181,7 +200,7 @@ export const Panel3DViewer: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+      <div className={embedded?"viewer-options":"flex flex-wrap items-center gap-3 text-xs text-slate-400"}>
         <button className="editor-tool" aria-pressed={doorOpen} onClick={()=>{setShowArtifact(false);setDoorOpen(v=>!v);}}>{doorOpen?'Close door':'Open door'}</button>
         <button className="editor-tool" aria-pressed={showCovers} onClick={()=>{setShowArtifact(false);setShowCovers(v=>!v);}}>{showCovers?'Remove duct covers':'Fit duct covers'}</button>
         <button className="editor-tool" aria-pressed={showBody} onClick={()=>{setShowArtifact(false);setShowBody(v=>!v);}}>{showBody?'Hide cabinet body':'Show cabinet body'}</button>
@@ -193,18 +212,18 @@ export const Panel3DViewer: React.FC = () => {
         {preview?.url && !designStale && <a className="text-blue-300 underline" href={assetUrl(preview.url)} download>Download GLB</a>}
         {pdm.components.some(c=>c.preview_asset&&c.preview_asset.status!=='READY')&&<span className="text-amber-300">Some component assets are unavailable; showing their bounds.</span>}
       </div>
-      {!pdm.ducts?.length&&<div className="text-xs text-amber-300">This saved revision predates the detailed enclosure and duct layout. Generate Design to create a new revision.</div>}
-      {designStale && <div role="status" className="rounded border border-amber-800 bg-amber-950/40 p-2 text-xs text-amber-200">Showing the last saved design. Generate the current requirements to refresh geometry and exports.</div>}
-      {hasDraftEdits && (
+      {!embedded&&!pdm.ducts?.length&&<div className="text-xs text-amber-300">This saved revision predates the detailed enclosure and duct layout. Generate Design to create a new revision.</div>}
+      {!embedded&&designStale && <div role="status" className="rounded border border-amber-800 bg-amber-950/40 p-2 text-xs text-amber-200">Showing the last saved design. Generate the current requirements to refresh geometry and exports.</div>}
+      {!embedded&&hasDraftEdits && (
         <div role="status" className="flex items-start gap-2 rounded-xl border border-amber-700 bg-amber-950/40 px-3 py-2 text-xs text-amber-200">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>Draft placement reroutes on release using saved connectivity. Saved project revisions, BOM and FreeCAD exports change only after Generate Design.</span>
         </div>
       )}
 
-      <div className="flex gap-2 xl:hidden"><button className="editor-tool" onClick={()=>setDrawer(v=>v==='tree'?null:'tree')}>Components</button><button className="editor-tool" onClick={()=>setDrawer(v=>v==='properties'?null:'properties')}>Properties</button></div>
-      <div className="relative grid flex-1 min-h-0 grid-cols-1 grid-rows-1 gap-3 overflow-hidden xl:grid-cols-[220px_minmax(0,1fr)_280px] xl:grid-rows-1">
-        <aside className={`${drawer==='tree'?'block':'hidden xl:block'} absolute left-0 top-0 z-40 h-full w-64 xl:static xl:w-auto min-h-0 overflow-y-auto rounded-xl border border-slate-800 bg-slate-900 p-3`} aria-label="Component tree">
+      <div data-viewer-chrome className="flex gap-2 xl:hidden"><button className="editor-tool" onClick={()=>setDrawer(v=>v==='tree'?null:'tree')}>Components</button><button className="editor-tool" onClick={()=>setDrawer(v=>v==='properties'?null:'properties')}>Properties</button></div>
+      <div className="viewer-grid relative grid flex-1 min-h-0 grid-cols-1 grid-rows-1 gap-3 overflow-hidden xl:grid-cols-[220px_minmax(0,1fr)_280px] xl:grid-rows-1">
+        {!embedded&&<aside className={`${drawer==='tree'?'block':'hidden xl:block'} absolute left-0 top-0 z-40 h-full w-64 xl:static xl:w-auto min-h-0 overflow-y-auto rounded-xl border border-slate-800 bg-slate-900 p-3`} aria-label="Component tree">
           <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-300">Component tree ({pdm.components.length})</h4>
           <ul className="space-y-1">
             {pdm.components.map((component) => {
@@ -225,9 +244,9 @@ export const Panel3DViewer: React.FC = () => {
           <ul className="space-y-1">{(pdm.accessories||[]).map(a=><li key={a.id}><button onClick={()=>selectObject(a.id)} className={`w-full rounded px-2 py-1 text-left text-xs ${selectedObjectId===a.id?'bg-blue-900 text-white':'text-slate-300 hover:bg-slate-800'}`}>{a.name}</button></li>)}</ul>
           <h4 className="mb-2 mt-4 text-xs font-bold uppercase text-slate-300">Wiring ducts</h4>
           <ul className="space-y-1">{(pdm.ducts||[]).map(d=><li key={d.id}><button onClick={()=>selectObject(d.id)} className={`w-full rounded px-2 py-1 text-left text-xs ${selectedObjectId===d.id?'bg-blue-900 text-white':'text-slate-300 hover:bg-slate-800'}`}>{d.label}<span className="block text-[10px] text-slate-500">{d.capacity_pct.toFixed(1)}% fill · {d.route_ids.length} wires</span></button></li>)}</ul>
-        </aside>
+        </aside>}
 
-        <div className="relative min-h-0 min-w-0 overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60">
+        <div className="viewer-canvas relative min-h-0 min-w-0 overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60">
           <DesignViewport controlRef={viewportRef} name="3D panel">
           <Canvas camera={{ fov: 45, near: 0.01, far: Math.max(encW, encH, encD) * 20 }} className="h-full w-full">
             <ResponsiveCamera width={encW} height={encH} depth={doorOpen&&pdm.accessories?.length?encD+encW*.7:encD} />
@@ -272,13 +291,14 @@ export const Panel3DViewer: React.FC = () => {
               dimmed={!!selectedDuct&&!route.duct_ids?.includes(selectedDuct.id)}/>)}
             </>}
           </Canvas>
+          <ViewportCameraControls view="threeD" viewportRef={viewportRef}/>
           </DesignViewport>
           {warnings.length > 0 && <div className="absolute bottom-3 left-3 rounded-lg border border-amber-700 bg-slate-950/90 px-3 py-2 text-xs text-amber-200">
             {warnings.length} placement warning{warnings.length === 1 ? '' : 's'}
           </div>}
         </div>
 
-        <aside className={`${drawer==='properties'?'block':'hidden xl:block'} absolute right-0 top-0 z-40 h-full w-64 xl:static xl:w-auto min-h-0 overflow-y-auto rounded-xl border border-slate-800 bg-slate-900 p-3`} aria-label="Properties inspector">
+        {!embedded&&<aside className={`${drawer==='properties'?'block':'hidden xl:block'} absolute right-0 top-0 z-40 h-full w-64 xl:static xl:w-auto min-h-0 overflow-y-auto rounded-xl border border-slate-800 bg-slate-900 p-3`} aria-label="Properties inspector">
           <h4 className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-300">Properties inspector</h4>
           {selectedDuct?<div className="space-y-2 text-xs text-slate-300"><p className="font-semibold">{selectedDuct.label}</p><p>{selectedDuct.catalog_id}</p><p>{selectedDuct.width} × {selectedDuct.height} × {selectedDuct.depth} mm</p><p>Estimated fill: {selectedDuct.capacity_pct}% / {selectedDuct.max_fill_pct}% limit</p><p>{selectedDuct.route_ids.length} routed conductors</p><p className="text-slate-500">Trunks follow this trough; terminal leads leave it locally.</p></div>:selectedAccessory?<div className="space-y-2 text-xs text-slate-300"><p className="font-semibold">{selectedAccessory.name}</p><p>{selectedAccessory.catalog_id}</p><p>{selectedAccessory.material}</p><p>{selectedAccessory.width} × {selectedAccessory.height} × {selectedAccessory.depth} mm</p></div>:!selectedComponent || !selectedTransform ? <p className="text-xs text-slate-500">Select a component in the tree or viewport.</p> : <>
             <div className="mb-3 border-b border-slate-800 pb-3">
@@ -314,7 +334,7 @@ export const Panel3DViewer: React.FC = () => {
             </ul>}
             <p className="mt-2 text-[9px] leading-relaxed text-slate-500">Prototype footprint checks use rotated 2D bounding boxes. They do not replace backend physical validation.</p>
           </div>
-        </aside>
+        </aside>}
       </div>
     </div>
   );

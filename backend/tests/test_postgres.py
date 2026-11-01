@@ -198,7 +198,7 @@ def test_database_connection_errors_do_not_leak_configuration(postgres_database)
     from fastapi.testclient import TestClient
     from app.main import create_app
     from app.persistence.database import Database
-    broken=Database(replace(postgres_database.settings,url=postgres_database.settings.url.set(port=1),connect_timeout=1))
+    broken=Database(replace(postgres_database.settings,url=postgres_database.settings.url.difference_update_query(['host','port']).set(host='127.0.0.1',port=1),connect_timeout=1))
     with TestClient(create_app(broken)) as client:
         assert client.get('/ready').status_code==503
         response=client.get('/api/projects')
