@@ -1,0 +1,4 @@
+.requirements-generation-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-width: 174px; }
+.requirements-generation-button .bolt-loader { width: 17px; height: 21px; color: #e4d6ff; }
+.requirements-generation-status { font-size: 11px; color: #b8a8d2; }
+

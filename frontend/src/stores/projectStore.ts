@@ -2,19 +2,34 @@ import { create } from 'zustand';
 import { CanonicalEngineeringModel } from '../types/cem';
 import { PhysicalDesignModel } from '../types/pdm';
 import { createProject, generateDesign, propagateChange, validatePlacement, validateRequirements,
-  listProjects, fetchProject, fetchDesign, fetchRevisions, restoreRevision, updateProject, fetchArchetypes, startCadJob, fetchCadJob } from '../api/client';
+  listProjects, fetchProject, fetchDesign, fetchRevisions, restoreRevision, updateProject, fetchArchetypes, startCadJob, fetchCadJob, markProjectOpened, saveRecovery } from '../api/client';
 import type { Artifact, Archetype, DesignPackage, ProjectConfiguration, ProjectRecord, RevisionSummary } from '../types/api';
+
+import { readRecovery, clearRecovery, type Checkpoint, type RecoveryDocument } from './projectRecovery';
 
 let projectRequest = 0;
 let routingRequest = 0;
 let openController: AbortController | null = null;
 
-export type ViewTab = 'requirements' | 'schematic' | 'layout2d' | 'threeD' | 'validation' | 'bom' | 'catalog';
+export type ViewTab = 'requirements' | 'schematic' | 'layout2d' | 'threeD' | 'validation' | 'bom' | 'catalog' | 'documentation';
 export type EditorTransform = { x: number; y: number; z: number; rotation_deg: number };
 type EditorTransformSnapshot = Record<string, EditorTransform>;
 export type EditorMode = 'select' | 'translate' | 'rotate';
 
 interface ProjectState {
+  projectDescription: string;
+  projectLocation: string;
+  recoveryVersion: number;
+  pendingRecovery: Checkpoint | null;
+  editSequence: number;
+  autosaveStatus: string;
+  setSchematicDraft: (data:any) => void;
+  recoverChanges: () => void;
+  discardLocalEdits: () => Promise<void>;
+  discardRecovery: () => Promise<void>;
+  autosave: () => Promise<void>;
+  saveAndClose: () => Promise<void>;
+
   projects: ProjectRecord[];
   archetypes: Archetype[];
   revisions: RevisionSummary[];
@@ -85,7 +100,7 @@ interface ProjectState {
   resetEditorDraft: () => void;
   validateCurrentRequirements: () => Promise<boolean>;
   validateCurrentPlacement: () => Promise<void>;
-  createNewProject: (name: string, archetype?: string, versionId?: string) => Promise<void>;
+  createNewProject: (name: string, archetype?: string, versionId?: string, metadata?: {description?:string;location?:string}) => Promise<void>;
   initializeProjects: () => Promise<void>;
   openProject: (id: string, discardDraft?: boolean) => Promise<void>;
   closeProject: () => void;
@@ -98,19 +113,21 @@ interface ProjectState {
   applyChangePropagation: (field: string, newValue: any) => Promise<void>;
 }
 
-const emptyDesign = { cem: null, pdm: null, pdmBaseline: null, schematicData: null, cadData: null,
+const emptyDesign = { isSaving:false,isGenerating:false,isValidatingPlacement:false, cem: null, pdm: null, pdmBaseline: null, schematicData: null, cadData: null,
   currentRevisionId: null, currentRevisionNo: null, artifacts: [], editorTransforms: {}, editorHiddenComponentIds: [],
   editorUndoStack: [], editorRedoStack: [], pendingEditorEdit: null, selectedObjectId: null, hoveredObjectId: null,
   diffReport: null, isDiffModalOpen: false, cadJobStatus: null };
 const projectFields = (p: ProjectRecord) => ({ projectId: p.id, projectName: p.name, archetype: p.archetype,
   requirementValues: p.requirements, savedRequirementValues: p.requirements, projectConfiguration: p.configuration,
-  savedConfiguration: p.configuration, lockVersion: p.lock_version, hasUnsavedChanges: false });
+  savedConfiguration: p.configuration, lockVersion: p.lock_version, hasUnsavedChanges: false,
+  projectDescription:p.description || '', projectLocation:p.location || '', recoveryVersion:p.recovery_version || 0, pendingRecovery:null });
 const designFields = (d: DesignPackage) => ({ isValidatingPlacement:false, cem: d.cem, pdm: d.pdm, pdmBaseline: d.pdm, schematicData: d.schematic,
   cadData: d.cad, currentRevisionId: d.revision_id, currentRevisionNo: d.revision_no, artifacts: d.artifacts,
   lockVersion: d.lock_version, designStale: d.is_stale, editorTransforms: {}, editorHiddenComponentIds: [],
   editorUndoStack: [], editorRedoStack: [], pendingEditorEdit: null });
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
+  projectDescription:'', projectLocation:'', recoveryVersion:0, pendingRecovery:null, editSequence:0, autosaveStatus:'',
   projects: [], archetypes: [], revisions: [], currentRevisionId: null, currentRevisionNo: null, lockVersion: 0,
   projectConfiguration: {}, savedRequirementValues: {}, savedConfiguration: {}, hasUnsavedChanges: false,
   designStale: false, isLoadingProject: false, isSaving: false, artifacts: [], cadJobStatus: null,
@@ -149,13 +166,15 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   
   setProjectId: (id) => set({ projectId: id }),
   setActiveTab: (tab) => set({ activeTab: tab }),
-  selectObject: (id) => set({ selectedObjectId: id }),
+  selectObject: (id) => set(state=>({ selectedObjectId: id===null?null:
+    state.pdm?.components.find(c=>c.id===id)?.cem_component_id ||
+    state.pdm?.routes.find(r=>r.id===id)?.conductor_id || id })),
   hoverObject: (id) => set({ hoveredObjectId: id }),
   
   setRequirementValue: (field, val) =>
     set((state) => ({
       requirementValues: { ...state.requirementValues, [field]: val },
-      hasUnsavedChanges: true, designStale: true,
+      hasUnsavedChanges: true, designStale: true, editSequence: state.editSequence+1,
     })),
     
   toggleExplodedView: () => set((state) => ({ explodedView: !state.explodedView })),
@@ -180,6 +199,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     };
     const current = state.editorTransforms[componentId] || base;
     return {
+      hasUnsavedChanges:true, editSequence:state.editSequence+1,
       pdm: state.pdm ? {...state.pdm,routes:[]} : null,
       pendingEditorEdit: state.pendingEditorEdit || { ...state.editorTransforms },
       editorTransforms: { ...state.editorTransforms, [componentId]: { ...current, ...transform } },
@@ -198,6 +218,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   undoEditorTransform: () => set((state) => {
     if (!state.editorUndoStack.length) return state;
     return {
+      hasUnsavedChanges:true, editSequence:state.editSequence+1,
       editorTransforms: state.editorUndoStack[state.editorUndoStack.length - 1],
       editorUndoStack: state.editorUndoStack.slice(0, -1),
       editorRedoStack: [...state.editorRedoStack, state.editorTransforms],
@@ -207,13 +228,14 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   redoEditorTransform: () => set((state) => {
     if (!state.editorRedoStack.length) return state;
     return {
+      hasUnsavedChanges:true, editSequence:state.editSequence+1,
       editorTransforms: state.editorRedoStack[state.editorRedoStack.length - 1],
       editorRedoStack: state.editorRedoStack.slice(0, -1),
       editorUndoStack: [...state.editorUndoStack, state.editorTransforms],
       pendingEditorEdit: null,
     };
   }),
-  resetEditorDraft: () => { routingRequest++;set((state) => ({ isValidatingPlacement:false, pdm: state.pdmBaseline || state.pdm,
+  resetEditorDraft: () => { routingRequest++;set((state) => ({ isValidatingPlacement:false, hasUnsavedChanges:true,editSequence:state.editSequence+1, pdm: state.pdmBaseline || state.pdm,
     editorTransforms: {}, editorHiddenComponentIds: [], editorUndoStack: [], editorRedoStack: [], pendingEditorEdit: null, editorMode: 'select' })); },
   validateCurrentRequirements: async () => {
     try {
@@ -254,9 +276,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     try {
       const [projects, archetypes] = await Promise.all([listProjects(), fetchArchetypes()]);
       set({ projects, archetypes });
-      const first = projects.find((p) => p.id === 'PROJ_DB_DEMO_001') || projects.find((p) => p.archetype === 'DB');
-      if (first) await get().openProject(first.id);
-      else set({ isLoadingProject: false });
+      set({ isLoadingProject: false });
     } catch (error) {
       set({ isLoadingProject: false, errorMessage: error instanceof Error ? error.message : String(error) });
     }
@@ -271,7 +291,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const signal = openController.signal;
     set({ isLoadingProject: true, errorMessage: null });
     try {
-      const p = await fetchProject(id, signal);
+      const p = await markProjectOpened(id);
       const [revisions, design] = await Promise.all([
         fetchRevisions(id),
         p.current_revision_id ? fetchDesign(id, signal) : Promise.resolve(null),
@@ -279,64 +299,125 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       if (token !== projectRequest) return;
       set({ ...emptyDesign, ...projectFields(p), ...(design ? designFields(design) : {}),
         revisions, isLoadingProject: false, designStale: design?.is_stale || false,
-        validationErrors: [], validationWarnings: [], activeTab: 'requirements' });
+        validationErrors: [], validationWarnings: [], activeTab: 'requirements',
+        editorTransforms:p.workspace?.editorTransforms || {}, schematicData:p.workspace?.schematicData || design?.schematic || null,
+        pendingRecovery: [readRecovery(p.id),p.recovery].filter((c):c is Checkpoint=>!!c).sort((a,b)=>b.saved_at.localeCompare(a.saved_at))[0] || null, autosaveStatus:'', editSequence:0 });
+      if(Object.keys(get().editorTransforms).length)void get().validateCurrentPlacement();
     } catch (error) {
       if (token === projectRequest) set({ isLoadingProject: false, errorMessage: error instanceof Error ? error.message : String(error) });
     }
   },
   closeProject: () => {
+    if(get().isSaving || get().isGenerating || get().isLoadingProject)return;
     if (get().hasUnsavedChanges) { set({ errorMessage: 'Save or discard your local edits before closing.' }); return; }
     ++projectRequest;
     openController?.abort();
     set({ ...emptyDesign, projectId: '', projectName: 'Select or create a project', requirementValues: {},
-      savedRequirementValues: {}, projectConfiguration: {}, savedConfiguration: {}, lockVersion: 0, revisions: [], designStale: false });
+      savedRequirementValues: {}, projectConfiguration: {}, savedConfiguration: {}, lockVersion: 0, revisions: [], designStale: false, pendingRecovery:null, autosaveStatus:'', projectDescription:'',projectLocation:'' });
   },
-  setProjectConfiguration: (configuration) => set({ projectConfiguration: configuration, hasUnsavedChanges: true, designStale: true }),
-  saveCurrentProject: async () => {
-    const state = get();
-    if (!state.projectId) { set({ errorMessage: 'Create a project before saving requirements.' }); return; }
-    set({ isSaving: true, errorMessage: null });
+  setProjectConfiguration: (configuration) => set(state=>({ projectConfiguration: configuration, hasUnsavedChanges: true, designStale: true,editSequence:state.editSequence+1 })),
+  setSchematicDraft: (data) => set(state=>({schematicData:data,hasUnsavedChanges:true,editSequence:state.editSequence+1})),
+  recoverChanges: () => {
+    const state=get(), checkpoint=state.pendingRecovery;
+    if(!checkpoint)return;
+    const d=checkpoint.document;
+    const sameRevision=d.baseRevisionId===state.currentRevisionId;
+    set({requirementValues:d.requirements,projectConfiguration:d.configuration,
+      ...(sameRevision?{editorTransforms:d.workspace.editorTransforms||{},schematicData:d.workspace.schematicData||state.schematicData}:{}),
+      hasUnsavedChanges:true,designStale:true,pendingRecovery:null,editSequence:state.editSequence+1,
+      errorMessage:sameRevision?null:'Recovered requirements. Editor changes based on a different revision were not applied.'});
+  },
+  discardLocalEdits: async () => {
+    const state=get(),token=projectRequest;
+    if(state.isSaving||state.isGenerating)return;
+    set({isSaving:true});
+    try{
+      await saveRecovery(state.projectId,state.lockVersion,state.recoveryVersion,null);
+      if(token!==projectRequest)return;
+      clearRecovery(state.projectId);
+      set({isSaving:false,hasUnsavedChanges:false});
+      await get().openProject(state.projectId,true);
+    }catch(error){if(token===projectRequest)set({isSaving:false,errorMessage:error instanceof Error?error.message:String(error)});}
+  },
+  discardRecovery: async () => {
+    const state=get(), token=projectRequest;
     try {
-      const p = await updateProject(state.projectId, state.lockVersion, {
-        requirements: state.requirementValues, configuration: state.projectConfiguration,
-      });
-      set({ ...projectFields(p), isSaving: false, designStale: true, projects: await listProjects() });
-    } catch (error) {
-      set({ isSaving: false, errorMessage: error instanceof Error ? error.message : String(error) });
-    }
+      const p=await saveRecovery(state.projectId,state.lockVersion,state.recoveryVersion,null);
+      if(token!==projectRequest)return;
+      clearRecovery(state.projectId);
+      set({pendingRecovery:null,recoveryVersion:p.recovery_version});
+    }catch(error){if(token===projectRequest)set({errorMessage:error instanceof Error?error.message:String(error)});}
   },
-  createNewProject: async (name, archetype = 'DB', versionId) => {
+  autosave: async () => {
+    const state=get(), token=projectRequest;
+    if(!state.projectId||!state.hasUnsavedChanges||state.pendingRecovery||state.isSaving||state.isGenerating)return;
+    set({isSaving:true,autosaveStatus:'Saving recovery checkpoint…'});
+    try{
+      const p=await saveRecovery(state.projectId,state.lockVersion,state.recoveryVersion,recoveryDocument(state));
+      if(token===projectRequest)set({recoveryVersion:p.recovery_version,isSaving:false,autosaveStatus:'Recovery checkpoint saved'});
+    }catch(error){if(token===projectRequest)set({isSaving:false,autosaveStatus:error instanceof Error?error.message:String(error)});}
+  },
+  saveAndClose: async () => {
+    if(get().isSaving||get().isGenerating)return;
+    if(get().hasUnsavedChanges)await get().saveCurrentProject();
+    if(!get().hasUnsavedChanges)get().closeProject();
+  },
+  saveCurrentProject: async () => {
+    const state=get(), token=projectRequest;
+    if(!state.projectId||state.isSaving||state.isGenerating||state.pendingRecovery)return;
+    set({isSaving:true,errorMessage:null});
+    try {
+      const p=await updateProject(state.projectId,state.lockVersion,{
+        requirements:state.requirementValues,configuration:state.projectConfiguration,expected_recovery_version:state.recoveryVersion,
+        workspace:{editorTransforms:state.editorTransforms,schematicData:state.schematicData},
+      });
+      if(token!==projectRequest)return;
+      const unchanged=get().editSequence===state.editSequence;
+      if(unchanged)clearRecovery(state.projectId);
+      set({lockVersion:p.lock_version,recoveryVersion:p.recovery_version||0,
+        savedRequirementValues:p.requirements,savedConfiguration:p.configuration,
+        hasUnsavedChanges:!unchanged,isSaving:false,pendingRecovery:null,autosaveStatus:'Project saved',
+        projects:get().projects.map(row=>row.id===p.id?p:row)});
+    }catch(error){if(token===projectRequest)set({isSaving:false,errorMessage:error instanceof Error?error.message:String(error)});}
+  },
+  createNewProject: async (name, archetype = 'DB', versionId, metadata) => {
     set({ isSaving: true, errorMessage: null, validationErrors: [], validationWarnings: [] });
     try {
-      const p = await createProject(name, get().requirementValues, archetype, versionId);
+      const p = await createProject(name, {}, archetype, versionId, metadata);
       ++projectRequest;
       set({ ...emptyDesign, ...projectFields(p), revisions: [], projects: await listProjects(),
-        isSaving: false, designStale: false, activeTab: 'requirements' });
+        isSaving: false, designStale: false, activeTab: 'requirements',editSequence:0,autosaveStatus:'' });
     } catch (error) {
       set({ isSaving: false, errorMessage: error instanceof Error ? error.message : String(error) });
     }
   },
   restoreSavedRevision: async (id) => {
+    if(get().isSaving||get().isGenerating||get().pendingRecovery)return;
     if (get().hasUnsavedChanges) { set({ errorMessage: 'Save or discard local edits before restoring a revision.' }); return; }
     const state = get();
+    const token=projectRequest;
     set({ isSaving: true, errorMessage: null });
     try {
       const result = await restoreRevision(state.projectId, id, state.lockVersion);
       const [project, revisions] = await Promise.all([fetchProject(state.projectId), fetchRevisions(state.projectId)]);
+      if(token!==projectRequest)return;
+      clearRecovery(state.projectId);
       set({ ...projectFields(project), ...designFields(result), revisions, isSaving: false });
     } catch (error) {
-      set({ isSaving: false, errorMessage: error instanceof Error ? error.message : String(error) });
+      if(token===projectRequest)set({ isSaving: false, errorMessage: error instanceof Error ? error.message : String(error) });
     }
   },
   runDesignPipeline: async (overrides) => {
     const state = get();
     if (!state.projectId) { set({ errorMessage: 'Create or open a project before generating a design.' }); return; }
+    if(state.isSaving||state.isGenerating||state.pendingRecovery)return;
     const token = projectRequest;
     set({ isGenerating: true, errorMessage: null, validationErrors: [], validationWarnings: [] });
     try {
       const result = await generateDesign(state.projectId, { ...state.requirementValues, ...overrides }, state.lockVersion, state.projectConfiguration);
       const [project, revisions] = await Promise.all([fetchProject(state.projectId), fetchRevisions(state.projectId)]);
       if (token !== projectRequest) return;
+      clearRecovery(state.projectId);
       set({ ...projectFields(project), ...designFields(result), revisions, isGenerating: false });
     } catch (error) {
       if (token === projectRequest) set({ isGenerating: false, errorMessage: error instanceof Error ? error.message : String(error) });
@@ -344,6 +425,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
   applyChangePropagation: async (field, newValue) => {
     const state = get();
+    if(state.isSaving||state.isGenerating||state.pendingRecovery)return;
+    const token=projectRequest;
     const otherEdits = Object.keys(state.requirementValues).some((key) => key !== field &&
       JSON.stringify(state.requirementValues[key]) !== JSON.stringify(state.savedRequirementValues[key]));
     if (otherEdits || JSON.stringify(state.projectConfiguration) !== JSON.stringify(state.savedConfiguration)) {
@@ -353,9 +436,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     try {
       const { new_design, diff_report } = await propagateChange(state.projectId, field, newValue, state.lockVersion);
       const [project, revisions] = await Promise.all([fetchProject(state.projectId), fetchRevisions(state.projectId)]);
+      if(token!==projectRequest)return;
+      clearRecovery(state.projectId);
       set({ ...projectFields(project), ...designFields(new_design), revisions, diffReport: diff_report, isDiffModalOpen: true, isGenerating: false });
     } catch (error) {
-      set({ isGenerating: false, errorMessage: error instanceof Error ? error.message : String(error) });
+      if(token===projectRequest)set({ isGenerating: false, errorMessage: error instanceof Error ? error.message : String(error) });
     }
   },
   refreshCadPreview: async () => {
@@ -368,6 +453,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       for (let attempt = 0; attempt < 60; attempt++) {
         if (token !== projectRequest) return;
         const status = await fetchCadJob(state.projectId, job.id);
+        if(token!==projectRequest)return;
         if (status.status !== 'PENDING') {
           if (status.status !== 'READY') throw new Error(status.error?.message || 'CAD preview generation failed.');
           set({ artifacts: [status, ...get().artifacts.filter((a) => a.id !== status.id)], cadJobStatus: 'READY' });
@@ -377,7 +463,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       }
       throw new Error('Preview generation is still pending. Reopen the project to check its saved status.');
     } catch (error) {
-      set({ cadJobStatus: 'FAILED', errorMessage: error instanceof Error ? error.message : String(error) });
+      if(token===projectRequest)set({ cadJobStatus: 'FAILED', errorMessage: error instanceof Error ? error.message : String(error) });
     }
   },
 }));
+
+export function recoveryDocument(state: ProjectState): RecoveryDocument {
+  return {requirements:state.requirementValues,configuration:state.projectConfiguration,
+    workspace:{editorTransforms:state.editorTransforms,schematicData:state.schematicData},baseRevisionId:state.currentRevisionId};
+}

@@ -757,6 +757,13 @@ projects = Table('projects', metadata,
     Column('archetype_version_id', UUID(), nullable=True),
     Column('current_revision_id', UUID(), nullable=True),
     Column('configuration', JSONB(astext_type=Text()), nullable=False, server_default=text("'{}'::jsonb")),
+    Column('description', TEXT(), nullable=False, server_default=text("''::text")),
+    Column('location', TEXT(), nullable=False, server_default=text("''::text")),
+    Column('last_opened_at', TIMESTAMP(timezone=True), nullable=True),
+    Column('deleted_at', TIMESTAMP(timezone=True), nullable=True),
+    Column('workspace', JSONB(astext_type=Text()), nullable=False, server_default=text("'{}'::jsonb")),
+    Column('recovery', JSONB(astext_type=Text()), nullable=True),
+    Column('recovery_version', INTEGER(), nullable=False, server_default=text('0')),
     Column('lock_version', INTEGER(), nullable=False, server_default=text('1')),
     ForeignKeyConstraint(['id', 'current_revision_id'], ['project_revisions.project_id', 'project_revisions.id'], name='fk_project_current_revision', **{'ondelete': 'RESTRICT', 'use_alter': True}),
     ForeignKeyConstraint(['archetype_version_id'], ['panel_archetype_versions.id'], name='projects_archetype_version_id_fkey', **{'ondelete': 'RESTRICT'}),
@@ -1292,3 +1299,5 @@ Projects.revisions = relationship(ProjectRevisions, foreign_keys=[project_revisi
 CemComponentInstances.terminals = relationship(CemTerminalInstances, viewonly=True)
 CadModelVersions.parameters = relationship(CadParameterDefinitions, viewonly=True)
 ValidationRuns.results = relationship(ValidationResults, viewonly=True)
+
+Index('ix_projects_recent', projects.c.last_opened_at.desc(), postgresql_where=projects.c.deleted_at.is_(None))

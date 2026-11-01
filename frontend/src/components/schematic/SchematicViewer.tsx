@@ -6,6 +6,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { DesignViewport, type DesignViewportHandle } from '../common/DesignViewport';
+import {useWorkspaceStore} from '../../stores/workspaceStore';
 import { GitBranch, Plus, TriangleAlert, X } from 'lucide-react';
 import { useProjectStore } from '../../stores/projectStore';
 import { buildSchematicGraph, validateSchematicGraph, type SchematicEdge, type SchematicGraphData,
@@ -60,21 +61,53 @@ const edgeTypes = { wire: WireEdge } as unknown as EdgeTypes;
 const wireClasses: WireClass[] = ['POWER', 'CONTROL', 'SIGNAL', 'NEUTRAL', 'PE'];
 const colors: Record<WireClass, string> = { POWER: '#EF4444', CONTROL: '#A78BFA', SIGNAL: '#F59E0B', NEUTRAL: '#3B82F6', PE: '#22C55E' };
 
-const SchematicCanvas: React.FC<{ data: SchematicGraphData }> = ({ data }) => {
+const SchematicCanvas: React.FC<{ data: SchematicGraphData;embedded?:boolean }> = ({ data,embedded=false }) => {
   const { selectObject, selectedObjectId } = useProjectStore();
   const viewportRef=useRef<DesignViewportHandle>(null);
+  const canvasHost=useRef<HTMLDivElement>(null);
   const flow=useReactFlow<SchematicNode,SchematicEdge>();
   const [zoomPercent,setZoomPercent]=useState(100);
   const [showProperties,setShowProperties]=useState(false);
   const fit=()=>void flow.fitView({padding:0.15,minZoom:0.02,maxZoom:1,duration:150});
+  useEffect(()=>useWorkspaceStore.subscribe((state,previous)=>{
+    const command=state.cameraCommand;
+    if(command===previous.cameraCommand||useProjectStore.getState().activeTab!=='schematic'||!command)return;
+    if(command.action==='fit')fit();
+    if(command.action==='fullscreen')void viewportRef.current?.enterFullscreen();
+  }),[]);
+  useEffect(()=>{
+    if(!canvasHost.current||typeof ResizeObserver==='undefined')return;
+    let frame=0;
+    const observer=new ResizeObserver(()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(fit);});
+    observer.observe(canvasHost.current);
+    return()=>{observer.disconnect();cancelAnimationFrame(frame);};
+  },[]);
   const initial = useMemo(() => buildSchematicGraph(data), [data]);
   const [nodes, setNodes, onNodesChange] = useNodesState<SchematicNode>(initial.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState<SchematicEdge>(initial.edges);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [wireFilter, setWireFilter] = useState<'ALL' | WireClass>('ALL');
   const draftSequence = useRef(0);
+  const edited = useRef(false);
+  const emitted = useRef<SchematicGraphData|null>(null);
+  useEffect(()=>{
+    if(!edited.current)return;
+    edited.current=false;
+    const document: SchematicGraphData={...data,
+      symbols:nodes.map(node=>({id:node.id,name:node.data.name,type:node.data.symbolType,category:node.data.category,
+        x:node.position.x,y:node.position.y,width:node.data.width,height:node.data.height,label:node.data.label,
+        terminals:node.data.terminals.map(t=>({...t,x:t.x+node.position.x,y:t.y+node.position.y}))})),
+      wires:edges.map(edge=>({id:edge.id,net_id:edge.data?.net_id||'',net_name:edge.data?.net_name||'',
+        from:edge.source,to:edge.target,from_terminal:edge.sourceHandle?.replace(/^source:/,'')||'',
+        to_terminal:edge.targetHandle?.replace(/^target:/,'')||'',wire_class:edge.data?.wire_class||'POWER',
+        color:edge.data?.color,svg_path:edge.data?.svg_path,waypoints:edge.data?.waypoints,crossings:edge.data?.crossings,junctions:edge.data?.junctions}))};
+    emitted.current=document;
+    useProjectStore.getState().setSchematicDraft(document);
+  },[nodes,edges]);
 
   useEffect(() => {
+    if(emitted.current===data)return;
+    edited.current=false;
     const graph = buildSchematicGraph(data);
     setNodes(graph.nodes);
     setEdges(graph.edges);
@@ -89,8 +122,9 @@ const SchematicCanvas: React.FC<{ data: SchematicGraphData }> = ({ data }) => {
 
   const onConnect = useCallback((connection: Connection) => {
     if (!connection.source || !connection.target || !connection.sourceHandle || !connection.targetHandle) return;
+    edited.current=true;
     draftSequence.current += 1;
-    const suffix = String(draftSequence.current).padStart(3, '0');
+    const suffix = crypto.randomUUID();
     const wireClass: WireClass = wireFilter === 'ALL' ? 'POWER' : wireFilter;
     setEdges((current) => addEdge({ ...connection, id: `DRAFT-CONN-${suffix}`, type: 'wire',
       data: { net_id: `NET-DRAFT-${suffix}`, net_name: `Draft net ${suffix}`, wire_class: wireClass,
@@ -98,8 +132,9 @@ const SchematicCanvas: React.FC<{ data: SchematicGraphData }> = ({ data }) => {
   }, [setEdges, wireFilter]);
 
   const addJunction = () => {
+    edited.current=true;
     draftSequence.current += 1;
-    const suffix = String(draftSequence.current).padStart(3, '0');
+    const suffix = crypto.randomUUID();
     const id = `DRAFT-JUNCTION-${suffix}`;
     setNodes((current) => [...current, { id, type: 'junction', position: { x: data.width / 2, y: data.height / 2 },
       data: { symbolId: id, label: `Draft junction ${suffix}`, name: 'Draft junction', symbolType: 'JUNCTION',
@@ -108,14 +143,15 @@ const SchematicCanvas: React.FC<{ data: SchematicGraphData }> = ({ data }) => {
 
   const updateSelectedEdge = (patch: Partial<SchematicEdgeData>) => {
     if (!selectedEdgeId) return;
+    edited.current=true;
     setEdges((current) => current.map((edge) => edge.id === selectedEdgeId ? {
       ...edge, data: { ...(edge.data || { net_id: '', net_name: '', wire_class: 'POWER', color: colors.POWER }), ...patch,
         color: patch.wire_class ? colors[patch.wire_class as WireClass] : (edge.data?.color || colors.POWER) },
     } : edge));
   };
 
-  return <div className="flex min-h-0 flex-1 flex-col gap-3">
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-900 p-3">
+  return <div className={embedded?"workspace-viewer":"flex min-h-0 flex-1 flex-col gap-3"}>
+    <div data-viewer-chrome className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-900 p-3">
       <div className="flex items-center gap-3"><div className="rounded-xl bg-blue-500/10 p-2 text-blue-400"><GitBranch className="h-5 w-5" /></div>
         <div><h3 className="text-sm font-bold text-slate-200">Interactive Electrical Schematic</h3>
           <p className="text-xs text-slate-400">React Flow · CEM IDs · terminal-level nets · schematic edits are drafts</p></div></div>
@@ -129,12 +165,16 @@ const SchematicCanvas: React.FC<{ data: SchematicGraphData }> = ({ data }) => {
       </div>
     </div>
 
-    <div className="relative grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_260px]">
-      <div className="relative min-h-0 overflow-hidden rounded-2xl border border-slate-800 bg-slate-950">
+    <div className="viewer-grid relative grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_260px]">
+      <div ref={canvasHost} className="viewer-canvas relative min-h-0 overflow-hidden rounded-2xl border border-slate-800 bg-slate-950">
         <DesignViewport controlRef={viewportRef} name="schematic" onExpandedChange={()=>requestAnimationFrame(fit)}>
         <div className="absolute left-3 top-3 z-10 rounded-lg border border-amber-500/30 bg-slate-950/90 px-2.5 py-1.5 text-[10px] text-amber-200">Draft graph · CEM connections and exports are unchanged</div>
+        {embedded&&<div className="camera-controls" role="toolbar" aria-label="Schematic tools">
+          <select aria-label="Filter schematic wire class" value={wireFilter} onChange={e=>setWireFilter(e.target.value as 'ALL'|WireClass)}><option value="ALL">All wires</option>{wireClasses.map(value=><option key={value} value={value}>{value}</option>)}</select>
+          <button onClick={addJunction}>Add junction</button>
+        </div>}
         <ReactFlow nodes={nodes.map(n=>({...n,selected:n.selected||n.id===selectedObjectId}))} edges={visibleEdges} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
-          onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect}
+          onNodesChange={changes=>{if(changes.some(c=>c.type!=='select'&&c.type!=='dimensions'))edited.current=true;onNodesChange(changes);}} onEdgesChange={changes=>{if(changes.some(c=>c.type!=='select'))edited.current=true;onEdgesChange(changes);}} onConnect={onConnect}
           onNodeClick={(_, node) => { selectObject(node.id); setSelectedEdgeId(null); }}
           onEdgeClick={(_, edge) => {setSelectedEdgeId(edge.id);selectObject(edge.id);}}
           onPaneClick={() => { setSelectedEdgeId(null); selectObject(null); }}
@@ -157,9 +197,9 @@ const SchematicCanvas: React.FC<{ data: SchematicGraphData }> = ({ data }) => {
         </DesignViewport>
       </div>
 
-      <aside className={`${showProperties?'flex':'hidden lg:flex'} absolute right-0 top-0 z-40 h-full w-64 overflow-auto lg:static lg:w-auto min-h-0 flex-col gap-3 rounded-2xl border border-slate-800 bg-slate-900 p-4`}>
+      {!embedded&&<aside className={`${showProperties?'flex':'hidden lg:flex'} absolute right-0 top-0 z-40 h-full w-64 overflow-auto lg:static lg:w-auto min-h-0 flex-col gap-3 rounded-2xl border border-slate-800 bg-slate-900 p-4`}>
         <div className="flex items-center justify-between"><h4 className="text-sm font-semibold text-slate-100">Electrical properties</h4>
-          {selectedEdge && <button aria-label="Delete selected wire" onClick={() => { setEdges((current) => current.filter((edge) => edge.id !== selectedEdgeId)); setSelectedEdgeId(null); }} className="text-slate-400 hover:text-red-300"><X className="h-4 w-4" /></button>}</div>
+          {selectedEdge && <button aria-label="Delete selected wire" onClick={() => { edited.current=true; setEdges((current) => current.filter((edge) => edge.id !== selectedEdgeId)); setSelectedEdgeId(null); }} className="text-slate-400 hover:text-red-300"><X className="h-4 w-4" /></button>}</div>
         {selectedEdge ? <>
           <div className="text-[10px] font-mono text-slate-500">{selectedEdge.id}</div>
           <label className="text-xs text-slate-400">Net ID<input aria-label="Net ID" value={selectedEdge.data?.net_id || ''} onChange={(event) => updateSelectedEdge({ net_id: event.target.value })}
@@ -182,13 +222,13 @@ const SchematicCanvas: React.FC<{ data: SchematicGraphData }> = ({ data }) => {
         <div className="mt-auto border-t border-slate-800 pt-3"><div className="mb-2 flex items-center gap-2 text-xs font-semibold text-slate-300"><TriangleAlert className="h-3.5 w-3.5 text-amber-400" />Draft rule checks <span className="ml-auto font-mono text-slate-500">{violations.length}</span></div>
           <div className="max-h-36 space-y-1 overflow-auto">{data.validation_results?.slice(0,4).map(v=><p key={v.id} className="text-amber-300">{v.message}</p>)}{violations.length ? violations.slice(0, 8).map((violation, index) => <div key={`${violation.objectId}-${violation.code}-${index}`} className={`rounded px-2 py-1.5 text-[10px] ${violation.severity === 'ERROR' ? 'bg-red-950/60 text-red-200' : 'bg-amber-950/50 text-amber-200'}`}>{violation.message}</div>) : <div className="text-[10px] text-emerald-300">No draft graph rule issues found.</div>}</div>
         </div>
-      </aside>
+      </aside>}
     </div>
   </div>;
 };
 
-export const SchematicViewer: React.FC = () => {
+export const SchematicViewer: React.FC<{embedded?:boolean}> = ({embedded=false}) => {
   const schematicData = useProjectStore((state) => state.schematicData) as SchematicGraphData | null;
   if (!schematicData) return <div className="p-12 text-center text-slate-500 font-mono text-sm">No schematic data loaded. Click "Generate Design" to build the schematic diagram.</div>;
-  return <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-950 p-4 md:p-6"><ReactFlowProvider><SchematicCanvas data={schematicData} /></ReactFlowProvider></div>;
+  return <div className={embedded?"workspace-viewer":"flex h-full min-h-0 flex-col overflow-hidden bg-slate-950 p-4 md:p-6"}><ReactFlowProvider><SchematicCanvas embedded={embedded} data={schematicData} /></ReactFlowProvider></div>;
 };

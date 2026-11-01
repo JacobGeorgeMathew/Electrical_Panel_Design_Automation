@@ -45,7 +45,7 @@ def create_app(database=None):
             'code':'PERSISTENCE_CONFLICT' if conflict else 'DATABASE_UNAVAILABLE',
             'message':'This operation conflicts with saved data.' if conflict else 'PostgreSQL is unavailable. Check the service and application migrations.'}})
     app.add_middleware(CORSMiddleware,allow_origins=['http://localhost:3000','http://127.0.0.1:3000','tauri://localhost','http://tauri.localhost','https://tauri.localhost'],
-        allow_credentials=True,allow_methods=['GET','POST','PATCH','PUT','OPTIONS'],allow_headers=['Content-Type'])
+        allow_credentials=True,allow_methods=['GET','POST','PATCH','PUT','DELETE','OPTIONS'],allow_headers=['Content-Type'])
     for module in (routes_projects,routes_requirements,routes_design,routes_schematic,routes_layout,routes_cad,routes_validation,routes_catalog,routes_assets):
         app.include_router(module.router)
     @app.get('/health')
