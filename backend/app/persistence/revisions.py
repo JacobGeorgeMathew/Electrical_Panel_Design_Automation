@@ -175,5 +175,5 @@ def write_revision(session,project,template,req_set,answers,result,manifest,file
             target_kind='CEM',target_key=c['id'],dependency_kind='SELECTED_SPECIFICATION',input_sha256=content_hash(c['component_version_id']),output_sha256=cem_hash))
     session.execute(insert(m.provenance).values(project_id=row['id'],project_revision_id=rid,subject_kind='DESIGN',subject_key=str(rid),
         source_kind='OPTIMIZER',source_ref=manifest['engine_version'],details={'manifest':manifest,'cem_sha256':cem_hash,'pdm_sha256':pdm_hash}))
-    repo.touch(row,current_revision_id=rid,configuration=project.get('configuration',{}))
+    repo.touch(row,current_revision_id=rid,configuration=project.get('configuration',{}),workspace={},recovery=None,recovery_version=row['recovery_version']+1)
     return {'revision_id':str(rid),'revision_no':number,'lock_version':row['lock_version']+1,'snapshot_sha256':revision_hash}

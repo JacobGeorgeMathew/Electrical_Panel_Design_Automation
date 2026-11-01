@@ -1,20 +1,47 @@
 from fastapi import APIRouter, Depends, Query
 from app.api.dependencies import get_service, get_session
-from app.models.api import ProjectCreate, ProjectUpdate, ProjectView, ExpectedVersion, AnswerSave, DesignPackage, RevisionCreate
+from app.models.api import ProjectCreate, ProjectUpdate, ProjectView, ExpectedVersion, AnswerSave, DesignPackage, RevisionCreate, RecoverySave, ProjectDuplicate, ProjectImport
 from app.persistence.repositories import ProjectRepository
 from app.persistence.repositories import identifier,serial
 from app.persistence import models as m
 from sqlalchemy import select
+from fastapi import Response
+from app.services.project_lifecycle import ProjectLifecycle
 
 router=APIRouter(prefix='/api/projects',tags=['projects'])
 
 @router.get('',response_model=list[ProjectView])
-def list_projects(page:int=Query(1,ge=1),page_size:int=Query(50,ge=1,le=100),session=Depends(get_session)):
-    return ProjectRepository(session).list(page,page_size)
+def list_projects(page:int=Query(1,ge=1),page_size:int=Query(50,ge=1,le=100),q:str=Query('',max_length=200),recent:bool=False,session=Depends(get_session)):
+    return ProjectRepository(session).list(page,page_size,q,recent)
 
 @router.post('',response_model=ProjectView,status_code=201)
 def create_project(data:ProjectCreate,service=Depends(get_service)):
     return service.create(data)
+
+@router.post('/import',response_model=ProjectView,status_code=201)
+def import_project(data:ProjectImport,service=Depends(get_service)):
+    return ProjectLifecycle(service).import_project(data)
+
+@router.post('/{project_id}/open',response_model=ProjectView)
+def opened(project_id:str,service=Depends(get_service)):
+    return ProjectLifecycle(service).opened(project_id)
+
+@router.delete('/{project_id}',status_code=204)
+def delete_project(project_id:str,data:ExpectedVersion,service=Depends(get_service)):
+    ProjectLifecycle(service).delete(project_id,data.expected_version)
+    return Response(status_code=204)
+
+@router.post('/{project_id}/duplicate',response_model=ProjectView,status_code=201)
+def duplicate_project(project_id:str,data:ProjectDuplicate,service=Depends(get_service)):
+    return ProjectLifecycle(service).duplicate(project_id,data)
+
+@router.get('/{project_id}/export')
+def export_project(project_id:str,service=Depends(get_service)):
+    return ProjectLifecycle(service).export(project_id)
+
+@router.put('/{project_id}/recovery',response_model=ProjectView)
+def recovery(project_id:str,data:RecoverySave,service=Depends(get_service)):
+    return ProjectLifecycle(service).recovery(project_id,data)
 
 @router.get('/{project_id}',response_model=ProjectView)
 def get_project(project_id:str,session=Depends(get_session)):

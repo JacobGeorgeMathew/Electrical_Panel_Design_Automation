@@ -32,10 +32,10 @@ export function buildSchematicGraph(data: SchematicGraphData): { nodes: Schemati
   const symbolById = new Map(data.symbols.map((symbol) => [symbol.id, symbol]));
   const nodes: SchematicNode[] = data.symbols.map((symbol) => ({
     id: symbol.id,
-    type: 'symbol', draggable: false, style: {width:symbol.width,height:symbol.height},
+    type: symbol.type==='JUNCTION'?'junction':'symbol', draggable: false, style: {width:symbol.width,height:symbol.height},
     position: { x: symbol.x, y: symbol.y },
     data: {
-      symbolId: symbol.id, label: symbol.label, name: symbol.name, symbolType: symbol.type,
+      junction:symbol.type==='JUNCTION', symbolId: symbol.id, label: symbol.label, name: symbol.name, symbolType: symbol.type,
       category: symbol.category, width: symbol.width, height: symbol.height,
       terminals: (symbol.terminals || []).map((terminal) => ({ ...terminal, x: terminal.x - symbol.x, y: terminal.y - symbol.y })), properties: { id: symbol.id, name: symbol.name,
         type: symbol.type, category: symbol.category, label: symbol.label },

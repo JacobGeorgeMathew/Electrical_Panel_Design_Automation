@@ -1,0 +1,30 @@
+The API was running, but its /ready check couldn’t confirm database readiness. The successful steps addressed three possible causes:
+
+- Variables loaded with source may not be exported to Python.
+- An already running backend cannot inherit environment variables loaded afterward.
+- The project-management update required the new 0004_projects database migration.
+
+Because those steps were performed together, we can’t say which was the sole cause.
+
+For future runs, start the backend from a terminal like this:
+
+cd /path/to/project/backend
+
+set -a
+source "/actual/path/to/backend_env"
+set +a
+
+.venv/bin/python -m app.persistence.manage initialize
+.venv/bin/python -m app.persistence.manage status
+
+.venv/bin/python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8731
+
+initialize safely applies only pending migrations. Confirm Ready: True, and keep that terminal running.
+
+In another terminal, start the frontend:
+
+cd /path/to/project/frontend
+npm run dev
+
+Make sure PostgreSQL is running first. Whenever database environment settings change, restart the backend; refreshing the browser alone won’t apply them.
+  Worked for 10s • 4:30 PM

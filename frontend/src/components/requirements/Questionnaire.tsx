@@ -29,7 +29,7 @@ export const Questionnaire: React.FC = () => {
     validationWarnings,
     setError,
     validateCurrentRequirements,
-    createNewProject, archetypes, isSaving, isLoadingProject
+    isSaving, isLoadingProject, pendingRecovery
   } = useProjectStore();
 
   const [suggestions,setSuggestions]=useState<RequirementSuggestions|null>(null);
@@ -37,9 +37,8 @@ export const Questionnaire: React.FC = () => {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loadingQuestions, setLoadingQuestions] = useState(true);
   const [questionAttempt, setQuestionAttempt] = useState(0);
-  const [selectedArchetype, setSelectedArchetype] = useState('DB');
-  const busy = isGenerating || isSaving || isLoadingProject;
-  const [projectName, setProjectName] = useState('New Distribution Board');
+  const selectedArchetype = useProjectStore(state=>state.archetype);
+  const busy = isGenerating || isSaving || isLoadingProject || !!pendingRecovery;
 
   useEffect(() => {
     const abort = new AbortController();
@@ -89,21 +88,9 @@ export const Questionnaire: React.FC = () => {
           </p>
         </div>
 
-        <label className="text-xs text-slate-400">New project archetype
-          <select aria-label="New project archetype" value={selectedArchetype} disabled={busy}
-            onChange={e=>setSelectedArchetype(e.target.value)} className="ml-2 rounded border border-slate-700 bg-slate-950 p-2">
-            {archetypes.map(a=><option key={a.version_id} value={a.code} disabled={!a.supported}>{a.name} · v{a.version_no}{!a.supported?' (reference only)':''}</option>)}
-          </select>
-        </label>
       </div>
 
       <div className="flex flex-wrap items-center gap-3 bg-slate-900/70 border border-slate-800 p-4 rounded-xl">
-        <input value={projectName} onChange={(e) => setProjectName(e.target.value)} aria-label="New project name"
-          className="min-w-64 flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm" />
-        <button onClick={() => createNewProject(projectName, selectedArchetype, archetypes.find(a=>a.code===selectedArchetype)?.version_id)} disabled={busy || !projectName.trim() || !archetypes.some(a=>a.code===selectedArchetype&&a.supported)}
-          className="px-4 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 border border-slate-700 rounded-lg text-xs font-semibold">
-          Create DB Project
-        </button>
         <button onClick={handleValidate} disabled={busy || !projectId}
           className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg text-xs font-semibold">
           Validate & Generate

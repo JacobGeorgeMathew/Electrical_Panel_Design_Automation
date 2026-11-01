@@ -47,6 +47,7 @@ class ProjectService:
                 raise PersistenceError('PROJECT_EXISTS','Project identifier already exists.',409)
             pid=repo.create(data.name,template['archetype_version_id'],data.id)
             row=repo.row(pid)
+            s.execute(update(m.projects).where(m.projects.c.id==row['id']).values(description=data.description,location=data.location,last_opened_at=datetime.now(timezone.utc)))
             reqs=self.validate(template,pid,data.requirements)
             repo.save_requirements(row,template,reqs,data.requirements)
             return repo.get(pid)
@@ -54,6 +55,12 @@ class ProjectService:
     def update(self,key,data):
         with self.db.sessions.begin() as s:
             repo=ProjectRepository(s);row=repo.check_version(key,data.expected_version)
+            if data.expected_recovery_version is not None and row['recovery_version']!=data.expected_recovery_version:
+                raise PersistenceError('RECOVERY_CONFLICT','Another session changed this project recovery checkpoint. Reopen before saving.',409)
+            if data.requirements is None and data.configuration is None and data.workspace is None:
+                changes={field:getattr(data,field) for field in ('name','description','location') if getattr(data,field) is not None}
+                repo.touch(row,**changes)
+                return repo.get(key)
             project=repo.get(key)
             catalog=CatalogRepository(s,self.assets)
             template=catalog.template(project['archetype'],project['archetype_version_id'])
@@ -65,6 +72,9 @@ class ProjectService:
             changes={}
             if data.name is not None: changes['name']=data.name
             if data.configuration is not None: changes['configuration']=data.configuration
+            for field in ('description','location','workspace'):
+                if getattr(data,field) is not None: changes[field]=getattr(data,field)
+            changes.update(recovery=None,recovery_version=row['recovery_version']+1)
             repo.touch(row,**changes)
             return repo.get(key)
 

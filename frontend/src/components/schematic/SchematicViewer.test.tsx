@@ -26,3 +26,19 @@ it('keeps zoom and fit controls inside the canvas so they remain available in fu
  expect(pane.getAttribute('data-expanded')).toBe('true');
  expect(pane.querySelector('[aria-label="Zoom in schematic"]')).not.toBeNull();
 });
+
+it('observes the canvas container and refits after workspace panel resizing',()=>{
+ let resized!:ResizeObserverCallback;
+ const observe=vi.fn(),disconnect=vi.fn();
+ vi.stubGlobal('ResizeObserver',class{constructor(callback:ResizeObserverCallback){resized=callback;}observe=observe;disconnect=disconnect;});
+ vi.stubGlobal('requestAnimationFrame',(callback:FrameRequestCallback)=>{callback(0);return 1;});
+ vi.stubGlobal('cancelAnimationFrame',vi.fn());
+ act(()=>root.render(<SchematicViewer embedded/>));
+ expect(observe).toHaveBeenCalledOnce();
+ expect(host.querySelector('aside')).toBeNull();
+ act(()=>resized([],{} as ResizeObserver));
+ expect(flow.fitView).toHaveBeenCalled();
+ act(()=>root.render(<div/>));
+ expect(disconnect).toHaveBeenCalledOnce();
+ vi.unstubAllGlobals();
+});
