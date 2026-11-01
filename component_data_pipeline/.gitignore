@@ -1,0 +1,12 @@
+.venv/
+.scratch_demo/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+data/raw/**
+data/staging.sqlite
+data/staging.sqlite-*
+data/exports/**
+data/manual/inbox/**
+!data/manual/inbox/.gitkeep
+!data/exports/.gitkeep

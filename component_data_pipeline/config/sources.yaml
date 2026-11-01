@@ -1,0 +1,105 @@
+{
+  "defaults": {
+    "user_agent": "ElectricalPanelComponentCatalog/0.1 (academic prototype; contact: project maintainer)",
+    "requests_per_domain": 0.5,
+    "timeout_seconds": 25,
+    "max_retries": 3,
+    "stop_after_forbidden_or_rate_limited": 2
+  },
+  "sources": {
+    "schneider_india": {
+      "owner": "Schneider Electric",
+      "base_url": "https://www.se.com/in/en/",
+      "categories": [
+        "MCCB",
+        "MCB",
+        "RCCB",
+        "RCBO",
+        "SPD",
+        "BUSBAR",
+        "ENCLOSURE",
+        "TERMINAL",
+        "DIN_RAIL"
+      ],
+      "seed_urls": [
+        "https://www.se.com/in/en/download/document/Acti9_Product_Catalouge/"
+      ],
+      "permission": "PERMISSION_REQUIRED",
+      "access_note": "Blocked pending written permission/API onboarding. Robots.txt remains UNVERIFIED."
+    },
+    "abb": {
+      "owner": "ABB Electrification",
+      "base_url": "https://www.abb.com/global/en/areas/electrification/low-voltage/",
+      "categories": [
+        "MCCB",
+        "MCB",
+        "RCCB",
+        "RCBO",
+        "SPD",
+        "BUSBAR",
+        "NEUTRAL_BAR",
+        "EARTH_BAR",
+        "TERMINAL",
+        "DIN_RAIL",
+        "ENCLOSURE"
+      ],
+      "seed_urls": [
+        "https://www.abb.com/global/en/areas/electrification/low-voltage/din-rail-devices/miniature-circuit-breakers"
+      ],
+      "permission": "PERMISSION_REQUIRED",
+      "access_note": "Blocked pending license/permission for product data. Robots.txt remains UNVERIFIED."
+    },
+    "havells_india": {
+      "owner": "Havells India",
+      "base_url": "https://www.havells.com/",
+      "categories": [
+        "MCCB",
+        "MCB",
+        "RCCB",
+        "RCBO",
+        "SPD",
+        "BUSBAR",
+        "ENCLOSURE"
+      ],
+      "seed_urls": [
+        "https://www.havells.com/"
+      ],
+      "permission": "UNVERIFIED",
+      "access_note": "Blocked pending clarification of terms and robots.txt."
+    },
+    "lt_india": {
+      "owner": "L&T / Lauritz Knudsen",
+      "base_url": "https://www.larsentoubro.com/",
+      "categories": [
+        "MCCB",
+        "MCB",
+        "RCCB",
+        "RCBO",
+        "SPD",
+        "BUSBAR",
+        "ENCLOSURE"
+      ],
+      "seed_urls": [
+        "https://www.larsentoubro.com/"
+      ],
+      "permission": "UNVERIFIED",
+      "access_note": "Blocked pending clarification of terms and robots.txt."
+    },
+    "siemens": {
+      "owner": "Siemens",
+      "base_url": "https://product-information-hub.siemens.cloud/",
+      "categories": [
+        "MCCB",
+        "MCB",
+        "RCCB",
+        "RCBO",
+        "SPD",
+        "BUSBAR",
+        "ENCLOSURE"
+      ],
+      "seed_urls": [],
+      "permission": "FORBIDDEN",
+      "access_note": "Website scraping/extraction prohibited by reviewed Siemens terms. API remains unavailable pending separately reviewed terms/key."
+    }
+  }
+}
