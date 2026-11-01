@@ -1,0 +1,98 @@
+.startup-page {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  isolation: isolate;
+  overflow: hidden;
+  background-color: #100c28;
+  background-size: cover;
+  background-position: center;
+  color: #f3efff;
+  font-family: Inter, system-ui, sans-serif;
+}
+
+.startup-shade {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(90deg, rgba(9, 6, 25, .92), rgba(13, 8, 36, .67) 45%, rgba(13, 8, 36, .14)),
+    linear-gradient(0deg, rgba(6, 6, 18, .78), transparent 60%);
+}
+
+.startup-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 32px clamp(24px, 6vw, 96px);
+  font-size: 14px;
+  font-weight: 750;
+  letter-spacing: 2px;
+}
+
+.startup-brand .bolt-loader { width: 20px; height: 25px; }
+.startup-brand-light { font-weight: 400; color: #c1b6db; }
+.startup-brand-divider { width: 1px; height: 19px; background: #a995d64d; margin: 0 8px; }
+.startup-brand-description { font-weight: 400; font-size: 11px; letter-spacing: .4px; color: #c0b4d8; }
+
+.startup-content {
+  width: min(740px, 100%);
+  margin: auto 0;
+  padding: 48px clamp(24px, 6vw, 96px) 64px;
+}
+
+.startup-eyebrow { color: #bb9fea; font-size: 10px; font-weight: 600; letter-spacing: 2px; }
+.startup-content h1 { margin: 22px 0; font-size: clamp(44px, 6.2vw, 82px); line-height: 1.07; font-weight: 600; letter-spacing: -3px; }
+.startup-content h1 span { color: #c6a8f8; }
+.startup-description { max-width: 390px; color: #c0b6d2; font-size: 15px; line-height: 1.8; }
+
+.startup-connection {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  max-width: 480px;
+  margin-top: 42px;
+  padding: 20px;
+  border: 1px solid #a98ad32e;
+  border-radius: 8px;
+  background: rgba(15, 10, 34, .7);
+  backdrop-filter: blur(10px);
+}
+
+.startup-bolt { width: 35px; height: 42px; color: #c7a5ff; }
+.startup-connection > div { flex: 1; min-width: 0; }
+.startup-connection h2 { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+.startup-connection p { color: #ac9cbf; font-size: 11px; line-height: 1.8; }
+.startup-connection--error { align-items: flex-start; border-color: #dc948650; }
+.startup-connection--error h2 { color: #f3bcaf; }
+.startup-api { margin-top: 10px; overflow-wrap: anywhere; }
+.startup-connection button { margin-top: 14px; padding: 8px 13px; border-radius: 4px; background: #7952b4; color: white; font-size: 12px; }
+.startup-connection button:hover { background: #9367d1; }
+.startup-connection button:focus-visible { outline: 2px solid #e3d2ff; outline-offset: 4px; }
+.startup-connection button span { margin-left: 12px; }
+.startup-progress {
+  position: fixed;
+  inset: auto 0 0;
+  z-index: 1;
+  overflow: hidden;
+  height: 5px;
+  background: #8265ae33;
+}
+.startup-progress span { display: block; height: 100%; width: 36%; background: linear-gradient(90deg, #7952b4, #d4b6ff, #a978ef); box-shadow: 0 0 14px #bd93ff88; animation: startup-travel 1.8s ease-in-out infinite; }
+.startup-footer { display: flex; justify-content: space-between; gap: 20px; padding: 24px clamp(24px, 6vw, 96px); color: #aa9abb; font-size: 9px; letter-spacing: 2px; }
+.startup-footer > span:last-child { display: flex; align-items: center; gap: 12px; letter-spacing: .4px; }
+.startup-footer i { height: 3px; width: 3px; background: #aa8bc9; border-radius: 50%; }
+
+@keyframes startup-travel { from { transform: translateX(-110%); } to { transform: translateX(390%); } }
+@media (max-width: 600px) {
+  .startup-page { background-position: 42% center; }
+  .startup-shade { background: linear-gradient(90deg, #0c0825e8, #130b31a8), linear-gradient(0deg, #070611cc, transparent); }
+  .startup-brand-description, .startup-brand-divider { display: none; }
+  .startup-content { padding-top: 28px; padding-bottom: 36px; }
+  .startup-content h1 { letter-spacing: -2px; }
+  .startup-connection { padding: 16px; gap: 14px; margin-top: 30px; }
+  .startup-footer { flex-direction: column; font-size: 8px; gap: 8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .startup-progress span { animation: none; width: 100%; opacity: .65; }
+}

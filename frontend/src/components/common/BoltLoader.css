@@ -1,0 +1,66 @@
+.bolt-loader {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 30px;
+  flex-shrink: 0;
+  color: #d8c3ff;
+  vertical-align: middle;
+}
+
+.bolt-loader svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.bolt-loader__outline {
+  fill: currentColor;
+  fill-opacity: .12;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-opacity: .5;
+}
+
+.bolt-loader__charge {
+  fill: currentColor;
+}
+
+.bolt-loader__spark {
+  stroke: #fff;
+  stroke-width: 1.1;
+  stroke-linecap: round;
+  stroke-opacity: 0;
+}
+
+.bolt-loader--animated .bolt-loader__charge {
+  animation: bolt-charge 1.65s ease-in-out infinite;
+  filter: drop-shadow(0 0 5px currentColor);
+}
+
+.bolt-loader--animated .bolt-loader__spark {
+  stroke-dasharray: 16 84;
+  animation: bolt-spark 1.65s linear infinite;
+}
+
+@keyframes bolt-charge {
+  0% { clip-path: inset(100% 0 0 0); opacity: .3; }
+  55%, 72% { clip-path: inset(0 0 0 0); opacity: 1; }
+  100% { clip-path: inset(0 0 0 0); opacity: .25; }
+}
+
+@keyframes bolt-spark {
+  0% { stroke-dashoffset: 100; stroke-opacity: 0; }
+  25%, 75% { stroke-opacity: 1; }
+  100% { stroke-dashoffset: 0; stroke-opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bolt-loader--animated .bolt-loader__charge,
+  .bolt-loader--animated .bolt-loader__spark {
+    animation: none;
+    filter: none;
+  }
+}
