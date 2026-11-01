@@ -1,0 +1,21 @@
+{
+  "canonical": {
+    "current_rating": "A",
+    "breaking_capacity": "kA",
+    "width": "mm",
+    "height": "mm",
+    "depth": "mm",
+    "heat_loss": "W",
+    "voltage_rating": "V",
+    "weight": "g",
+    "price": "currency-tagged amount"
+  },
+  "dimension_axis_order": {
+    "default": [
+      "width",
+      "height",
+      "depth"
+    ],
+    "note": "Do not infer a vendor's dimension axis order. Set per source after verifying its drawing convention."
+  }
+}
