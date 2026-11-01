@@ -1,9 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useProjectStore } from '../../stores/projectStore';
 import { fetchQuestionnaire, fetchArchetype, fetchRequirementSuggestions } from '../../api/client';
 import type { Question, RequirementSuggestions } from '../../types/api';
 import { EnclosureConfigurator } from '../projects/EnclosureConfigurator';
-import { Sliders, CheckCircle2, AlertTriangle, Zap, ArrowUpRight, Cpu } from 'lucide-react';
+import {BoltLoader} from '../common/BoltLoader';
+import './Questionnaire.css';
+import { Sliders, CheckCircle2, AlertTriangle, Cpu } from 'lucide-react';
 
 const dependencyMatches = (dep: any, value: any) => {
   switch (dep.operator) {
@@ -38,7 +40,10 @@ export const Questionnaire: React.FC = () => {
   const [loadingQuestions, setLoadingQuestions] = useState(true);
   const [questionAttempt, setQuestionAttempt] = useState(0);
   const selectedArchetype = useProjectStore(state=>state.archetype);
-  const busy = isGenerating || isSaving || isLoadingProject || !!pendingRecovery;
+  const [submissionPhase, setSubmissionPhase] = useState<'validating' | 'generating' | null>(null);
+  const submitting = useRef(false);
+  const isProcessing = submissionPhase !== null || isGenerating;
+  const busy = isProcessing || isSaving || isLoadingProject || !!pendingRecovery;
 
   useEffect(() => {
     const abort = new AbortController();
@@ -72,7 +77,20 @@ export const Questionnaire: React.FC = () => {
   };
 
   const handleValidate = async () => {
-    if (await validateCurrentRequirements()) await runDesignPipeline();
+    if (submitting.current || busy || !projectId) return;
+    submitting.current = true;
+    setSubmissionPhase('validating');
+    try {
+      if (await validateCurrentRequirements() && useProjectStore.getState().projectId === projectId) {
+        setSubmissionPhase('generating');
+        await runDesignPipeline();
+      }
+    } catch (error) {
+      setError(error instanceof Error ? error.message : String(error));
+    } finally {
+      submitting.current = false;
+      setSubmissionPhase(null);
+    }
   };
 
   return (
@@ -91,10 +109,14 @@ export const Questionnaire: React.FC = () => {
       </div>
 
       <div className="flex flex-wrap items-center gap-3 bg-slate-900/70 border border-slate-800 p-4 rounded-xl">
-        <button onClick={handleValidate} disabled={busy || !projectId}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg text-xs font-semibold">
-          Validate & Generate
+        <button onClick={handleValidate} disabled={busy || !projectId} aria-busy={isProcessing}
+          className="requirements-generation-button px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg text-xs font-semibold">
+          {isProcessing && <BoltLoader />}
+          {submissionPhase === 'validating' ? 'Validating requirements…' : isProcessing ? 'Generating design…' : 'Validate & Generate'}
         </button>
+        {isProcessing && <span role="status" aria-live="polite" className="requirements-generation-status">
+          {submissionPhase === 'validating' ? 'Checking your electrical requirements…' : 'Building your electrical panel design…'}
+        </span>}
       </div>
 
       {(errorMessage || validationErrors.length > 0) && (
