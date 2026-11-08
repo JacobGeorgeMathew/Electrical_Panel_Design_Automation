@@ -1,1 +1,0 @@
-"""Electrical component data pipeline."""
