@@ -14,9 +14,9 @@ export function LoadingPage({error, apiBase, onRetry}: LoadingPageProps) {
       <div className="startup-shade" aria-hidden="true" />
       <header className="startup-brand">
         <BoltLoader animated={false} />
-        <span>PANEL<span className="startup-brand-light">STUDIO</span></span>
+        <span>PANEL<span className="startup-brand-light">FLOW</span></span>
         <span className="startup-brand-divider" />
-        <span className="startup-brand-description">Electrical panel engineering</span>
+        <span className="startup-brand-description">An Integrated Platform for Electrical Panel Design Automation</span>
       </header>
 
       <section className="startup-content" aria-labelledby="startup-title">

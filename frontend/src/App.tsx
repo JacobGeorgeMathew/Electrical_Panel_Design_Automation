@@ -4,7 +4,7 @@ import MainApp from "./MainApp";
 import { LoadingPage } from "./components/loading/LoadingPage";
 import { API_BASE } from "./api/config";
 
-export const MINIMUM_LOADING_MS = 8000;
+export const MINIMUM_LOADING_MS = 5000;
 
 export default function App() {
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
