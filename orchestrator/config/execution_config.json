@@ -1,0 +1,15 @@
+{
+  "project_repository_root": "../..",
+  "lifecycle_path": "planning/development_lifecycle.json",
+  "schema_path": "planning/schema.json",
+  "state_path": "planning/execution_state.json",
+  "history_path": "planning/execution_history.jsonl",
+  "reports_dir": "planning/task_reports",
+  "model_config_path": "orchestrator/config/agent_model_config.json",
+  "approval_behavior": "on-request",
+  "show_dry_run_on_startup": true,
+  "require_launch_confirmation": true,
+  "stop_after_failed_task": true,
+  "stop_after_incomplete_report": true,
+  "scheduling_policy": "strict"
+}

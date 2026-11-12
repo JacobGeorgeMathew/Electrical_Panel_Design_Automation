@@ -1,0 +1,16 @@
+# Intended virtual environment
+/.venv/
+
+# Environment accidentally created alongside the orchestrator source
+/bin/
+/lib/
+/lib64
+/include/
+/share/
+/pyvenv.cfg
+
+# Python caches and local runtime lock
+__pycache__/
+*.py[cod]
+.pytest_cache/
+/.execution.lock
