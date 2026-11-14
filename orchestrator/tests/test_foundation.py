@@ -16,9 +16,37 @@ from .support import Harness, ROOT
 class LifecycleTests(Harness):
     def test_real_lifecycle_schema_and_order(self):
         actual = load_lifecycle(ROOT / "planning/development_lifecycle.json", ROOT / "planning/schema.json")
-        self.assertEqual(len(actual.tasks), 118)
+        self.assertEqual(len(actual.tasks), 119)
         self.assertEqual([t["id"] for _, _, t in actual.ordered[:5]], [f"P0-T0{i}" for i in range(1, 6)])
-        self.assertEqual(actual.forward_dependencies, [("P2-T10", "P2-T12"), ("P2-T11", "P2-T12")])
+        self.assertEqual(actual.forward_dependencies, [])
+        self.assertEqual(actual.tasks["P0-T05"]["verification_profiles"], ["document_review"])
+        self.assertIn("P5-T00", actual.tasks["P5-T01"]["dependencies"])
+        self.assertIn("native_cad", actual.tasks["P5-T00"]["verification_profiles"])
+        self.assertTrue(all(t["status"] == "deferred" for t in actual.tasks.values() if t["id"].startswith("P8-")))
+
+    def test_actual_plan_references_and_phase_coverage(self):
+        actual = load_lifecycle(ROOT / "planning/development_lifecycle.json", ROOT / "planning/schema.json")
+        ids = set(actual.tasks)
+        def references(value):
+            if isinstance(value, dict):
+                for key, child in value.items():
+                    if key in {"task_ids", "required_task_ids", "gate_task_ids"}:
+                        self.assertTrue(set(child) <= ids, (key, child))
+                    elif key in {"gate_task_id", "exit_task_id"}:
+                        self.assertIn(child, ids)
+                    references(child)
+            elif isinstance(value, list):
+                for child in value:
+                    references(child)
+        references(actual.data)
+        for phase in actual.data["phases"]:
+            covered = {phase["exit_task_id"]}
+            while True:
+                expanded = covered | {dep for tid in covered for dep in actual.tasks[tid]["dependencies"]}
+                if expanded == covered:
+                    break
+                covered = expanded
+            self.assertTrue({t["id"] for m in phase["milestones"] for t in m["tasks"]} <= covered)
 
     def test_bad_json_and_duplicate_json_keys(self):
         for raw in ("{", '{"x": 1, "x": 2}', '{"x": NaN}'):

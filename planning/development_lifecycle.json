@@ -248,16 +248,16 @@
             },
             {
               "id": "P0-T05",
-              "title": "Evaluate native geometry integration using a bounded spike",
+              "title": "Complete native geometry investigation and register qualification blockers",
               "type": "spike",
               "status": "planned",
               "assigned_agent": "cad_kernel_engineer",
               "dependencies": ["P0-T03"],
               "planned_outputs": ["docs/architecture/geometry-kernel-evaluation.md","backend/tests/fixtures/cad_reference/"],
-              "implementation_steps": ["Compare existing FreeCAD script path with a pinned headless FreeCAD worker and direct OCCT alternative for one enclosure, mounted part and routed wire.","Execute representative STEP export/reopen if dependencies are available; record packaging, licenses, memory/time and failure isolation. Mark unavailable execution unverified."],
-              "acceptance_criteria": ["Recommendation names one adapter path, exact environment and unit/identity mapping.","Native success is evidenced by reopened STEP, or an explicit unresolved prerequisite blocks later native implementation."],
-              "verification_profiles": ["native_cad","document_review"],
-              "human_input": "Provide supported OS access and approve external kernel licensing/distribution where required.",
+              "implementation_steps": ["Review the existing comparison, pinned runtime provenance and retained native experiment evidence; preserve every prior report and failed result. Run a bounded experiment only if evidence is missing and local runtime permission is available.","Record the adapter recommendation, unit/identity mapping, measured outcomes, limitations and unresolved issues with downstream owners. An unavailable or failing native experiment is a valid research outcome, never a native_cad PASS.","Link exporter pivot defect P0-T05-NATIVE-001 to mandatory P5-T00 correction and qualification. Track semantic identity under P5-T05/P5-T06, production isolation under P5-T02 and distribution under P7-T03."],
+              "acceptance_criteria": ["Recommendation names one adapter path, exact observed or proposed environment and unit/identity mapping; executed results are distinguishable from proposals.","The evidence review records native PASS, FAIL or NOT_RUN honestly, preserves evidence and assigns unresolved issues to mandatory downstream qualification tasks. Expected values and tolerances are not relaxed to hide failures.","Completion qualifies the investigation only, not native geometry, distribution or engineering release. P5-T00 must pass before native implementation proceeds."],
+              "verification_profiles": ["document_review"],
+              "human_input": "Confirm permission to review existing local evidence. New native execution requires local runtime permission; redistribution remains a later release gate.",
               "input_files": ["backend/app/services/cad_engine.py","backend/app/services/panel_geometry.py","backend/panel-backend.spec","frontend/src-tauri/tauri.conf.json"]
             },
             {
@@ -268,10 +268,10 @@
               "assigned_agent": "architecture_lead",
               "dependencies": ["P0-T03","P0-T04","P0-T05"],
               "planned_outputs": ["docs/decisions/approved-product-scope.md"],
-              "implementation_steps": ["Present DB-only MVP, Save/Recompute/Publish UX, legacy migration strategy, local desktop default, supported OS, kernel recommendation and reference board limits.","Request explicit product-owner choices; recommend modular monolith, PostgreSQL, existing editors, custom typed operations and isolated geometry worker."],
+              "implementation_steps": ["Present DB-only MVP, Save/Recompute/Publish UX, legacy migration strategy, local desktop default, supported OS, conditional kernel recommendation and reference board limits.","Request explicit product-owner choices; recommend modular monolith, PostgreSQL, existing editors, custom typed operations and isolated geometry worker. Review P0-T05 findings and explicitly exclude unqualified native STEP from the MVP.","Record whether kernel redistribution is in scope now; deferral retains P7-T03 distribution approval and P5-T00 native qualification. Product scope approval cannot clear these gates."],
               "acceptance_criteria": ["Product owner records approved scope and document semantics, deployment mode, supported platforms and initial performance targets.","Selecting hosted multi-user deployment requires a separately approved identity/authorization backlog before hosted exposure; it is not covered by local-session protection."],
               "verification_profiles": ["document_review"],
-              "approver": "Product owner; technical lead; license owner for kernel distribution",
+              "approver": "Product owner and technical lead; license owner only if kernel distribution is approved in this decision",
               "decision_id": "D01",
               "input_files": ["ARCHITECTURE_ASSESSMENT.md","docs/PROJECT_LIFECYCLE.md"]
             },
@@ -283,23 +283,23 @@
               "assigned_agent": "electrical_engineering_agent",
               "dependencies": ["P0-T01","P0-T04"],
               "planned_outputs": ["docs/architecture/electrical-semantics-adr.md"],
-              "implementation_steps": ["Define conductor edges versus equipotential nets, terminal equivalence, phase/protective-earth boundaries and graphical junction semantics for DB.","Define PASS/FAIL/UNRESOLVED/NOT_APPLICABLE aggregation, required-check scopes and prototype-preview versus engineering-release labels."],
+              "implementation_steps": ["Define conductor edges versus equipotential nets, terminal equivalence, phase/protective-earth boundaries and graphical junction semantics for DB.","Define PASS/FAIL/UNRESOLVED/NOT_APPLICABLE aggregation, required-check scopes and prototype-preview versus engineering-release labels.","Prepare reviewable examples and mark proposed semantics as awaiting P0-T08 qualified human approval. Completing this document does not authorize implementation."],
               "acceptance_criteria": ["Examples cover shared busbar terminals, cross-phase rejection and graphical crossings without electrical junctions.","Missing bend/diameter/earth data cannot satisfy an applicable required check."],
-              "verification_profiles": ["contract","engineering_review"],
+              "verification_profiles": ["contract","document_review"],
               "input_files": ["backend/app/services/netlist_engine.py","backend/app/services/graph_engine.py","backend/app/services/wire_geometry.py","backend/app/services/validation_engine.py"]
             },
             {
               "id": "P0-T08",
-              "title": "Approve bounded electrical semantics and required checks",
+              "title": "Accept bounded electrical semantics for the academic prototype",
               "type": "human_gate",
               "status": "awaiting_future_approval",
               "assigned_agent": "electrical_engineering_agent",
               "dependencies": ["P0-T07"],
               "planned_outputs": ["docs/decisions/approved-electrical-semantics.md"],
-              "implementation_steps": ["Obtain qualified engineer review of reference connectivity cases, validation applicability and constraints allowed for manual editing.","Record unsupported conditions and evidence needed for later method and catalog approval."],
-              "acceptance_criteria": ["Named reviewer signs net/conductor interpretation and required-check matrix.","Prototype constraints remain explicit; approval does not claim certification or approve unreviewed calculation methods."],
-              "verification_profiles": ["engineering_review"],
-              "approver": "Qualified electrical engineer designated by product owner",
+              "implementation_steps": ["Record JacobGM's explicit acceptance of the academic prototype documentation based on their attestation that Josh, a fourth-year electrical engineering student, reviewed and approved the documents on 2026-11-14; retain net/conductor interpretation, required checks and manual-edit limits in D02.","Record unsupported conditions and evidence needed for later method and catalog approval; explicitly defer qualified electrical engineering review and preserve D03/P4-T03 and D04/P4-T16 authority. This academic acceptance does not establish engineering applicability or release eligibility."],
+              "acceptance_criteria": ["Product owner JacobGM explicitly accepts the academic prototype decision packet based on their attestation of Josh's student peer review; the decision records reviewer role/date, approval provenance, and deferred qualified engineering review without fabricating Josh's signature or independently worked evidence.","Prototype constraints remain explicit; approval does not claim certification or approve unreviewed calculation methods."],
+              "verification_profiles": ["document_review"],
+              "approver": "JacobGM, product owner, for academic prototype acceptance only; qualified electrical engineering approval deferred",
               "decision_id": "D02",
               "input_files": ["backend/app/models/electrical_graph.py","backend/app/models/cem.py"]
             }
@@ -662,6 +662,19 @@
               "input_files": ["frontend/src/api/client.ts","frontend/src/stores/projectStore.ts","frontend/src/stores/workspaceStore.ts","frontend/src/components/workspace/useWorkspaceCommands.ts"]
             },
             {
+              "id": "P2-T12",
+              "title": "Bootstrap isolated real-browser command test harness",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "quality_engineer",
+              "dependencies": ["P2-T09"],
+              "planned_outputs": ["frontend/e2e/","frontend/playwright.config.ts"],
+              "implementation_steps": ["Add one browser automation dependency only for interactions jsdom cannot prove; provide isolated seeded backend fixtures and repeatable startup/cleanup.","Use existing viewport smoke checks and the P2-T09 command client with prerequisite backend APIs to prove the harness runs before P2-T10/P2-T11 bindings exist.","Provide reusable fixtures/helpers for picking, gestures, conflicts and save/reopen. P2-T10/P2-T11 add feature-specific tests; P2-T14 owns final integrated cross-view acceptance."],
+              "acceptance_criteria": ["Harness smoke tests run repeatably without developer database state and clean up isolated fixtures.","A real browser loads the representative viewport and exercises the implemented command client/API path; no acceptance depends on bindings delivered by P2-T10/P2-T11.","Documented fixtures and commands support later cross-view tests; pending feature tests are not counted as passing."],
+              "verification_profiles": ["browser","frontend_build"],
+              "input_files": ["frontend/package.json","frontend/src/components/common/DesignViewport.tsx","backend/tests/conftest.py"]
+            },
+            {
               "id": "P2-T10",
               "title": "Connect 2D, 3D and inspector transforms to operations",
               "type": "implementation",
@@ -688,19 +701,6 @@
               "input_files": ["frontend/src/components/schematic/SchematicViewer.tsx","frontend/src/components/schematic/schematicGraph.ts","frontend/src/components/catalog/CatalogBrowser.tsx"]
             },
             {
-              "id": "P2-T12",
-              "title": "Add real-browser command and cross-view acceptance harness",
-              "type": "implementation",
-              "status": "planned",
-              "assigned_agent": "quality_engineer",
-              "dependencies": ["P2-T09"],
-              "planned_outputs": ["frontend/e2e/","frontend/playwright.config.ts"],
-              "implementation_steps": ["Add one browser automation dependency only for interactions jsdom cannot prove; provide isolated seeded backend fixtures.","Cover picking, gesture grouping, conflict handling and save/reopen using actual network contracts and representative WebGL rendering."],
-              "acceptance_criteria": ["Harness runs repeatably without developer database state.","Tests fail if the editor only changes a mesh overlay while saved PDM remains unchanged."],
-              "verification_profiles": ["browser","frontend_build"],
-              "input_files": ["frontend/package.json","frontend/src/components/common/DesignViewport.tsx","backend/tests/conftest.py"]
-            },
-            {
               "id": "P2-T13",
               "title": "Adapt automatic generation to proposed operation batches",
               "type": "implementation",
@@ -721,7 +721,7 @@
               "assigned_agent": "quality_engineer",
               "dependencies": ["P2-T10","P2-T11","P2-T12","P2-T13"],
               "planned_outputs": ["docs/verification/phase-2-acceptance.md","docs/PROJECT_LIFECYCLE.md","docs/CAD_WORKSPACE.md"],
-              "implementation_steps": ["Run move/save/reopen/undo, symbol move, connection, add/remove and automatic proposal workflows.","Verify supported operations, missing validation limitations and Save/Recompute/Publish labels are documented."],
+              "implementation_steps": ["Run move/save/reopen/undo, symbol move, connection, add/remove and automatic proposal workflows.","Verify supported operations, missing validation limitations and Save/Recompute/Publish labels are documented.","Run integrated browser tests from P2-T10/P2-T11 with P2-T12 fixtures; verify picking, grouped gestures, conflicts, cross-view movement and save/reopen. Include a negative check detecting mesh-only movement with unchanged saved PDM."],
               "acceptance_criteria": ["All user mutation paths use shared operations and preserve CEM/PDM authority.","Historical revisions remain unchanged; unsupported rotation is unavailable; no implicit save-time regeneration occurs."],
               "verification_profiles": ["postgres_isolated","browser","frontend_unit","frontend_build"],
               "input_files": ["backend/tests/test_project_lifecycle.py","frontend/src/stores/projectStore.editor.test.ts"]
@@ -1217,12 +1217,26 @@
           "title": "Geometry boundary and bounded parametric model",
           "tasks": [
             {
+              "id": "P5-T00",
+              "title": "Correct exporter pivot mapping and qualify the native reference",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "cad_kernel_engineer",
+              "dependencies": ["P3-T14","P0-T05","P0-T06"],
+              "planned_outputs": ["backend/app/services/cad_engine.py","backend/tests/test_cad_reference.py","docs/verification/native-reference-qualification.md"],
+              "implementation_steps": ["Inspect the P0-T05 retained 30 mm mounted-part bound failure and independently derive the correct centre/pivot transform for rotated boxes and cylinders. Reuse the qualified runtime and unchanged reference expectations.","Correct only exporter transform mapping and add zero/nonzero-rotation regression cases. Review generator version pins and historical revision compatibility; never rewrite saved artifacts or frozen baseline evidence.","Run pinned native export and fresh-process STEP reopen. Retain artifacts, provenance, units, counts, per-part bounds, validity, volume comparison, timings and failure logs. Record human reference-test tolerance approval.","Close P0-T05-NATIVE-001 only on passing native evidence. Keep semantic identity, production isolation and distribution qualification in their respective downstream tasks."],
+              "acceptance_criteria": ["Rotated and unrotated native geometry agrees with independent PDM placement expectations within approved tolerances; the demonstrated 30 mm regression is covered without changing its expected bounds.","The native_cad profile passes with retained STEP and fresh-process evidence, including mm units, counts, bounds and validity; missing runtime or failed geometry prevents acceptance.","Generator/version compatibility is reviewed and historical revisions/artifact bytes remain unchanged."],
+              "verification_profiles": ["backend_unit","native_cad","document_review"],
+              "human_input": "Provide the pinned runtime and approve reference-test tolerances and local execution. Redistribution remains a separate P7 release decision.",
+              "input_files": ["docs/architecture/geometry-kernel-evaluation.md","backend/tests/fixtures/cad_reference/","backend/app/services/cad_engine.py","backend/app/services/panel_geometry.py","backend/app/persistence/revisions.py"]
+            },
+            {
               "id": "P5-T01",
               "title": "Define geometry adapter and assembly input contract",
               "type": "implementation",
               "status": "planned",
               "assigned_agent": "cad_kernel_engineer",
-              "dependencies": ["P3-T14","P0-T06"],
+              "dependencies": ["P3-T14","P0-T06","P5-T00"],
               "planned_outputs": ["backend/app/geometry/kernel.py","backend/app/models/cad_document.py"],
               "implementation_steps": ["Specify declarative PDM-derived assembly instances, primitive/feature parameters, stable object references, units, origins and schema/kernel versions.","Retain the existing primitive renderer as a fast adapter; choose the native adapter approved in P0 and define shape validity/bounds tolerances."],
               "acceptance_criteria": ["Contract fixtures map each geometric instance to a PDM ID and pinned component model.","No frontend mesh or arbitrary script is accepted as authoritative geometry input."],
@@ -2209,14 +2223,14 @@
       "id": "D01",
       "gate_task_id": "P0-T06",
       "decision": "Approve product scope, document semantics and deployment boundary",
-      "approver": "Product owner; technical lead; license owner for kernel distribution",
+      "approver": "Product owner and technical lead; license owner only if kernel distribution is approved in this decision",
       "record": "docs/decisions/approved-product-scope.md"
     },
     {
       "id": "D02",
       "gate_task_id": "P0-T08",
-      "decision": "Approve bounded electrical semantics and required checks",
-      "approver": "Qualified electrical engineer designated by product owner",
+      "decision": "Accept bounded electrical semantics documentation for the academic prototype based on reported student peer review; qualified engineering approval deferred",
+      "approver": "JacobGM, product owner, for academic prototype acceptance only; qualified electrical engineering approval deferred",
       "record": "docs/decisions/approved-electrical-semantics.md"
     },
     {
@@ -2403,14 +2417,14 @@
   "planning_validation": {
     "scope": "JSON syntax, unique task IDs, valid dependency and traceability references, acyclic dependency graph, agent/profile assignments, prerequisite-produced paths and task acceptance criteria. Application behavior is unverified by this planning operation.",
     "status": "passed",
-    "checked_on": "2026-11-10",
-    "checks_passed": ["JSON parses", "118 unique task IDs", "All dependencies and task references resolve", "Dependency graph is acyclic", "All phase exits cover their phase tasks", "All agent and verification-profile IDs resolve", "All input paths exist or are outputs of prerequisite tasks", "Every task has measurable acceptance criteria and verification methods", "11 human decision gates name approvers"],
+    "checked_on": "2026-11-13",
+    "checks_passed": ["JSON parses and validates against planning/schema.json", "119 unique task IDs", "All dependencies and task references resolve", "Dependency graph is acyclic and has no forward dependencies", "All phase exits cover their phase tasks", "All agent and verification-profile IDs resolve", "Every task has acceptance criteria and verification methods", "11 human decision gates name approvers", "20 optional P8 tasks remain deferred"],
     "application_tests_run": false,
     "application_test_reason": "Planning-only file creation; no application behavior was changed or verified.",
     "phase_count": 9,
     "milestone_count": 32,
-    "task_count": 118,
+    "task_count": 119,
     "human_gate_count": 11
   },
-  "scheduling_notes": ["Start with P0-T01. P0-T04 and P0-T07 can proceed while the test baseline is established; decisions close before P1 implementation.","P1 document API and full-revision snapshot branches can run in parallel after P1-T02. Integrate through P1-T11.","P2 frontend bindings and browser harness can proceed after the operation API contract, while backend handlers are completed. T10/T11 explicitly depend on the browser harness.","P3 electrical and physical adapters can run in parallel. Durable job storage can proceed after stage contracts while adapters are extracted.","P4 requirement/evidence preparation can start after P1 acceptance; actual method integration waits for P3 and human engineering approval.","P5 CAD worker work can overlap P4 engineering after P3; reviewed wiring documentation and final CAD acceptance explicitly depend on P4 outputs.","P6 provider/context preparation can overlap P4/P5 after their specified contracts; explanations and final acceptance depend on reviewed engineering.","P7 operational planning/security begins before all feature work ends; final release joins engineering, CAD, AI and operational acceptance.","P8 remains deferred until P7 acceptance and D08. Its schematic, feature and retrieval branches may then run in parallel; new archetype work requires separate engineering gates.","Do not run simultaneous migrations or uncontrolled edits to shared contracts. Use reviewed branches and designate one integration owner.","Dependency lists encode actual task prerequisites, including human gates. A milestone name or numerical phase order never substitutes for a missing task dependency."]
+  "scheduling_notes": ["Execute one task at a time in declared phase/milestone/task order; all dependencies must already be VERIFIED. The strict orchestrator policy takes precedence over possible parallel work described in the planning execution_policy.","P0-T05 completes an investigation, including negative findings. It cannot qualify native geometry; P5-T00 is the mandatory correction/qualification gate. P0-T06 can approve the bounded MVP with native STEP excluded.","P0-T07 prepares the electrical design review; by JacobGM's explicit academic-scope amendment, P0-T08 accepts prototype documentation based on reported student peer review. Qualified method/data and engineering-release approval remain deferred to D03/P4-T03 and D04/P4-T16; this does not establish engineering applicability or certification.","P2-T12 bootstraps runnable browser fixtures before P2-T10/P2-T11. Feature-specific browser tests are delivered with those bindings and final cross-view verification belongs to P2-T14.","Failed required implementation checks never satisfy dependencies. Split research findings from implementation qualification instead of using blanket partial acceptance.","All twenty P8 tasks remain deferred. P8-T01/P8-T02 require explicit activation after P7; D08 selects branches. Before activating implementation, update the DAG and R3 for selected branches through reviewed reconciliation. Unselected branches remain deferred, never falsely verified.","Do not merge tasks across specialist ownership, independent acceptance evidence or human approval boundaries merely to reduce session counts.","Reconcile an edited lifecycle only after reviewing the impact preview. Preserve unaffected acceptances only against a fingerprint-verified predecessor; retain every old attempt and decision."]
 }

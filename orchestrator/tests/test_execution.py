@@ -157,14 +157,15 @@ class DispatcherTests(Harness):
             InteractiveDispatcher().preflight()
 
 
-class CLITests(Harness):
+class CLIHarness(Harness):
     def setUp(self):
         super().setUp()
         config = json.loads((ROOT / "orchestrator/config/execution_config.json").read_text())
         config.update(project_repository_root=".", model_config_path="models.json")
         self.config_path = self.root / "config.json"
         atomic_json(self.config_path, config)
-        mappings = json.loads((ROOT / "orchestrator/config/agent_model_config.json").read_text())
+        mappings = {"agents": {a["id"]: {"model": None, "reasoning_effort": None, "confirmed_in_cli": False}
+                               for a in self.data["agents"]}, "task_overrides": {}}
         mappings["agents"]["architecture_lead"] = {"model": "fixture-model", "reasoning_effort": "high", "confirmed_in_cli": True}
         atomic_json(self.root / "models.json", mappings)
 
@@ -174,6 +175,8 @@ class CLITests(Harness):
             code = main(["--config", str(self.config_path), *args])
         return code, stream.getvalue()
 
+
+class CLITests(CLIHarness):
     @patch("orchestrator.codex.interactive_dispatcher.subprocess.Popen")
     def test_dry_run_is_read_only(self, popen):
         before = {p: p.read_bytes() for p in self.root.rglob("*") if p.is_file()}

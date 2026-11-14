@@ -1,0 +1,44 @@
+{
+  "captured_at": "2026-11-13T11:17:14.667731+00:00",
+  "command": ".venv/bin/python -c: environment(), inspect_reference(), and SHA-256 source hashing; see attempt report C3",
+  "cwd": "backend/",
+  "exit_code": 0,
+  "environment": {
+    "executable": "/home/jacobGM/Desktop/Engineering/s7/Project/Electrical_Panel_board_design/Electrical_Panel_design_automation/backend/.venv/bin/python",
+    "prefix": "/home/jacobGM/Desktop/Engineering/s7/Project/Electrical_Panel_board_design/Electrical_Panel_design_automation/backend/.venv",
+    "python": "3.14.8 (main, Oct  2 2026, 10:23:31) [GCC 16.2.1 20260810]",
+    "platform": "Linux-7.2.11-arch1-1-x86_64-with-glibc2.44",
+    "machine": "x86_64",
+    "modules": {"FreeCAD": false, "Part": false, "OCP": false, "OCC": false, "cadquery": false},
+    "executables": {"FreeCADCmd": null, "freecadcmd": null, "FreeCAD": null, "freecad": null, "conda": null, "micromamba": null, "docker": null}
+  },
+  "inspection": {
+    "status": "PASS_NON_NATIVE_COUPON_CHECKS",
+    "counts": {"BOX": 41, "TUBE": 1},
+    "script_sha256": "ce7bf63fe0b4b47d30605c6edafc2f4d0c972f4cb0f33f6f563328eafbecb246",
+    "script_bytes": 10491,
+    "glb_sha256": "c18f6264f6053e56c3a71e7df68feb8bcbe040eefef7833b64114d4b76b67ff6",
+    "glb_bytes": 68928,
+    "sampled_wire_length_mm": 147.4180506091406,
+    "elapsed_ms": 62.84470100035833,
+    "process_max_rss_kib_linux": 56040,
+    "native_cad": "NOT_RUN",
+    "engineering_approval": "UNRESOLVED"
+  },
+  "measurement_limits": "One sequential diagnostic sample; fixture-to-script-and-GLB interval excludes interpreter/import startup; RSS includes imports. No native time/RSS, percentile or supported-platform result.",
+  "reference_sha256": "621a2ef72681a54cb9959314af871a549ddd2c3537eee9f19dfa7d9346c1718c",
+  "source_sha256": {
+    "backend/app/services/cad_engine.py": "cf22ec762daa120821e737772c4a5702074ff882c2be81f34cd7fd1bafc39ad7",
+    "backend/app/services/panel_geometry.py": "3848b09f1d52a388cc3ef96e804dfc8196e2d89d1f48d1c75d90196b766070e0",
+    "backend/app/services/wire_geometry.py": "1c3822d7410308a79a7c7095f2d4e29fefb5d6a079652f9311e08fbf7c25c9a8",
+    "backend/app/models/pdm.py": "5f061441d5a7917691b60e801f50f442503eac80a83d45f1cb13740368b1fa5c",
+    "backend/app/persistence/assets.py": "22141f5865eb9a44df618ca52c34bc0d60cc29b7979589fb60609b4d0bf51c32",
+    "backend/app/services/project_service.py": "5b94ab69fd78e5967066de2382b530f7f1817bee50ee796326769609b2a12910",
+    "backend/app/main.py": "b89f9c312ab8617d180d77154b8bb610d3b41d22bd1d826fd9dd4a420d75d767",
+    "backend/panel-backend.spec": "c9bfb9106cb5bc15f61d2cdf36ed606f140c54afca2bceca9dbb038cc7f4329b",
+    "frontend/src-tauri/tauri.conf.json": "bf2e6ae5d9e9db5d461494aab46bea0de7fdd652256b8be62857ed397162be79",
+    "backend/requirements.txt": "d6db29db39031d4386e5acdb2bb30e9c6ad01db5877c0f60e6c890fc8bdca4af",
+    "planning/development_lifecycle.json": "fc32d17809dd5d15b037def5fc4120994927143d75e8cf12b5414979c37b39e3",
+    "planning/task_reports/P0-T03/attempt-01.md": "e2610ab355337346eff824c36e613fe67bb1054117e76b2ed3f10201ffa1b779"
+  }
+}

@@ -40,9 +40,11 @@ The discovered authoritative files are:
 - `planning/development_lifecycle.json`
 - `planning/schema.json` — this is the actual schema filename, not `development_lifecycle.schema.json`.
 
-They contain **9 phases, 32 milestones, 118 tasks and 11 specialist agents**, rather than the illustrative 8/30/110 counts in the request. Counts and task assignments are read from those files.
+The revised plan contains **9 phases, 32 milestones, 119 tasks and 11 specialist agents**. The original 118-task lifecycle is archived at `planning/lifecycle_history/2026-11-13.before-repair.json`. Counts and assignments are read from the active lifecycle.
 
-**Strict order is intentional.** You selected stop-at-blocker behavior. The lifecycle currently has forward dependencies from `P2-T10` and `P2-T11` to `P2-T12`. Validation reports these non-cyclic ordering conflicts; execution will stop at `P2-T10` unless you explicitly correct the lifecycle. This implementation does not edit or topologically reorder it. A skipped task remains unverified and cannot satisfy a dependent task.
+**Strict order is intentional.** You selected stop-at-blocker behavior. The revised lifecycle declares `P2-T12` before `P2-T10`/`P2-T11`, and limits that task to browser harness bootstrap. Integrated editor checks follow their implementation. Validation rejects forward dependencies and task launches stop on an invalid order; the orchestrator never silently reorders tasks. A skipped task remains unverified and cannot satisfy a dependent task.
+
+P0-T05 now accepts a reviewed investigation, including failed native experiments. It does not approve native geometry: mandatory P5-T00 owns the exporter correction and passing native qualification. Twenty P8 tasks remain deferred until explicit selection/activation. See [the repair and continuation guide](../planning/LIFECYCLE_REPAIR.md).
 
 ## Prerequisites and Arch Linux setup
 
@@ -228,6 +230,20 @@ python -m orchestrator.main reconcile
 
 Reconciliation requires a reason and confirmation. It conservatively invalidates **all** previous acceptances, preserves attempts/decisions and retains removed-task records. It does not silently transfer completion to changed definitions. Already attempted tasks become paused for explicit retry; new tasks follow their declared states. Back up the original lifecycle and state/history pair before adopting major plan changes.
 
+To preserve unaffected progress, supply the exact predecessor lifecycle. Its fingerprint, computed with the current schema, must match saved state. If the schema changed, this mode refuses the migration; restore/review the original schema or use conservative reconciliation. Preview first:
+
+```sh
+python -m orchestrator.main validate --lifecycle-only --require-models
+python -m orchestrator.main reconcile --previous-lifecycle planning/lifecycle_history/2026-11-13.before-repair.json --preview
+python -m orchestrator.main reconcile --previous-lifecycle planning/lifecycle_history/2026-11-13.before-repair.json
+```
+
+The last command asks for confirmation and a reason. It preserves unchanged records only when task definitions, phase/milestone context, assigned-agent definitions, verification profiles, relevant human gates and global contracts remain compatible. Changed tasks and their dependents lose current acceptance; their attempts and decisions remain recorded. Removed task records are archived. Reordering alone does not change a task's evidence, but dependency edits do. Planning timestamps, scheduling commentary and effort estimates do not invalidate evidence. Active attempts must be recovered first.
+
+For the November 13 repair, the preview preserves P0-T01 through P0-T04. P0-T05 becomes PAUSED, retains both prior attempts, and needs an explicit retry under its narrower investigation criteria. Neither historical report is edited or retroactively accepted. Use `retry P0-T05` and ask for evidence review, not another native repair experiment. A new accepted review unlocks P0-T06; its human product decision remains mandatory.
+
+`validate --lifecycle-only` validates the plan without loading or changing saved progress; ordinary `validate` also checks saved state. `reconcile --preview` reads state/history without committing a migration or launching Codex. It uses the normal execution lock to avoid racing an active session.
+
 Malformed state, conflicting journals or a torn/truncated history line fail closed. The controller never silently resets progress or trims history. Preserve the damaged files, restore a matching backup pair, or perform an audited manual repair. The write-ahead journal is a recovery mechanism, not a substitute for backups.
 
 Lifecycle, schema, state, history, configuration and prior report hashes are checked around each Codex session. Unexpected edits stop processing. This detects accidental changes; it is not an OS-level security boundary against a process running as the same user. Review unexpected changes before recovery.
@@ -259,7 +275,7 @@ See [verification results](VERIFICATION.md) for executed checks. Live TUI render
 
 Common problems:
 
-- **No next eligible task:** inspect the first pending task and its blockers; strict order never jumps to a later task. For P2 forward dependencies, correct the lifecycle yourself and reconcile explicitly.
+- **No next eligible task:** inspect the first pending task and its blockers; strict order never jumps to a later task. A skip does not satisfy dependencies. Correct planning conflicts explicitly and preview reconciliation before adoption.
 - **Unconfigured model:** run `setup-models`; confirm the pair in your account's `/model` picker.
 - **Missing CLI/unsupported flags:** inspect `codex --help`; update through your approved installation workflow before retrying.
 - **No real terminal:** run normal orchestration in a terminal; use `--dry-run` in redirected/automated environments.

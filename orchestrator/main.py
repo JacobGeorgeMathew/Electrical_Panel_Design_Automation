@@ -24,10 +24,14 @@ def parser():
     p.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     p.add_argument("--dry-run", action="store_true")
     sub = p.add_subparsers(dest="command")
-    for name in ("status", "init", "recover", "reconcile", "setup-models"):
+    for name in ("status", "init", "recover", "setup-models"):
         sub.add_parser(name)
+    reconcile = sub.add_parser("reconcile")
+    reconcile.add_argument("--previous-lifecycle", type=Path, help="Original lifecycle matching the saved fingerprint; preserve unaffected progress")
+    reconcile.add_argument("--preview", action="store_true", help="Show reconciliation impact without writing execution state or history")
     validate = sub.add_parser("validate")
     validate.add_argument("--require-models", action="store_true")
+    validate.add_argument("--lifecycle-only", action="store_true", help="Validate a revised plan before migrating saved progress")
     for name in ("reports", "retry", "reopen", "review"):
         command = sub.add_parser(name)
         command.add_argument("task_id")
@@ -69,6 +73,9 @@ def decision_menu(task, tracker, reports, decisions):
                     decisions.retry(tid, reason, reopen=action == "5", instructions=extra)
                     return extra
             elif action in {"6", "7"}:
+                if action == "6":
+                    dependents = [key for key, item in tracker.lifecycle.tasks.items() if tid in item["dependencies"]]
+                    ui.display(f"Skipping {tid} will not complete it. Direct dependent tasks remain blocked: {dependents}")
                 reason = ui.ask("Reason: ")
                 if ui.confirm("Record this decision? Skips never satisfy dependencies."):
                     decisions.mark(tid, "SKIPPED" if action == "6" else "BLOCKED", reason)
@@ -163,14 +170,19 @@ def run(args):
     scheduler = TaskScheduler(lifecycle, tracker)
     decisions = DecisionManager(tracker, reports)
     command = args.command
+    if lifecycle.forward_dependencies and command not in {"validate", "status", "reports", "reconcile", "recover"} and not args.dry_run:
+        raise OrchestratorError(f"Strict-order plan cannot execute forward dependencies: {lifecycle.forward_dependencies}. Correct the plan and reconcile before launching tasks.")
     readonly = args.dry_run or command in {"status", "validate", "reports"}
     if readonly:
-        tracker.load()
+        if command == "validate" and args.lifecycle_only:
+            tracker.state = tracker.initial_state()
+        else:
+            tracker.load()
         models = ModelSelector(config["model_config_path"], lifecycle)
         if args.dry_run:
             ui.dry_run(lifecycle, tracker, scheduler, models, reports, config)
         elif command == "validate":
-            ui.display(f"Valid lifecycle/schema and execution state: {len(lifecycle.tasks)} tasks.")
+            ui.display(f"Valid lifecycle/schema{' (saved state not checked)' if args.lifecycle_only else ' and execution state'}: {len(lifecycle.tasks)} tasks.")
             missing = []
             for task in lifecycle.tasks.values():
                 try:
@@ -179,6 +191,8 @@ def run(args):
                     missing.append(task["assigned_agent"])
             ui.display(f"Unconfigured agent mappings: {sorted(set(missing))}")
             ui.display(f"Forward dependencies requiring correction under strict ordering: {lifecycle.forward_dependencies}")
+            if lifecycle.forward_dependencies:
+                raise OrchestratorError("Strict-order plan has forward dependencies; correct declared task order before execution.")
             if args.require_models and missing:
                 raise OrchestratorError("Model configuration is incomplete; run setup-models.")
         elif command == "reports":
@@ -197,9 +211,23 @@ def run(args):
             tracker.recover_transaction()
         tracker.load(allow_changed=command == "reconcile")
         if command == "reconcile":
-            ui.display("Lifecycle/schema changed: all prior acceptances will be invalidated; attempts and decisions will be preserved. No results are silently mapped.")
-            if ui.confirm("Adopt the current lifecycle with conservative invalidation?"):
-                tracker.reconcile(ui.ask("Reason for adopting the lifecycle change: "))
+            previous = None
+            if args.previous_lifecycle:
+                from .lifecycle_reconciliation import reconciliation_plan
+                path = args.previous_lifecycle
+                previous = load_lifecycle(path if path.is_absolute() else config["root"] / path, config["schema_path"])
+                plan = reconciliation_plan(previous, lifecycle, tracker.state)
+                ui.display(f"Preserve VERIFIED tasks: {plan['preserved_verified']}")
+                ui.display(f"Changed definitions/context: {plan['changed']}")
+                ui.display(f"Added: {plan['added']} | Removed: {plan['removed']}")
+                ui.display(f"Invalidate changed/downstream records: {len(plan['invalidated'])}; preserve {len(plan['preserved'])} unaffected records. Attempts and decisions remain in history.")
+            else:
+                ui.display("Conservative reconciliation invalidates all prior acceptances; attempts and decisions remain in history. Supply --previous-lifecycle to preserve unaffected progress.")
+            if args.preview:
+                ui.display("Preview only: execution state/history unchanged; no tasks launched.")
+                return 0
+            if ui.confirm("Adopt this lifecycle reconciliation?"):
+                tracker.reconcile(ui.ask("Reason for adopting the lifecycle change: "), previous=previous)
             return 0
         if not tracker.path.exists():
             tracker.refresh()
@@ -272,12 +300,7 @@ def main(argv=None):
     except LifecycleChanged as exc:
         ui.display(f"STOP: {exc}")
         if sys.stdin.isatty():
-            ui.display("Choose to restore the prior lifecycle or run reconcile; current progress is unchanged.")
-            try:
-                if ui.confirm("Open explicit reconciliation now? This invalidates prior acceptances."):
-                    return main(["--config", str(args.config), "reconcile"])
-            except (KeyboardInterrupt, EOFError):
-                return 130
+            ui.display("Current progress is unchanged. Preview reconciliation with the original lifecycle before adopting changes; see orchestrator/README.md.")
         return 2
     except (OrchestratorError, OSError, ValueError) as exc:
         ui.display(f"ERROR: {exc}")

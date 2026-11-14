@@ -1,0 +1,53 @@
+{
+  "format_version": 1,
+  "scope": "Prototype Distribution Boards; mathematical checks are not qualified engineering approval.",
+  "requirements": {
+    "supply_voltage": 415, "phases": 3, "frequency": 50,
+    "incomer_rating": 250, "ip_rating": "IP54",
+    "spare_capacity_pct": 20, "neutral_required": true
+  },
+  "feasible": [
+    {"id": "db-12", "project_id": "BASELINE-DB-12", "num_feeders": 12, "observed_enclosure": "ENC_800_1200_300"},
+    {"id": "db-16", "project_id": "BASELINE-DB-16", "num_feeders": 16, "observed_enclosure": "ENC_1000_1200_300"}
+  ],
+  "independent_expectations": {
+    "status": "Independently recomputed arithmetic and geometry only; electrical applicability UNREVIEWED.",
+    "apparent_capacity_kva": {"formula": "sqrt(3) * 415 V * 250 A / 1000", "rounded_value": 179.7},
+    "design_current_a": {"formula": "250 A * 0.75 * 1.20", "value": 225.0, "assumption": "Prototype diversity and spare factors"},
+    "busbar_minimum_a": {"formula": "250 A * 1.25", "unrounded_value": 312.5, "observed_rounded_value": 312.0, "assumption": "Prototype multiplier; rounding is observed behavior, not an approved minimum"},
+    "physical_acceptance": "No overlaps, inside mounting plate, exact terminal endpoints, complete duct trunks, zero violations including warnings",
+    "unvalidated": ["ampacity", "fault rating", "selectivity", "voltage drop applicability", "thermal model applicability", "manufacturer geometry", "native FreeCAD/STEP"]
+  },
+  "failures": [
+    {
+      "id": "placement-too-wide", "stage": "placement",
+      "enclosure_mm": [200, 200], "component_mm": [200, 20, 20],
+      "independent_reason": "200 mm device exceeds 80 mm usable width after two 60 mm margins",
+      "expected_status": "INFEASIBLE", "expected_message": "WIDE (200.0x20.0) does not fit the enclosure"
+    },
+    {
+      "id": "undersized-fixed-enclosure", "stage": "generation",
+      "project_id": "BASELINE-FIXED-FAIL", "num_feeders": 12, "enclosure_id": "ENC_800_1000_300",
+      "independent_reason": "Catalog component heat divided by 0.45 W/L exceeds enclosure volume (240 L)",
+      "expected_code": "NO_FEASIBLE_ENCLOSURE"
+    },
+    {
+      "id": "disconnected-ducts", "stage": "routing", "enclosure_mm": [300, 200, 120],
+      "components": [["A",95,80,0],["B",185,80,20]],
+      "ducts": [["LEFT",40,20,40,160],["RIGHT",220,20,40,160]],
+      "wall": null,
+      "connection": {"id":"C","net_id":"N","from_component":"A","from_terminal":"T","to_component":"B","to_terminal":"T"},
+      "expected_reason": "Physical wiring duct network is disconnected or blocked.",
+      "independent_reason": "Duct footprints are disjoint with a 140 mm gap; no duct-confined trunk exists"
+    },
+    {
+      "id": "blocked-duct-bridge", "stage": "routing", "enclosure_mm": [300, 200, 120],
+      "components": [["A",95,80,0],["B",185,80,20]],
+      "ducts": [["LEFT",40,20,40,160],["RIGHT",220,20,40,160],["BRIDGE",40,20,220,40]],
+      "wall": {"x":145,"y":0,"width":20,"height":200},
+      "connection": {"id":"C","net_id":"N","from_component":"A","from_terminal":"T","to_component":"B","to_terminal":"T"},
+      "expected_reason": "Physical wiring duct network is disconnected or blocked.",
+      "independent_reason": "Full-height wall splits the connected duct footprints into unreachable left and right regions"
+    }
+  ]
+}

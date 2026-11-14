@@ -28,8 +28,10 @@ class DecisionManager:
     def accept(self, tid, reviewer, evidence):
         task = self.tracker.lifecycle.tasks[tid]
         record = self.tracker.state["tasks"][tid]
-        if record["status"] != "NEEDS_REVIEW" or not reviewer.strip() or not evidence.strip():
-            raise OrchestratorError("Acceptance requires NEEDS_REVIEW, a named reviewer and an evidence note.")
+        if record["status"] != "NEEDS_REVIEW":
+            raise OrchestratorError(f"Cannot accept {tid}: saved status is {record['status']}, not NEEDS_REVIEW. Review the report and resolve failed/incomplete work or revise its scope explicitly before retrying. Typing a status into the evidence note does not change it.")
+        if not reviewer.strip() or not evidence.strip():
+            raise OrchestratorError("Acceptance requires a named reviewer and a nonempty evidence note.")
         if any(self.tracker.state["tasks"][d]["status"] != "VERIFIED" for d in task["dependencies"]):
             raise OrchestratorError("All prerequisites must still be VERIFIED.")
         attempt = record["attempts"][-1]

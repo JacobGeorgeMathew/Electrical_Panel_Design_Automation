@@ -1,0 +1,182 @@
+{
+  "task_id": "P0-T03",
+  "attempt": 1,
+  "captured_on": "2026-11-13",
+  "source_commit": "6e85b6b2918aaee2587e2c473584d076486d636e",
+  "status": "observations only; no approved performance threshold",
+  "procedure": "performance-baseline.md",
+  "warmup_count": 1,
+  "retained_sample_count": 5,
+  "p95_method": "nearest rank; maximum of five samples",
+  "concurrency": "final database and browser runs sequential after verification/build processes stopped; other host activity uncontrolled",
+  "hardware": {
+    "cpu": "Intel Core i3-1115G4 @ 3.00GHz",
+    "physical_cores": 2,
+    "logical_cpus": 4,
+    "ram_bytes": 7945617408,
+    "gpu": "Intel Tiger Lake-LP GT2 UHD Graphics G4",
+    "cpu_governor": "powersave",
+    "os": "Linux 7.2.11-arch1-1 x86_64"
+  },
+  "database": [
+    {
+      "case": "db-12",
+      "python": "3.14.8",
+      "components": 29,
+      "routes": 44,
+      "enclosure_mm": [
+        800,
+        1200,
+        300
+      ],
+      "warmup_generate_ms": 3489.900153,
+      "warmup_open_ms": 161.698942,
+      "generate": {
+        "samples_ms": [
+          3402.612995,
+          3398.496835,
+          3505.453281,
+          3524.496846,
+          3416.645655
+        ],
+        "median_ms": 3416.645655,
+        "nearest_rank_p95_ms": 3524.496846
+      },
+      "open": {
+        "samples_ms": [
+          260.630818,
+          156.899568,
+          159.059419,
+          158.640722,
+          166.087486
+        ],
+        "median_ms": 159.059419,
+        "nearest_rank_p95_ms": 260.630818
+      },
+      "engine_version": "db-pipeline-4",
+      "generator": {
+        "name": "panelstudio-primitives",
+        "version": "3"
+      },
+      "artifact_hashes": {
+        "GLB": "e967b8270347bd61e1a7763daea854e371e305ec06ffe6c34271d16ed26d6057",
+        "PY": "85c9d817e2cb10587ac3c53b89b36d5bc538e2e6553a830bd4deeb499cf005ce"
+      },
+      "semantic_sha256": "3a977957089ad1be64d13ab271f7a8150446fd3fbac79c03c6e18081289b5b3c"
+    },
+    {
+      "case": "db-16",
+      "python": "3.14.8",
+      "components": 37,
+      "routes": 56,
+      "enclosure_mm": [
+        1000,
+        1200,
+        300
+      ],
+      "warmup_generate_ms": 4184.273652,
+      "warmup_open_ms": 244.607119,
+      "generate": {
+        "samples_ms": [
+          4267.817169,
+          4292.502591,
+          4284.128955,
+          4325.507718,
+          4321.763521
+        ],
+        "median_ms": 4292.502591,
+        "nearest_rank_p95_ms": 4325.507718
+      },
+      "open": {
+        "samples_ms": [
+          243.172501,
+          249.540368,
+          245.029435,
+          242.427718,
+          243.263598
+        ],
+        "median_ms": 243.263598,
+        "nearest_rank_p95_ms": 249.540368
+      },
+      "engine_version": "db-pipeline-4",
+      "generator": {
+        "name": "panelstudio-primitives",
+        "version": "3"
+      },
+      "artifact_hashes": {
+        "GLB": "621ef1dec6a44c2c14c46f5f933714b31a1470b1ca3ec118b96a3606207728cd",
+        "PY": "c0089a97920b0fd0b8ad0866d26bf593bd06f0fa06864157dd094b36794b6b67"
+      },
+      "semantic_sha256": "b724076c10f8b5baa6fdb75841a570ce3f4bebf338135448e6eff5a541e532cc"
+    }
+  ],
+  "render": [
+    {
+      "case": "db-12",
+      "browser": "firefox",
+      "browser_version": "159.0",
+      "mode": "headless Firefox, Vite development server",
+      "metric": "fresh React SVG mount through second animation-frame callback",
+      "host_css_px": [
+        1280,
+        900
+      ],
+      "viewport_css_px": [
+        1280,
+        814
+      ],
+      "viewbox": "0 0 800 1200",
+      "components": 29,
+      "routes": 44,
+      "warmup_ms": 40,
+      "samples_ms": [
+        16,
+        16,
+        26,
+        22,
+        26
+      ],
+      "median_ms": 22,
+      "nearest_rank_p95_ms": 26
+    },
+    {
+      "case": "db-16",
+      "browser": "firefox",
+      "browser_version": "159.0",
+      "mode": "headless Firefox, Vite development server",
+      "metric": "fresh React SVG mount through second animation-frame callback",
+      "host_css_px": [
+        1280,
+        900
+      ],
+      "viewport_css_px": [
+        1280,
+        814
+      ],
+      "viewbox": "0 0 1000 1200",
+      "components": 37,
+      "routes": 56,
+      "warmup_ms": 15,
+      "samples_ms": [
+        19,
+        24,
+        21,
+        18,
+        20
+      ],
+      "median_ms": 20,
+      "nearest_rank_p95_ms": 24
+    }
+  ],
+  "unmeasured": [
+    "cold OS/process startup",
+    "browser end-to-end open",
+    "3D/WebGL",
+    "GPU/display completion",
+    "Tauri",
+    "native FreeCAD/STEP",
+    "concurrent-user latency",
+    "peak memory",
+    "larger boards"
+  ]
+}

@@ -73,7 +73,7 @@ class ProgressTracker:
             raise OrchestratorError("State/history sequence mismatch; restore the matching pair or recover.")
         if self.state["lifecycle_fingerprint"] != self.lifecycle.fingerprint:
             if not allow_changed:
-                raise LifecycleChanged("Lifecycle/schema changed. Run reconcile to review and explicitly invalidate prior acceptances, or restore the original lifecycle.")
+                raise LifecycleChanged("Lifecycle/schema changed. Preview reconcile --previous-lifecycle <original-file> --preview to preserve unaffected progress, use conservative reconcile, or restore the original lifecycle.")
         else:
             if set(self.state["tasks"]) != set(self.lifecycle.tasks):
                 raise OrchestratorError("Execution state task IDs do not match the lifecycle.")
@@ -251,9 +251,13 @@ class ProgressTracker:
                 record["status"] = "BLOCKED"
         return sorted(affected - {tid})
 
-    def reconcile(self, reason):
+    def reconcile(self, reason, previous=None):
         if not reason.strip():
             raise OrchestratorError("Reconciliation requires a human reason.")
+        if self.state["current_task_id"] or any(r["status"] in {"RESERVED", "IN_PROGRESS"} for r in self.state["tasks"].values()):
+            raise OrchestratorError("Recover the active attempt before reconciling a lifecycle.")
+        from .lifecycle_reconciliation import reconciliation_plan
+        plan = reconciliation_plan(previous, self.lifecycle, self.state) if previous else None
         old = self.state
         fresh = self.initial_state()
         fresh["event_sequence"] = old["event_sequence"]
@@ -261,6 +265,9 @@ class ProgressTracker:
         for tid, previous in old["tasks"].items():
             if tid not in fresh["tasks"]:
                 fresh["retired_tasks"].setdefault(tid, []).append(previous)
+                continue
+            if plan and tid in plan["preserved"]:
+                fresh["tasks"][tid] = copy.deepcopy(previous)
                 continue
             record = fresh["tasks"][tid]
             for key in ("attempt_count", "attempts", "human_decisions", "failure_reasons"):
@@ -271,5 +278,7 @@ class ProgressTracker:
             if record["attempt_count"]:
                 record["status"] = "PAUSED"
         self.state = fresh
+        self.refresh()
         self.commit("LIFECYCLE_RECONCILED", details={"reason": reason,
-            "old_fingerprint": old["lifecycle_fingerprint"], "new_fingerprint": fresh["lifecycle_fingerprint"]})
+            "old_fingerprint": old["lifecycle_fingerprint"], "new_fingerprint": fresh["lifecycle_fingerprint"],
+            "mode": "preserve_unaffected" if plan else "conservative", "plan": plan})
