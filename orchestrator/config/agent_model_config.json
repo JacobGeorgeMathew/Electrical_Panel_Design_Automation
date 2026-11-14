@@ -1,0 +1,60 @@
+{
+  "agents": {
+    "architecture_lead": {
+      "model": "gpt-6.1-sol",
+      "reasoning_effort": "high",
+      "confirmed_in_cli": true
+    },
+    "database_engineer": {
+      "model": "gpt-6.1-sol",
+      "reasoning_effort": "high",
+      "confirmed_in_cli": true
+    },
+    "backend_application_engineer": {
+      "model": "gpt-6.1-sol",
+      "reasoning_effort": "medium",
+      "confirmed_in_cli": true
+    },
+    "frontend_cad_engineer": {
+      "model": "gpt-6.1-sol",
+      "reasoning_effort": "medium",
+      "confirmed_in_cli": true
+    },
+    "electrical_engineering_agent": {
+      "model": "gpt-6.1-sol",
+      "reasoning_effort": "high",
+      "confirmed_in_cli": true
+    },
+    "physical_optimization_agent": {
+      "model": "gpt-6.1-sol",
+      "reasoning_effort": "high",
+      "confirmed_in_cli": true
+    },
+    "cad_kernel_engineer": {
+      "model": "gpt-6.1-sol",
+      "reasoning_effort": "high",
+      "confirmed_in_cli": true
+    },
+    "ai_integration_engineer": {
+      "model": "gpt-6.1-sol",
+      "reasoning_effort": "medium",
+      "confirmed_in_cli": true
+    },
+    "quality_engineer": {
+      "model": "gpt-6.1-sol",
+      "reasoning_effort": "high",
+      "confirmed_in_cli": true
+    },
+    "security_release_engineer": {
+      "model": "gpt-6.1-sol",
+      "reasoning_effort": "high",
+      "confirmed_in_cli": true
+    },
+    "technical_writer": {
+      "model": "gpt-6.1-terra",
+      "reasoning_effort": "medium",
+      "confirmed_in_cli": true
+    }
+  },
+  "task_overrides": {}
+}

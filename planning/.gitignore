@@ -1,0 +1,7 @@
+# Local execution records can contain private review notes. Back them up together.
+execution_state.json
+execution_history.jsonl
+execution_state.lock
+execution_state.pending.json
+.execution_state.*
+task_reports/

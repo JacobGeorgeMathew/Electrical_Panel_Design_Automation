@@ -1,0 +1,59 @@
+{
+  "fixture_id": "P0-T05-coupon-v1",
+  "scope": "Synthetic geometry coupon, not a generated or electrically approved DB",
+  "units": "mm",
+  "virtual_endpoint": {"component_id": "PANEL_ROOT", "terminal_id": "EARTH_STUD", "position_mm": [160, 220, 30], "status": "UNRESOLVED"},
+  "pdm": {
+    "id": "PDM-CAD-REFERENCE", "project_id": "CAD-REFERENCE", "panel_id": "PNL-CAD-REFERENCE",
+    "enclosure_id": "SYNTHETIC-300-400-150", "enclosure_width": 300, "enclosure_height": 400,
+    "enclosure_depth": 150, "ip_rating": "UNVERIFIED",
+    "mounting_plate_x": 30, "mounting_plate_y": 30, "mounting_plate_z": 12,
+    "mounting_plate_width": 240, "mounting_plate_height": 340,
+    "construction": {"sheet_mm": 1.5},
+    "components": [{
+      "id": "PDM-COUPON", "cem_component_id": "COUPON", "name": "Plate-mounted geometry coupon",
+      "category": "GEOMETRY_COUPON", "position": {"x": 80, "y": 100, "z": 15},
+      "width": 20, "height": 40, "depth": 30, "rotation_deg": 90,
+      "zone_name": "SYNTHETIC", "heat_loss_watts": 0, "cad_model": "synthetic-box-v1",
+      "terminals": [{"id": "T", "x": 10, "y": 0, "z": 15}]
+    }],
+    "ducts": [{
+      "id": "DUCT-REFERENCE", "label": "Synthetic vertical trough", "orientation": "VERTICAL",
+      "x": 140, "y": 80, "z": 15, "width": 40, "height": 180, "depth": 40,
+      "wall_mm": 2, "usable_area_mm2": 1296, "route_ids": ["ROUTE-CONN-REFERENCE"]
+    }],
+    "routes": [{
+      "id": "ROUTE-CONN-REFERENCE", "conductor_id": "CONN-REFERENCE", "net_id": "NET-REFERENCE",
+      "net_name": "Synthetic PE coupon", "from_component": "COUPON", "from_terminal": "T",
+      "to_component": "PANEL_ROOT", "to_terminal": "EARTH_STUD", "wire_class": "PE",
+      "waypoints": [{"x": 110, "y": 120, "z": 30}, {"x": 160, "y": 120, "z": 30}, {"x": 160, "y": 220, "z": 30}],
+      "length_mm": 150, "bend_count": 1, "color_hex": "#36A657", "wire_diameter_mm": 3,
+      "minimum_bend_radius_mm": 6, "dimension_source": "synthetic-spike",
+      "routing_algorithm": "hand-defined-duct-coupon", "status": "UNRESOLVED",
+      "duct_ids": ["DUCT-REFERENCE"], "duct_entry_index": 1, "duct_exit_index": 2
+    }]
+  },
+  "independent_expectations": {
+    "rendered_solid_count": 42,
+    "box_count": 41,
+    "tube_count": 1,
+    "assembly_bounds_mm": [0, 0, 0, 300, 400, 150],
+    "mounted_part_bounds_mm": [70, 110, 15, 110, 130, 45],
+    "mounted_part_center_mm": [90, 120, 30],
+    "backplate_bounds_mm": [30, 30, 12, 270, 370, 15],
+    "wire_bounds_mm": [110, 118.5, 28.5, 161.5, 220, 31.5],
+    "wire_terminal_endpoints_mm": [[110, 120, 30], [160, 220, 30]],
+    "wire_bend_radius_mm": 6,
+    "ideal_circular_centerline_length_mm": 147.42477796076938,
+    "tolerances": {"status": "PROPOSED_REQUIRES_HUMAN_APPROVAL", "bounds_mm": 0.05, "sampled_length_mm": 0.02, "roundtrip_volume_relative": 0.000001}
+  },
+  "native_target": {
+    "adapter": "out-of-process-headless-freecad",
+    "freecad_version": "1.0.2", "python_major_minor": [3, 11],
+    "platform": "Linux-x86_64",
+    "asset": "FreeCAD_1.0.2-conda-Linux-x86_64-py311.AppImage",
+    "sha256": "e00be00ad9fdb12b05c5002bfd1aa2ea8126f2c1d4e2fb603eb7423b72904f61",
+    "url": "https://github.com/FreeCAD/FreeCAD/releases/download/1.0.2/FreeCAD_1.0.2-conda-Linux-x86_64-py311.AppImage",
+    "qualification_status": "BLOCKED_NATIVE_RUNTIME_ABSENT"
+  }
+}

@@ -1,0 +1,24 @@
+========================================================
+DEVELOPMENT ORCHESTRATOR
+========================================================
+Project: PanelFlow
+Phases: 9
+Milestones: 32
+Tasks: 118
+Remaining: 118
+Current Phase: P0
+Current Milestone: P0-M1
+States: VERIFIED: 0, FAILED: 0, BLOCKED: 117, READY: 1, NEEDS_REVIEW: 0, PARTIALLY_COMPLETED: 0, PAUSED: 0, SKIPPED: 0
+Next eligible task: P0-T01
+Ordering conflict: forward dependencies [('P2-T10', 'P2-T12'), ('P2-T11', 'P2-T12')]. Strict ordering will stop; lifecycle correction requires your approval.
+
+NEXT FIVE UNVERIFIED TASKS IN DECLARED ORDER (no progress simulated)
+P0-T01 | architecture_lead | UNCONFIGURED — run setup-models / UNCONFIGURED | READY | dependencies=[]
+P0-T02 | quality_engineer | UNCONFIGURED — run setup-models / UNCONFIGURED | BLOCKED | dependencies=['P0-T01']
+  Blockers: Dependency P0-T01: READY
+P0-T03 | quality_engineer | UNCONFIGURED — run setup-models / UNCONFIGURED | BLOCKED | dependencies=['P0-T02']
+  Blockers: Dependency P0-T02: BLOCKED
+P0-T04 | architecture_lead | UNCONFIGURED — run setup-models / UNCONFIGURED | BLOCKED | dependencies=['P0-T01']
+  Blockers: Dependency P0-T01: READY
+P0-T05 | cad_kernel_engineer | UNCONFIGURED — run setup-models / UNCONFIGURED | BLOCKED | dependencies=['P0-T03']
+  Blockers: Dependency P0-T03: BLOCKED
