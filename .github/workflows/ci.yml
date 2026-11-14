@@ -1,0 +1,205 @@
+name: Baseline CI
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: baseline-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: '3.14.8'
+  NODE_VERSION: '24.18.0'
+  NPM_VERSION: '12.2.2'
+  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  backend-unit:
+    name: Backend unit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      PANEL_RUN_POSTGRES_TESTS: '0'
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Prepare backend environment
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install -r requirements.txt
+          .venv/bin/python -m pip check
+          mkdir -p "$RUNNER_TEMP/ci-results"
+      - name: Check CI result guards
+        run: .venv/bin/python -m unittest discover -s ../.github/scripts -p 'test_*.py' -v
+      - name: Run backend unit profile and report skips
+        env:
+          PANEL_DATA_DIR: ${{ runner.temp }}/panel-unit-data
+        run: .venv/bin/python -m pytest -ra --junitxml="$RUNNER_TEMP/ci-results/backend-unit.xml"
+      - name: Summarize results
+        if: always()
+        run: .venv/bin/python ../.github/scripts/ci_results.py "$RUNNER_TEMP/ci-results/backend-unit.xml" --label 'Backend unit'
+      - name: Publish test results
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: backend-unit-results
+          path: ${{ runner.temp }}/ci-results/
+          if-no-files-found: error
+          retention-days: 14
+
+  postgres-isolated:
+    name: Disposable PostgreSQL
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+    # This secret is exclusively for the job-local service, never a development DB.
+    # Missing secrets (including fork PRs) fail service startup rather than skip.
+    services:
+      postgres:
+        image: postgres:18.6-bookworm
+        env:
+          POSTGRES_USER: panel_ci
+          POSTGRES_DB: postgres
+          POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD }}
+        ports:
+          - 5432/tcp
+        options: >-
+          --health-cmd "pg_isready -U panel_ci -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PANEL_RUN_POSTGRES_TESTS: '1'
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      # A PostgreSQL workflow test uses Node/Three.js to verify a generated GLB.
+      - uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+      - name: Prepare dependencies
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install -r requirements.txt
+          .venv/bin/python -m pip check
+          npm install --global "npm@$NPM_VERSION"
+          npm ci --prefix ../frontend
+          mkdir -p "$RUNNER_TEMP/ci-results"
+      - name: Run isolated PostgreSQL profile and audit teardown
+        env:
+          PANEL_DATA_DIR: ${{ runner.temp }}/panel-postgres-data
+          PGHOST: 127.0.0.1
+          PGPORT: ${{ job.services.postgres.ports['5432'] }}
+          PGUSER: panel_ci
+          PGPASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD }}
+        run: .venv/bin/python tools/run_ci_postgres.py --junitxml="$RUNNER_TEMP/ci-results/postgres-isolated.xml"
+      - name: Require database coverage and summarize skips
+        if: always()
+        run: .venv/bin/python ../.github/scripts/ci_results.py "$RUNNER_TEMP/ci-results/postgres-isolated.xml" --label 'Disposable PostgreSQL' --require-postgres
+      - name: Publish test results
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: postgres-isolated-results
+          path: ${{ runner.temp }}/ci-results/
+          if-no-files-found: error
+          retention-days: 14
+
+  frontend-test:
+    name: Frontend tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Prepare frontend dependencies
+        run: |
+          npm install --global "npm@$NPM_VERSION"
+          npm ci
+          mkdir -p "$RUNNER_TEMP/ci-results"
+      - name: Run frontend test profile
+        run: npm test -- --reporter=default --reporter=junit --outputFile="$RUNNER_TEMP/ci-results/frontend-test.xml"
+      - name: Summarize results
+        if: always()
+        run: python ../.github/scripts/ci_results.py "$RUNNER_TEMP/ci-results/frontend-test.xml" --label 'Frontend tests'
+      - name: Publish test results
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: frontend-test-results
+          path: ${{ runner.temp }}/ci-results/
+          if-no-files-found: error
+          retention-days: 14
+
+  frontend-build:
+    name: Frontend build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+      - name: Prepare frontend dependencies
+        run: |
+          npm install --global "npm@$NPM_VERSION"
+          npm ci
+          mkdir -p "$RUNNER_TEMP/ci-results"
+      - name: Run frontend build profile
+        id: build
+        run: npm run build 2>&1 | tee "$RUNNER_TEMP/ci-results/frontend-build.log"
+      - name: Summarize build
+        if: always()
+        env:
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+        run: |
+          # Only the result/log are published; dist remains on the disposable runner.
+          echo "### Frontend build: $BUILD_OUTCOME" >> "$GITHUB_STEP_SUMMARY"
+      - name: Publish build log
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: frontend-build-results
+          path: ${{ runner.temp }}/ci-results/
+          if-no-files-found: error
+          retention-days: 14

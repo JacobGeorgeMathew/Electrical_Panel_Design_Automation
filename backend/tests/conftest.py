@@ -6,6 +6,14 @@ import pytest
 from sqlalchemy import create_engine
 
 
+def pytest_collection_modifyitems(items):
+    # Persist fixture dependency in JUnit, including tests skipped before setup.
+    # CI uses this to distinguish database coverage from ordinary unit results.
+    for item in items:
+        if 'postgres_database' in item.fixturenames:
+            item.user_properties.append(('panelflow_postgres', 'true'))
+
+
 @pytest.fixture(scope='session')
 def postgres_database(tmp_path_factory):
     if os.environ.get('PANEL_RUN_POSTGRES_TESTS')!='1':
