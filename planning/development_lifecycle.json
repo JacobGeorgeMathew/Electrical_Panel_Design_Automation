@@ -319,9 +319,9 @@
               "dependencies": ["P0-T02","P0-T06"],
               "planned_outputs": [".github/workflows/ci.yml"],
               "implementation_steps": ["Add backend unit, explicitly enabled disposable PostgreSQL, frontend test and build lanes with pinned toolchains.","Publish test results and fail when an intended database lane silently skips; keep credentials in CI secrets."],
-              "acceptance_criteria": ["A sample PR executes all four lanes and reports skips.","CI creates and removes only its disposable databases and commits no secrets or build artifacts."],
+              "acceptance_criteria": ["The committed workflow defines backend unit, explicitly enabled disposable PostgreSQL, frontend test and frontend build lanes with pinned toolchains, result publication and required database skip detection; all four mandatory local verification profiles pass with disclosed skips. JacobGM explicitly defers hosted execution while the GitHub billing lock prevents runner startup, as recorded in docs/verification/ci-hosted-verification-deferral.md; hosted checks remain unverified.","Source review and the executed local isolated-database profile demonstrate fixture-owned disposable database creation/removal, a passing teardown audit, CI credentials referenced through secrets, and no secrets or generated build artifacts in the implementation commit. Hosted container provisioning/teardown and result artifact publication remain documented follow-up obligations before relying on hosted CI as a release gate."],
               "verification_profiles": ["backend_unit","postgres_isolated","frontend_unit","frontend_build"],
-              "input_files": ["backend/tests/conftest.py","backend/requirements.txt","frontend/package.json"]
+              "input_files": ["backend/tests/conftest.py","backend/requirements.txt","frontend/package.json","docs/verification/ci-hosted-verification-deferral.md"]
             },
             {
               "id": "P0-T10",
