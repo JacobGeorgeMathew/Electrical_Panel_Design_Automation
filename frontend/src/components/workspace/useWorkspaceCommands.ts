@@ -1,5 +1,6 @@
 import {useProjectStore} from '../../stores/projectStore';
 import {useWorkspaceStore,type WorkspaceTool} from '../../stores/workspaceStore';
+import {useDocumentStore} from '../../stores/documentStore';
 import {assetUrl,exportProject,fetchFreeCADScript} from '../../api/client';
 
 export function downloadFile(data:Blob,name:string){
@@ -8,7 +9,8 @@ export function downloadFile(data:Blob,name:string){
 }
 export function useWorkspaceCommands(openDialog:(dialog:'project'|'help')=>void){
   const state=useProjectStore(),ui=useWorkspaceStore();
-  const busy=state.isGenerating||state.isSaving||state.isLoadingProject||!!state.pendingRecovery;
+  const docState=useDocumentStore();
+  const busy=docState.readOnly||state.isGenerating||state.isSaving||state.isLoadingProject||!!state.pendingRecovery;
   const tool=(value:WorkspaceTool)=>{
     ui.setTool(value);state.setEditorMode(value==='measure'?'select':value);
     if(value==='measure')useWorkspaceStore.setState({inspectorOpen:true});
@@ -33,7 +35,7 @@ export function useWorkspaceCommands(openDialog:(dialog:'project'|'help')=>void)
     layout:{label:'Reset workspace layout',run:ui.resetLayout,disabled:false},
     fit:{label:'Fit design',shortcut:'F',run:()=>ui.camera('fit'),disabled:!['threeD','layout2d','schematic'].includes(state.activeTab)||(!state.pdm&&!state.schematicData)},
     fullscreen:{label:'Full-screen viewport',shortcut:'Shift+F',run:()=>ui.camera('fullscreen'),disabled:!['threeD','layout2d','schematic'].includes(state.activeTab)},
-    generate:{label:'Generate design',run:()=>{ui.setBottomTab('output');void state.runDesignPipeline().then(()=>{const current=useProjectStore.getState();if(current.projectId===state.projectId&&!current.errorMessage&&current.pdm)current.setActiveTab('threeD');});},disabled:busy},
+    generate:{label:'Publish engineering revision (compute & publish)',run:()=>{ui.setBottomTab('output');void state.runDesignPipeline().then(()=>{const current=useProjectStore.getState();if(current.projectId===state.projectId&&!current.errorMessage&&current.pdm)current.setActiveTab('threeD');});},disabled:busy||(!!state.document&&state.hasUnsavedChanges)},
     requirements:{label:'Requirements',run:()=>state.setActiveTab('requirements'),disabled:false},
     catalog:{label:'Component library…',run:()=>state.setActiveTab('catalog'),disabled:false},
     select:{label:'Select',shortcut:'V',run:()=>tool('select'),disabled:busy},
@@ -48,7 +50,7 @@ export function useWorkspaceCommands(openDialog:(dialog:'project'|'help')=>void)
     report:{label:'Detailed validation report',run:()=>state.setActiveTab('validation'),disabled:!state.pdm},
     exportProject:{label:'Project package (saved)…',run:()=>void run(async()=>downloadFile(new Blob([JSON.stringify(await exportProject(state.projectId))],{type:'application/json'}),`panel-project-${state.projectId}.json`)),disabled:busy},
     exportGLB:{label:'Saved assembly · GLB',run:()=>{if(preview?.url){const a=document.createElement('a');a.href=assetUrl(preview.url);a.download='panel-assembly.glb';a.click();}},disabled:!preview?.url||state.designStale||state.hasUnsavedChanges},
-    exportCAD:{label:'FreeCAD script…',run:()=>void run(async()=>{const result=await fetchFreeCADScript(state.projectId);downloadFile(new Blob([result.script],{type:'text/x-python'}),`panel-${state.projectId}.py`);}),disabled:!state.pdm||state.designStale||state.hasUnsavedChanges},
+    exportCAD:{label:'FreeCAD script…',run:()=>void run(async()=>{const result=await fetchFreeCADScript(state.projectId);downloadFile(new Blob([result.script],{type:'text/x-python'}),`panel-${state.projectId}.py`);}),disabled:docState.readOnly||docState.unsupported||!state.pdm||state.designStale||state.hasUnsavedChanges},
     help:{label:'Workspace help & shortcuts',run:()=>openDialog('help'),disabled:false},
     documentation:{label:'Project documentation',run:()=>state.setActiveTab('documentation'),disabled:false},
   };

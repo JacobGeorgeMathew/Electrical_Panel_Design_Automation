@@ -2,6 +2,7 @@ import {useEffect,useState,type CSSProperties} from 'react';
 import {Box,Layers,GitBranch,FileSpreadsheet,Sliders,Package,BookOpen,ShieldCheck} from 'lucide-react';
 import {useProjectStore,type ViewTab} from '../stores/projectStore';
 import {useWorkspaceStore} from '../stores/workspaceStore';
+import {useDocumentStore} from '../stores/documentStore';
 import {Questionnaire} from '../components/requirements/Questionnaire';
 import {SchematicViewer} from '../components/schematic/SchematicViewer';
 import {Layout2DViewer} from '../components/layout/Layout2DViewer';
@@ -29,6 +30,7 @@ const tabs:{id:ViewTab;label:string;icon:typeof Box}[]=[
 ];
 export function ProjectPage(){
   const state=useProjectStore(),ui=useWorkspaceStore();
+  const docState=useDocumentStore();
   const [dialog,setDialog]=useState<'project'|'help'|null>(null);
   const commands=useWorkspaceCommands(setDialog);
   useEffect(()=>{
@@ -59,6 +61,10 @@ export function ProjectPage(){
   const extra=state.activeTab==='catalog'?{id:'catalog' as const,label:'Component Library',icon:Package}:state.activeTab==='documentation'?{id:'documentation' as const,label:'Documentation',icon:BookOpen}:state.activeTab==='validation'?{id:'validation' as const,label:'Validation Report',icon:ShieldCheck}:null;
   return <div className="engineering-workspace" style={{'--browser-width':`${ui.browserWidth}px`,'--inspector-width':`${ui.inspectorWidth}px`} as CSSProperties}>
     <WorkspaceMenuBar commands={commands}/><WorkspaceToolbar commands={commands}/>
+    {(docState.readOnly||docState.unsupported)&&<div className="workspace-notice" role="status">
+      {docState.readOnly?'Historical read-only. ':''}{docState.unsupported?'Unsupported legacy output: saved representations are missing. ':''}
+      {docState.readOnly&&<button disabled={state.isLoadingProject} onClick={()=>void state.returnToDocument()}>Return to working draft</button>}
+    </div>}
     {state.pendingRecovery&&<div className="workspace-notice" role="alert">Recovery checkpoint available{state.pendingRecovery.base_version!==state.lockVersion?' from an earlier project version':''}.
       <button onClick={state.recoverChanges}>Recover changes</button><button disabled={state.isSaving} onClick={()=>void state.discardRecovery()}>Discard checkpoint</button></div>}
     <main className="workspace-body">
@@ -85,7 +91,7 @@ export function ProjectPage(){
       {ui.inspectorOpen&&<><PanelResizeHandle panel="inspector"/><div className="inspector-dock"><PropertiesInspector/></div></>}
     </main>
     {ui.bottomOpen&&<PanelResizeHandle panel="bottom"/>}<WorkspaceBottomPanel/>
-    <footer className="workspace-statusbar"><span className={`save-state ${state.hasUnsavedChanges?'dirty':''}`}>{state.isSaving?'Saving…':state.hasUnsavedChanges?'● Unsaved draft':'● Saved'}</span><span>{state.designStale?'Engineering revision out of date':state.currentRevisionNo?`Active revision r${state.currentRevisionNo}`:'Empty engineering document'}</span><span className="status-selection">{state.selectedObjectId?`Selected: ${state.selectedObjectId}`:'No selection'}</span><span>mm</span><span>{state.archetype}</span></footer>
+    <footer className="workspace-statusbar"><span className={`save-state ${state.hasUnsavedChanges?'dirty':''}`}>{state.isSaving?'Saving…':docState.saveLabel}</span><span>{docState.outputLabel}</span><span className="status-selection">{state.selectedObjectId?`Selected: ${state.selectedObjectId}`:'No selection'}</span><span>mm</span><span>{state.archetype}</span></footer>
     {dialog&&<WorkspaceDialog title={dialog==='project'?'Project & revision history':'Workspace help'} onClose={()=>setDialog(null)}>{dialog==='project'?<ProjectPersistenceBar/>:<div className="workspace-help"><p>Use the browser to navigate the project and select components. The properties inspector follows selection across all views.</p><dl><dt>Ctrl / ⌘ S</dt><dd>Save project</dd><dt>Ctrl / ⌘ Z</dt><dd>Undo placement</dd><dt>Ctrl / ⌘ Shift Z</dt><dd>Redo placement</dd><dt>V / M</dt><dd>Select / Move</dd><dt>F / Shift F</dt><dd>Fit / Full-screen viewport</dd><dt>Esc</dt><dd>Exit full screen or clear selection</dd></dl><p>Drag panel dividers to resize, or focus a divider and use the arrow keys. Panel buttons in the toolbar collapse the browser and inspector. Measure selects two component centers.</p><p>Component specifications remain catalog-controlled. Save preserves placement and schematic drafts. Exports use the generated engineering revision.</p></div>}</WorkspaceDialog>}
     <ChangePropagationModal/>
   </div>;

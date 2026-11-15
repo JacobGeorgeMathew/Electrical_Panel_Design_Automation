@@ -95,7 +95,7 @@
     "app/data/panel_templates.json": "2bbf9bcc389c33adec65ad72dd19eeb044ef0be14ab2d2b01b3ce9f5f8dec284",
     "app/data/rules.json": "c23ece972453c2608a95ef0a2a6a079fde5f59eff527adc2bed3208ebfe8f358",
     "app/data/sample_projects.json": "548011dac315d22aa79b404ec3f5b8b7d2ab56260bf24b1bd69bd72501ec9e32",
-    "app/models/api.py": "dcc3fee3a4d612e7b89870ee4500bc9c9515a62b984087ae77007a723448a10a",
+    "app/models/api.py": "005aecacf08be6a663cea73d769e969751344e3bcbc3a0d2ad978309803873bf",
     "app/models/cem.py": "db105ffcafe8cf6ea6a77f4226e1135a16f6235c1c0844c467508d4a9ac8742c",
     "app/models/document.py": "029c3d44673184005d19550a8b748f1c93c7aa0404d3ee23738282caf2299262",
     "app/models/document_api.py": "dc94126d9d52c3b13848c60dd6dac86bf866f90764e4bb1b410a96bd7eb50a45",
@@ -118,7 +118,8 @@
     "app/services/panel_assembly.py": "e739fe828b8fc40cc539ebae07a30214bdfc1a0f1facf5f9d832b91e77d71272",
     "app/services/panel_geometry.py": "3848b09f1d52a388cc3ef96e804dfc8196e2d89d1f48d1c75d90196b766070e0",
     "app/services/physical_routing.py": "19a58e746ca8f3e4a580ade3d5e0b8d41947e57891bcbe0995dd8dd699f2c146",
-    "app/services/project_lifecycle.py": "5f0e1dec1fbf9a29c838da0be361f1ce937b9921731891fd0925a27128069dd7",
+    "app/services/project_lifecycle.py": "1e1f59b2e5b231287adda4dee0ba8e5126a3c0774fae686131572bee3768fe98",
+    "app/services/project_package.py": "865cd8fd3cfab5431856afc5203e6a5bd15cb76ccbe789b990ff370904bd9ad7",
     "app/services/project_service.py": "3d3c7502e90ce19a7e1164b2efad974a7a7a924fa47def9bcfa447406812a738",
     "app/services/questionnaire_choices.py": "aa78dfc647c07e0ce032568ccd53c02f3f6d175c479bd384ccd4f2957bdc8f7d",
     "app/services/requirement_engine.py": "3e0b60529a740e3abc96961dbcc9fea7d1dfc540bf82a3f701a83a2556bee7cf",
@@ -136,7 +137,7 @@
     "app/repositories/enclosure_repository.py": "be487d3eb2863afaff166234acbee09ad4650be97cb4caf3333977f4f6155899",
     "app/repositories/project_repository.py": "166dbe3d63d14a90c0d5d36c6acabb8e74aa5eb38a1a532f24b2df46ae4bce29",
     "app/repositories/rule_repository.py": "48b8d236aaf8edf1f1c14322e10a14529b7ad62904993436ce020b4060f758c0",
-    "app/persistence/assets.py": "22141f5865eb9a44df618ca52c34bc0d60cc29b7979589fb60609b4d0bf51c32",
+    "app/persistence/assets.py": "db97e1b90c46449c7e3d907872beb451d6497e801f04565b109b7e00f59885c4",
     "app/persistence/repositories.py": "8a1cf676e46ef31d0fc0afe0be8681883c8875858d17cb7ced7388dcdf18fd34"
   }
 }

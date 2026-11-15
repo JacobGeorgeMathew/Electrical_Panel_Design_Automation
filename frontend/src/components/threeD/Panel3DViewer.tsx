@@ -133,7 +133,7 @@ export const Panel3DViewer: React.FC<{embedded?:boolean}> = ({embedded=false}) =
     editorUndoStack, editorRedoStack, setEditorMode, toggleEditorSnap, setEditorGridMm,
     toggleComponentVisibility, updateEditorTransform, commitEditorTransform,
     undoEditorTransform, redoEditorTransform, resetEditorDraft, artifacts, refreshCadPreview, cadJobStatus, designStale,
-    hasUnsavedChanges, currentRevisionId, cadData,
+    hasUnsavedChanges, currentRevisionId, cadData, viewedRevisionId,
   } = useProjectStore();
 
   const [showArtifact,setShowArtifact] = useState(false);
@@ -281,7 +281,7 @@ export const Panel3DViewer: React.FC<{embedded?:boolean}> = ({embedded=false}) =
                 transform={componentTransform(component, editorTransforms[id])}
                 isSelected={selectedId === id} isHovered={hoveredObjectId === id || hoveredObjectId === component.id}
                 exploded={explodedView} hidden={editorHiddenComponentIds.includes(id)}
-                mode={selectedId === id && editorMode !== 'select' ? editorMode : null}
+                mode={!viewedRevisionId && selectedId === id && editorMode !== 'select' ? editorMode : null}
                 snapEnabled={editorSnapEnabled} gridMm={editorGridMm}
                 onSelect={selectObject} onHover={hoverObject} onTransform={updateEditorTransform} onCommit={()=>{commitEditorTransform();void useProjectStore.getState().validateCurrentPlacement();}} />;
             })}

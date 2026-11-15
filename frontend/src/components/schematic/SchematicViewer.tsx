@@ -62,7 +62,8 @@ const wireClasses: WireClass[] = ['POWER', 'CONTROL', 'SIGNAL', 'NEUTRAL', 'PE']
 const colors: Record<WireClass, string> = { POWER: '#EF4444', CONTROL: '#A78BFA', SIGNAL: '#F59E0B', NEUTRAL: '#3B82F6', PE: '#22C55E' };
 
 const SchematicCanvas: React.FC<{ data: SchematicGraphData;embedded?:boolean }> = ({ data,embedded=false }) => {
-  const { selectObject, selectedObjectId } = useProjectStore();
+  const { selectObject, selectedObjectId, viewedRevisionId } = useProjectStore();
+  const readOnly=!!viewedRevisionId;
   const viewportRef=useRef<DesignViewportHandle>(null);
   const canvasHost=useRef<HTMLDivElement>(null);
   const flow=useReactFlow<SchematicNode,SchematicEdge>();
@@ -121,6 +122,7 @@ const SchematicCanvas: React.FC<{ data: SchematicGraphData;embedded?:boolean }> 
   const visibleEdges = edges.filter((edge) => wireFilter === 'ALL' || edge.data?.wire_class === wireFilter).map(edge=>({...edge,selected:edge.selected||edge.id===selectedObjectId||!!selectedNet&&edge.data?.net_id===selectedNet}));
 
   const onConnect = useCallback((connection: Connection) => {
+    if(readOnly)return;
     if (!connection.source || !connection.target || !connection.sourceHandle || !connection.targetHandle) return;
     edited.current=true;
     draftSequence.current += 1;
@@ -129,9 +131,10 @@ const SchematicCanvas: React.FC<{ data: SchematicGraphData;embedded?:boolean }> 
     setEdges((current) => addEdge({ ...connection, id: `DRAFT-CONN-${suffix}`, type: 'wire',
       data: { net_id: `NET-DRAFT-${suffix}`, net_name: `Draft net ${suffix}`, wire_class: wireClass,
         color: colors[wireClass], draft: true } }, current) as SchematicEdge[]);
-  }, [setEdges, wireFilter]);
+  }, [setEdges, wireFilter, readOnly]);
 
   const addJunction = () => {
+    if(readOnly)return;
     edited.current=true;
     draftSequence.current += 1;
     const suffix = crypto.randomUUID();
@@ -142,6 +145,7 @@ const SchematicCanvas: React.FC<{ data: SchematicGraphData;embedded?:boolean }> 
   };
 
   const updateSelectedEdge = (patch: Partial<SchematicEdgeData>) => {
+    if(readOnly)return;
     if (!selectedEdgeId) return;
     edited.current=true;
     setEdges((current) => current.map((edge) => edge.id === selectedEdgeId ? {
@@ -183,8 +187,8 @@ const SchematicCanvas: React.FC<{ data: SchematicGraphData;embedded?:boolean }> 
             setSelectedEdgeId(chosenEdges[0]?.id || null);
           }}
           onMove={(_,viewport)=>setZoomPercent(Math.round(viewport.zoom*100))}
-          fitView fitViewOptions={{ padding: 0.15, minZoom:0.02, maxZoom:1 }} minZoom={0.02} maxZoom={8} zoomOnScroll zoomOnPinch zoomOnDoubleClick preventScrolling nodesConnectable nodesDraggable
-          selectionOnDrag={false} panOnDrag deleteKeyCode={['Backspace', 'Delete']}>
+          fitView fitViewOptions={{ padding: 0.15, minZoom:0.02, maxZoom:1 }} minZoom={0.02} maxZoom={8} zoomOnScroll zoomOnPinch zoomOnDoubleClick preventScrolling nodesConnectable={!readOnly} nodesDraggable={!readOnly}
+          selectionOnDrag={false} panOnDrag deleteKeyCode={readOnly?null:['Backspace', 'Delete']}>
           <Background color="#334155" gap={24} size={1} /><MiniMap nodeColor={(node) => node.type === 'junction' ? '#FBBF24' : '#334155'} />
 
         </ReactFlow>

@@ -25,7 +25,7 @@ export function PropertiesInspector(){
   const pose=part?componentTransform(part,editorTransforms[part.cem_component_id]):null;
   const measured=measurement.map(key=>pdm?.components.find(c=>c.cem_component_id===key)).filter((p):p is NonNullable<typeof p>=>!!p);
   const centers=measured.map(p=>{const t=componentTransform(p,editorTransforms[p.cem_component_id]);return [t.x+p.width/2,t.y+p.height/2,t.z+p.depth/2];});
-  const editable=!state.isGenerating&&!state.isLoadingProject&&!state.pendingRecovery;
+  const editable=!state.viewedRevisionId&&!state.isGenerating&&!state.isLoadingProject&&!state.pendingRecovery;
   return <aside aria-label="Properties inspector" className="properties-inspector">
     <div className="panel-heading">PROPERTIES <span>{id||'No selection'}</span></div>
     {tool==='measure'&&<section className="property-section measurement"><h3><Ruler size={14}/>Measure</h3><p>Select two components in a canvas or browser.</p>

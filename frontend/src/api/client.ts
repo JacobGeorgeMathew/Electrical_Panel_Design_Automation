@@ -1,4 +1,5 @@
 import { API_BASE } from './config';
+import type { DocumentSave, DocumentView } from '../types/document';
 import type { PhysicalDesignModel } from '../types/pdm';
 import type { ProjectRecord, ProjectConfiguration, DesignPackage, RevisionSummary, Question, Archetype, CatalogPage, CatalogComponent, Enclosure, Artifact } from '../types/api';
 
@@ -36,6 +37,12 @@ export async function request<T>(path: string, options: RequestInit = {}, timeou
 
 const json = (method: string, body: unknown): RequestInit => ({ method, body: JSON.stringify(body) });
 const id = encodeURIComponent;
+export const fetchDocument = (projectId: string, signal?: AbortSignal) =>
+  request<DocumentView>('/v1/projects/' + id(projectId) + '/document', { signal });
+export const saveDocument = (projectId: string, data: DocumentSave) =>
+  request<DocumentView>('/v1/projects/' + id(projectId) + '/document', json('PUT', data));
+export const fetchRevision = (projectId: string, revisionId: string, signal?: AbortSignal) =>
+  request<DesignPackage>('/projects/' + id(projectId) + '/revisions/' + id(revisionId), { signal });
 export const fetchRequirementSuggestions=(projectId:string,archetype:string,values:Record<string,unknown>,signal?:AbortSignal)=>
   request<import('../types/api').RequirementSuggestions>(projectId?'/projects/'+id(projectId)+'/requirements/suggestions':'/archetypes/'+id(archetype)+'/suggestions',
     {...json('POST',values),signal});
@@ -86,5 +93,5 @@ export const deleteProject=(projectId:string,version:number)=>request<void>('/pr
 export const duplicateProject=(projectId:string,version:number,name:string)=>request<ProjectRecord>('/projects/'+id(projectId)+'/duplicate',json('POST',{expected_version:version,name}),90000);
 export const exportProject=(projectId:string)=>request<unknown>('/projects/'+id(projectId)+'/export',{},90000);
 export const importProject=(data:unknown)=>request<ProjectRecord>('/projects/import',json('POST',data),90000);
-export const saveRecovery=(projectId:string,version:number,recoveryVersion:number,document:import('../stores/projectRecovery').RecoveryDocument|null)=>
+export const saveRecovery=(projectId:string,version:number,recoveryVersion:number,document:import('../types/recovery').RecoveryDocument|null)=>
   request<ProjectRecord>('/projects/'+id(projectId)+'/recovery',json('PUT',{expected_version:version,expected_recovery_version:recoveryVersion,document}));

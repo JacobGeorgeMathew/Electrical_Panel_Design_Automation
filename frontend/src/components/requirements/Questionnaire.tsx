@@ -31,7 +31,7 @@ export const Questionnaire: React.FC = () => {
     validationWarnings,
     setError,
     validateCurrentRequirements,
-    isSaving, isLoadingProject, pendingRecovery
+    isSaving, isLoadingProject, pendingRecovery, viewedRevisionId, document: workingDocument, hasUnsavedChanges
   } = useProjectStore();
 
   const [suggestions,setSuggestions]=useState<RequirementSuggestions|null>(null);
@@ -43,7 +43,7 @@ export const Questionnaire: React.FC = () => {
   const [submissionPhase, setSubmissionPhase] = useState<'validating' | 'generating' | null>(null);
   const submitting = useRef(false);
   const isProcessing = submissionPhase !== null || isGenerating;
-  const busy = isProcessing || isSaving || isLoadingProject || !!pendingRecovery;
+  const busy = !!viewedRevisionId || isProcessing || isSaving || isLoadingProject || !!pendingRecovery;
 
   useEffect(() => {
     const abort = new AbortController();
@@ -109,10 +109,10 @@ export const Questionnaire: React.FC = () => {
       </div>
 
       <div className="flex flex-wrap items-center gap-3 bg-slate-900/70 border border-slate-800 p-4 rounded-xl">
-        <button onClick={handleValidate} disabled={busy || !projectId} aria-busy={isProcessing}
+        <button onClick={handleValidate} disabled={busy || !projectId || (!!workingDocument&&hasUnsavedChanges)} aria-busy={isProcessing}
           className="requirements-generation-button px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg text-xs font-semibold">
           {isProcessing && <BoltLoader />}
-          {submissionPhase === 'validating' ? 'Validating requirements…' : isProcessing ? 'Generating design…' : 'Validate & Generate'}
+          {submissionPhase === 'validating' ? 'Validating requirements…' : isProcessing ? 'Publishing design…' : 'Validate & Publish'}
         </button>
         {isProcessing && <span role="status" aria-live="polite" className="requirements-generation-status">
           {submissionPhase === 'validating' ? 'Checking your electrical requirements…' : 'Building your electrical panel design…'}

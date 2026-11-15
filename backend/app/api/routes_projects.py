@@ -8,8 +8,9 @@ from sqlalchemy import select
 from fastapi import Response
 from app.services.project_lifecycle import ProjectLifecycle
 from app.models.api import OverlayCompatibilityInput
+from app.services.project_package import PackageImportRoute
 
-router=APIRouter(prefix='/api/projects',tags=['projects'])
+router=APIRouter(prefix='/api/projects',tags=['projects'],route_class=PackageImportRoute)
 
 @router.get('',response_model=list[ProjectView])
 def list_projects(page:int=Query(1,ge=1),page_size:int=Query(50,ge=1,le=100),q:str=Query('',max_length=200),recent:bool=False,session=Depends(get_session)):

@@ -21,7 +21,9 @@ class AssetStore:
             raise ValueError("Unsupported managed asset format.")
         digest = hashlib.sha256(data).hexdigest()
         key = f"sha256/{digest[:2]}/{digest[2:4]}/{digest}.{extension}"
-        target = self.root / key
+        target = (self.root / key).resolve()
+        if not target.is_relative_to(self.root):
+            raise AssetUnavailable("Asset path is outside managed storage.")
         target.parent.mkdir(parents=True, exist_ok=True)
         if not target.exists():
             fd, temporary = tempfile.mkstemp(prefix=".pending-", dir=target.parent)

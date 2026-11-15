@@ -35,6 +35,7 @@ class PreparedOutputs:
     dependencies: list
     transforms: dict
     bounds: dict
+    complete: bool = True
 
 
 def transform(position, angle=0):
@@ -44,7 +45,7 @@ def transform(position, angle=0):
 
 
 def prepare_outputs(project, requirements, answers, result, manifest, files, source, assets,
-                    expected_version):
+                    expected_version, *, revision_id=None):
     """Detach and hash exact engine representations, inputs/pins and artifact metadata.
 
     DOCUMENT captures the source aggregate and its resolved values, not a claim
@@ -55,7 +56,7 @@ def prepare_outputs(project, requirements, answers, result, manifest, files, sou
         raise ValueError('Publication requires an explicit version fence.')
     if result['validation_errors'] or result['pdm']['validation_results']:
         raise PersistenceError('INVALID_PUBLICATION', 'Physical violations block publication.', 409)
-    rid = uuid4()
+    rid = revision_id or uuid4()
     source = deepcopy(source)
     model_manifest = deepcopy(manifest)
     model_manifest.pop('output_manifest_sha256', None)
@@ -117,6 +118,10 @@ def prepare_outputs(project, requirements, answers, result, manifest, files, sou
 
 def write_outputs(session, prepared):
     """Insert only precomputed JSON and references in the caller's transaction."""
+    if not prepared.complete:
+        # A v1 package never contained frozen outputs. Preserve that absence;
+        # only explicit compatibility conversion may create new representations.
+        return
     source = prepared.manifest['source_document']
     row = session.execute(select(m.design_documents).where(
         m.design_documents.c.project_id == identifier(prepared.project_id)).with_for_update()).mappings().first()

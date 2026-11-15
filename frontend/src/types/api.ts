@@ -13,7 +13,7 @@ export interface ProjectRecord {
   current_revision_id: string | null; created_at: string;
   updated_at: string; description: string; location: string; last_opened_at: string | null;
   workspace: {editorTransforms?: Record<string, import('../stores/projectStore').EditorTransform>; schematicData?: any};
-  recovery: import('../stores/projectRecovery').Checkpoint | null; recovery_version: number;
+  recovery: import('./recovery').Checkpoint | null; recovery_version: number;
 }
 export interface RevisionSummary { id: string; revision_no: number; parent_revision_id: string | null; created_at: string; status: string; content_sha256: string; }
 export interface Question {

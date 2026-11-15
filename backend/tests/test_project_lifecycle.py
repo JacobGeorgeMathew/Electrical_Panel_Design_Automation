@@ -65,6 +65,55 @@ def test_recovery_is_durable_and_conflicting_tabs_cannot_overwrite(api, postgres
     assert api.put(path, json={**request, 'expected_recovery_version': checkpoint['recovery_version']}).status_code == 409
 
 
+def test_versioned_recovery_has_independent_clock_and_retains_old_base(api, postgres_database, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from app.services.project_service import ProjectService
+    from app.services.orchestrator import DesignOrchestrator
+    from app.services.cad_engine import CADEngine
+    from app.services.schematic_engine import SchematicEngine
+    from app.services.physical_routing import DuctRouter
+    from tests.test_documents_api import request_for
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError('Recovery invoked generation')
+
+    for cls in (DesignOrchestrator, CADEngine, SchematicEngine, DuctRouter):
+        monkeypatch.setattr(cls, '__init__', forbidden)
+    monkeypatch.setattr(ProjectService, 'generate', forbidden)
+    p = create(api)
+    root = f"/api/projects/{p['id']}"
+    document_path = f"/api/v1/projects/{p['id']}/document"
+    base = ok(api.get(document_path))
+    d = base['document']
+    draft = {'schema_version': 2, 'baseDocument': {k: d[k] for k in
+        ('document_id', 'document_sequence', 'schema_version')},
+        'baseRevisionId': None, 'requirements': {'unfinished': '-'},
+        'configuration': {}, 'workspace': {'editorTransforms': {}, 'schematicData': None}}
+    body = {'expected_version': p['lock_version'], 'expected_recovery_version': 0, 'document': draft}
+    # Save changes L/S first. Recovery still accepts and retains the older base.
+    saved = ok(api.put(document_path, json=request_for(base)))
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        responses = list(pool.map(lambda _: api.put(root + '/recovery', json=body), range(2)))
+    assert sorted(r.status_code for r in responses) == [200, 409]
+    winner = next(r.json() for r in responses if r.status_code == 200)
+    assert next(r.json() for r in responses if r.status_code == 409)['error']['code'] == 'RECOVERY_CONFLICT'
+    assert winner['lock_version'] == saved['document']['lock_version']
+    assert winner['recovery'] == {**winner['recovery'], 'schema_version': 2,
+        'recovery_sequence': 1, 'base_version': p['lock_version'], 'document': draft}
+    assert ok(api.get(document_path)) == saved
+    with TestClient(create_app(postgres_database)) as restarted:
+        assert ok(restarted.get(root))['recovery'] == winner['recovery']
+    # Another document Save leaves R and the raw incompatible draft unchanged.
+    ok(api.put(document_path, json=request_for(saved, 230)))
+    assert ok(api.get(root))['recovery'] == winner['recovery']
+    cleared = ok(api.put(root + '/recovery', json={**body, 'expected_recovery_version': 1, 'document': None}))
+    assert cleared['recovery_version'] == 2 and cleared['recovery'] is None
+    assert ok(api.get(root + '/revisions')) == []
+    for invalid in ({**draft, 'schema_version': 99},
+                    {**draft, 'baseDocument': {**draft['baseDocument'], 'document_sequence': -1}}):
+        assert api.put(root + '/recovery', json={**body, 'document': invalid}).status_code == 422
+
+
 def test_duplicate_and_import_preserve_generated_history(api):
     p = create(api)
     design = ok(api.post(f"/api/projects/{p['id']}/revisions", json={'expected_version': p['lock_version'], 'requirements': {}}), 201)
