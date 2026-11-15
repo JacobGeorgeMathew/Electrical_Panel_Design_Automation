@@ -1,5 +1,11 @@
 """Repository/storage contracts for application services and future adapters."""
 from typing import Protocol
+from app.models.document import ResolvedDocument
+from app.models.document_api import DocumentView
+
+class WorkingDocumentStore(Protocol):
+    def load(self, project: dict) -> DocumentView: ...
+    def store(self, resolved: ResolvedDocument, create: bool = False) -> None: ...
 
 class ComponentCatalog(Protocol):
     def get_component(self,key:str)->dict|None: ...

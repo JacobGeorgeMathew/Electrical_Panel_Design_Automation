@@ -50,6 +50,8 @@ class ProjectService:
             s.execute(update(m.projects).where(m.projects.c.id==row['id']).values(description=data.description,location=data.location,last_opened_at=datetime.now(timezone.utc)))
             reqs=self.validate(template,pid,data.requirements)
             repo.save_requirements(row,template,reqs,data.requirements)
+            from app.services.document_service import DocumentService
+            DocumentService.create_empty(s, row, template)
             return repo.get(pid)
 
     def update(self,key,data):

@@ -29,6 +29,7 @@ ENV/
 backend/venv/
 .local/
 backend/.local/
+backend/.env
 
 # IDE / OS
 .vscode/

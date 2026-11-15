@@ -14,7 +14,7 @@ class Database:
     def ready(self) -> bool:
         try:
             with self.engine.connect() as conn:
-                return conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0004_projects"
+                return conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0005_design_documents"
         except Exception:
             return False
 
