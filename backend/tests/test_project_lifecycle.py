@@ -95,3 +95,93 @@ def test_rename_preserves_recovery_and_invalid_packages_are_atomic(api):
     assert api.post('/api/projects/import',json=package).status_code==422
     assert {r['id'] for r in ok(api.get('/api/projects'))}==before
     assert api.post(f"/api/projects/{p['id']}/duplicate",json={'expected_version':renamed['lock_version'],'name':'   '}).status_code==422
+
+
+def test_restore_adds_one_revision_preserving_all_original_hashes(api, postgres_database, monkeypatch):
+    from sqlalchemy import select
+    from app.persistence import models as m
+    from app.persistence.assets import canonical_json
+    from app.persistence.repositories import identifier, serial
+    from app.services.project_service import ProjectService
+    from tests.test_revision_reader import disable_generators
+
+    p = create(api)
+    service = ProjectService(postgres_database)
+    first = service.generate(p['id'], {'num_feeders': 4}, p['lock_version'],
+                             configuration={'enclosure_id': None})
+    second = service.generate(p['id'], {'num_feeders': 5}, first['lock_version'])
+    root = '/api/projects/' + p['id']
+    tables = [m.project_revisions, m.cem_snapshots, m.pdm_snapshots,
+              m.revision_output_manifests, m.revision_output_snapshots, m.generated_artifacts]
+
+    def original_rows():
+        with postgres_database.sessions() as session:
+            return [canonical_json(serial([dict(row) for row in session.execute(select(table).where(
+                (table.c.id if table is m.project_revisions else table.c.project_revision_id).in_(
+                    [identifier(first['revision_id']), identifier(second['revision_id'])]))).mappings()]))
+                for table in tables]
+
+    before = original_rows()
+    artifact_bytes = {a['url']: api.get(a['url']).content for a in first['artifacts']}
+    disable_generators(monkeypatch)
+    restored = ok(api.post(root + '/revisions/' + first['revision_id'] + '/restore',
+        json={'expected_version': second['lock_version']}), 201)
+    assert restored['revision_no'] == second['revision_no'] + 1
+    assert restored['revision_id'] not in {first['revision_id'], second['revision_id']}
+    assert restored['manifest']['restored_from_revision_id'] == first['revision_id']
+    for field in ('cem', 'pdm', 'schematic', 'bom', 'cad', 'validation_errors'):
+        assert restored[field] == first[field]
+    with postgres_database.sessions() as session:
+        parent = session.scalar(select(m.project_revisions.c.parent_revision_id).where(
+            m.project_revisions.c.id == identifier(restored['revision_id'])))
+    assert str(parent) == second['revision_id']
+    assert original_rows() == before
+    assert len(ok(api.get(root + '/revisions'))) == 3
+    assert all(api.get(url).content == data for url, data in artifact_bytes.items())
+    assert api.post(root + '/revisions/' + first['revision_id'] + '/restore',
+                    json={'expected_version': second['lock_version']}).status_code == 409
+    assert len(ok(api.get(root + '/revisions'))) == 3
+
+
+def test_overlay_proposals_retain_workspace_recovery_and_history(api, postgres_database, monkeypatch):
+    from app.services.project_service import ProjectService
+    from tests.test_revision_reader import disable_generators
+
+    p = create(api)
+    design = ProjectService(postgres_database).generate(p['id'], {}, p['lock_version'])
+    root = '/api/projects/' + p['id']
+    part = design['pdm']['components'][0]
+    workspace = {'editorTransforms': {part['cem_component_id']:
+        {**part['position'], 'x': part['position']['x'] + 1, 'rotation_deg': 0}}}
+    saved = ok(api.patch(root, json={'expected_version': design['lock_version'], 'workspace': workspace}))
+    saved = ok(api.put(root + '/recovery', json={'expected_version': saved['lock_version'],
+        'expected_recovery_version': saved['recovery_version'], 'document': {
+            'requirements': {}, 'configuration': {}, 'workspace': workspace,
+            'baseRevisionId': design['revision_id']}}))
+    disable_generators(monkeypatch)
+    request = dict(expected_version=saved['lock_version'], revision_id=design['revision_id'])
+    blocked = ok(api.post(root + '/compatibility-proposal', json=request))
+    assert blocked['status'] == 'BLOCKED' and not blocked['operations']
+    # Explicit base selection/evidence makes a reviewable proposal, never a commit.
+    proposal = ok(api.post(root + '/compatibility-proposal', json={**request, 'base': blocked['base']}))
+    assert proposal['status'] == 'REVIEW_REQUIRED' and len(proposal['operations']) == 1
+    recovery = ok(api.post(root + '/compatibility-proposal', json={**request, 'source': 'recovery'}))
+    assert recovery['status'] == 'BLOCKED'  # revision ID alone is insufficient
+    matching_recovery = ok(api.post(root + '/compatibility-proposal', json={**request,
+        'source': 'recovery', 'base': blocked['base']}))
+    assert matching_recovery['status'] == 'REVIEW_REQUIRED'
+    assert proposal['original_workspace'] == saved['workspace']
+    assert proposal['original_recovery'] == saved['recovery']
+    assert ok(api.get(root)) == saved
+    assert len(ok(api.get(root + '/revisions'))) == 1
+    assert ok(api.get(root + '/design'))['snapshot_sha256'] == design['snapshot_sha256']
+    assert api.post(root + '/compatibility-proposal', json={**request,
+        'expected_version': design['lock_version']}).status_code == 409
+    different_base = {**saved['recovery']['document'], 'baseRevisionId': 'another-revision'}
+    changed = ok(api.put(root + '/recovery', json={'expected_version': saved['lock_version'],
+        'expected_recovery_version': saved['recovery_version'], 'document': different_base}))
+    mismatch = ok(api.post(root + '/compatibility-proposal', json={**request,
+        'source': 'recovery', 'base': blocked['base']}))
+    assert mismatch['status'] == 'BLOCKED' and not mismatch['operations']
+    assert any(item['item'] == 'recovery.baseRevisionId' for item in mismatch['blocked'])
+    assert ok(api.get(root)) == changed

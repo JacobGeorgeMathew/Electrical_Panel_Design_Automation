@@ -1,12 +1,15 @@
 """Project lifecycle around the existing repository and revision publisher."""
 from copy import deepcopy
 from datetime import datetime, timezone
-from sqlalchemy import update
+from uuid import uuid4
+from sqlalchemy import insert, update
 from pydantic import ValidationError
 from app.persistence import models as m
 from app.persistence.assets import content_hash, canonical_json
 from app.persistence.repositories import ProjectRepository, CatalogRepository, PersistenceError
 from app.persistence.revisions import write_revision
+from app.persistence.revision_outputs import prepare_outputs
+from app.persistence.documents import document_hash
 from app.models.api import ProjectCreate, ProjectImport
 from app.models.cem import CanonicalEngineeringModel
 from app.models.pdm import PhysicalDesignModel
@@ -23,6 +26,33 @@ class ProjectLifecycle:
             row = ProjectRepository(s).row(key)
             s.execute(update(m.projects).where(m.projects.c.id == row['id']).values(last_opened_at=datetime.now(timezone.utc)))
             return ProjectRepository(s).get(key)
+
+    def compatibility_proposal(self, key, data):
+        from app.services.document_compatibility import overlay_proposal
+        with self.db.sessions() as session:
+            repo = ProjectRepository(session)
+            repo.check_version(key, data.expected_version)
+            project = repo.get(key)
+        revision = self.service.load_revision(key, data.revision_id)
+        if data.source == 'workspace':
+            overlay = project['workspace']
+        elif data.source == 'recovery':
+            overlay = (project['recovery'] or {}).get('document', {}).get('workspace', {})
+        else:
+            overlay = data.overlay
+        proposal = overlay_proposal(revision, overlay, data.base)
+        if data.source == 'recovery':
+            checkpoint_base = (project['recovery'] or {}).get('document', {}).get('baseRevisionId')
+            if checkpoint_base != revision['revision_id']:
+                proposal['status'] = 'BLOCKED'
+                proposal['operations'] = []
+                proposal['blocked'].append({'item': 'recovery.baseRevisionId', 'reason':
+                    'Recovery belongs to a different or unknown base. Retain it and explicitly review its original revision before conversion.'})
+        # Preserve all server originals as review/recovery evidence. No writes,
+        # implicit base inference, generators or operation application occur here.
+        return {**proposal, 'lock_version': project['lock_version'],
+            'recovery_version': project['recovery_version'],
+            'original_workspace': project['workspace'], 'original_recovery': project['recovery']}
 
     def delete(self, key, expected_version):
         # Tombstone preserves immutable engineering history and shared assets.
@@ -81,47 +111,74 @@ class ProjectLifecycle:
     def _import(self, package):
         # Never adopt an imported identity or overwrite an existing project.
         data = ProjectCreate(**{**package.project.model_dump(), 'id': None})
-        with self.db.sessions.begin() as s:
-            repo = ProjectRepository(s)
+        pid = str(uuid4())
+        with self.db.sessions() as s:
             catalog = CatalogRepository(s, self.service.assets)
             template = catalog.template(data.archetype, data.archetype_version_id)
-            pid = repo.create(data.name, template['archetype_version_id'])
+            historical_templates = [catalog.template(data.archetype, source['manifest']['archetype_version_id'])
+                                    for source in package.revisions]
+            enclosures = catalog.enclosures()
+        from app.services.document_service import DocumentService
+        from app.services.cad_engine import CADEngine
+        from app.services.schematic_engine import SchematicEngine
+        from app.services.panel_assembly import assembly_bom
+        document = DocumentService.empty_document({'id': pid, 'lock_version': 1}, template)
+        source_document = {**document.model_dump(mode='json'), 'content_sha256': document_hash(document.document)}
+        prepared = []
+        for index, source in enumerate(package.revisions):
+            payload = {k: source[k] for k in ('cem', 'pdm', 'manifest')}
+            if content_hash(payload) != source['sha256']:
+                raise PersistenceError('PACKAGE_INTEGRITY', 'A design revision failed its integrity check.')
+            old = package.source_project_id
+            if payload['cem']['project_id']!=old or payload['pdm']['project_id']!=old:
+                raise PersistenceError('PROJECT_MISMATCH','A revision belongs to a different project.')
+            def rebind(value):
+                if isinstance(value, dict): return {k: rebind(v) for k,v in value.items()}
+                if isinstance(value, list): return [rebind(v) for v in value]
+                if isinstance(value, str):
+                    return {old: pid, 'DB-'+old: 'DB-'+pid, 'PDM-'+old: 'PDM-'+pid}.get(value, value)
+                return value
+            payload = rebind(deepcopy(payload))
+            cem = CanonicalEngineeringModel(**payload['cem'])
+            pdm = PhysicalDesignModel(**payload['pdm'])
+            failures = ValidationEngine().validate_pdm(pdm, cem)
+            if failures:
+                raise PersistenceError('INVALID_IMPORTED_DESIGN', 'An imported design fails physical validation; no project was imported.')
+            manifest = payload['manifest']
+            historical = historical_templates[index]
+            values = {r.id:r.value for r in cem.requirements if r.value is not None}
+            reqs = self.service.validate(historical, pid, values)
+            project = dict(id=pid, database_id=pid, lock_version=index+1,
+                           configuration=manifest.get('configuration', {}))
+            result = {'cem': cem.model_dump(), 'pdm': pdm.model_dump(), 'validation_errors': []}
+            result['cad'] = CADEngine().generate_parametric_geometry(pdm)
+            result['schematic'] = SchematicEngine().generate_schematic_data(cem)
+            result['bom'] = assembly_bom(cem, pdm)
+            files = self.service.generate_files(result)
+            manifest = {**manifest, 'copied_from_project': old}
+            outputs = prepare_outputs(project, reqs, values, result, manifest, files,
+                source_document, self.service.assets, project['lock_version'])
+            prepared.append((project, historical, reqs, values, result, manifest, files, outputs))
+        reqs = self.service.validate(template, pid, data.requirements)
+        self.service.configure_enclosures(enclosures, package.configuration)
+        # All validation, engine calls, serialization, hashes and file writes end
+        # above. Project creation and every revision remain one atomic DB unit.
+        with self.db.sessions.begin() as s:
+            repo = ProjectRepository(s)
+            s.execute(insert(m.projects).values(id=pid, name=data.name, status='ACTIVE',
+                archetype_version_id=template['archetype_version_id'],
+                description=data.description, location=data.location))
+            doc = source_document['document']
+            s.execute(insert(m.design_documents).values(id=doc['document_id'], project_id=pid,
+                panel_id=doc['panel_id'], schema_version=doc['schema_version'], document_sequence=0,
+                document=doc, content_sha256=source_document['content_sha256']))
+            s.execute(insert(m.design_document_snapshots).values(document_id=doc['document_id'],
+                model_kind='REQUIREMENTS', schema_version=1, sha256=doc['models']['requirements']['sha256'],
+                snapshot=source_document['snapshots']['requirements']))
+            for project, historical, historical_reqs, values, result, manifest, files, outputs in prepared:
+                write_revision(s, project, historical, historical_reqs, values, result,
+                    manifest, files, project['lock_version'], outputs=outputs)
             row = repo.row(pid)
-            s.execute(update(m.projects).where(m.projects.c.id == row['id']).values(description=data.description, location=data.location))
-            for source in package.revisions:
-                payload = {k: source[k] for k in ('cem', 'pdm', 'manifest')}
-                if content_hash(payload) != source['sha256']:
-                    raise PersistenceError('PACKAGE_INTEGRITY', 'A design revision failed its integrity check.')
-                old = package.source_project_id
-                if payload['cem']['project_id']!=old or payload['pdm']['project_id']!=old:
-                    raise PersistenceError('PROJECT_MISMATCH','A revision belongs to a different project.')
-                def rebind(value):
-                    if isinstance(value, dict): return {k: rebind(v) for k,v in value.items()}
-                    if isinstance(value, list): return [rebind(v) for v in value]
-                    if isinstance(value, str):
-                        return {old: pid, 'DB-'+old: 'DB-'+pid, 'PDM-'+old: 'PDM-'+pid}.get(value, value)
-                    return value
-                payload = rebind(deepcopy(payload))
-                cem = CanonicalEngineeringModel(**payload['cem'])
-                pdm = PhysicalDesignModel(**payload['pdm'])
-                failures = ValidationEngine().validate_pdm(pdm, cem)
-                if failures:
-                    raise PersistenceError('INVALID_IMPORTED_DESIGN', 'An imported design fails physical validation; no project was imported.')
-                manifest = payload['manifest']
-                historical = catalog.template(data.archetype, manifest['archetype_version_id'])
-                values = {r.id:r.value for r in cem.requirements if r.value is not None}
-                reqs = self.service.validate(historical, pid, values)
-                project = repo.get(pid)
-                project['configuration'] = manifest.get('configuration', {})
-                result = {'cem': cem.model_dump(), 'pdm': pdm.model_dump(), 'validation_errors': []}
-                from app.services.cad_engine import CADEngine
-                result['cad'] = CADEngine().generate_parametric_geometry(pdm)
-                files = self.service.generate_files(result)
-                write_revision(s, project, historical, reqs, values, result,
-                    {**manifest, 'copied_from_project': old}, files, project['lock_version'])
-            row = repo.row(pid)
-            reqs = self.service.validate(template, pid, data.requirements)
-            self.service.configure_enclosures(catalog.enclosures(), package.configuration)
             repo.save_requirements(row, template, reqs, data.requirements)
             repo.touch(row, configuration=package.configuration, workspace=package.workspace)
             return repo.get(pid)

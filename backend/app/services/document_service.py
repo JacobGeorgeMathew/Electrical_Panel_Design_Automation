@@ -18,6 +18,10 @@ class DocumentService:
 
     @staticmethod
     def create_empty(session, project, template):
+        DocumentRepository(session).store(DocumentService.empty_document(project, template), create=True)
+
+    @staticmethod
+    def empty_document(project, template):
         requirements = RequirementSet(project_id=str(project['id']), archetype='DB')
         # Input-only document: these pins identify its known input contract, not
         # a claim that downstream engineering/catalog outputs have been computed.
@@ -31,8 +35,7 @@ class DocumentService:
             models=DocumentReferences(requirements=SnapshotReference(sha256=snapshot_sha256(requirements))),
             pins=pins, provenance=DocumentProvenance(origin='MANUAL', actor_id='local-user'),
             dirty_stages=DIRTY_STAGES)
-        DocumentRepository(session).store(ResolvedDocument(document=document,
-            snapshots=DocumentSnapshots(requirements=requirements)), create=True)
+        return ResolvedDocument(document=document, snapshots=DocumentSnapshots(requirements=requirements))
 
     def load(self, key):
         with self.db.sessions() as session:
