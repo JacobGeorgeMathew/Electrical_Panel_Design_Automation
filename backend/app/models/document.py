@@ -83,6 +83,18 @@ class EnclosureInterface(ContractModel):
         return self
 
 
+class GenerationIntent(ContractModel):
+    """Retained user intent; ordinary Save cannot clear operation-owned locks."""
+    manual_models: list[Literal['cem', 'pdm', 'schematic']] = Field(default_factory=list)
+    locked_placements: list[StableID] = Field(default_factory=list)
+
+    @model_validator(mode='after')
+    def unique_intents(self):
+        unique_ids(self.manual_models, 'generation_intent.manual_models')
+        unique_ids(self.locked_placements, 'generation_intent.locked_placements')
+        return self
+
+
 class WorkingDocument(ContractModel):
     schema_version: Literal['1.0.0'] = '1.0.0'
     document_id: StableID
@@ -98,6 +110,7 @@ class WorkingDocument(ContractModel):
     provenance: DocumentProvenance
     dirty_stages: list[DirtyStage] = Field(default_factory=list)
     enclosure_interfaces: list[EnclosureInterface] = Field(default_factory=list)
+    generation_intent: GenerationIntent | None = Field(default=None, exclude_if=lambda value: value is None)
 
     @model_validator(mode='after')
     def namespaces_unique(self):

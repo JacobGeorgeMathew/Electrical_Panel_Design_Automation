@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Callable
 
-from app.models.document import ResolvedDocument, SnapshotReference, snapshot_sha256
+from app.models.document import ResolvedDocument, SnapshotReference, GenerationIntent, snapshot_sha256
 from app.models.operations import OperationPreview, OperationPreviewRequest, OperationChange, RequiredCheck
 from app.services.operations.engineering import (EngineeringChoices, update_requirement,
     change_component_rating, resize_enclosure)
@@ -18,6 +18,7 @@ from app.services.operations.schematic import (move_symbol, update_label, update
 from app.persistence.documents import document_hash
 from app.persistence.repositories import PersistenceError
 from app.services.design_errors import DesignError
+from app.services.generation_proposals import apply_generation
 
 
 def reject(operation, code, message):
@@ -38,6 +39,7 @@ class OperationDefinition:
 
 
 REGISTRY = MappingProxyType({
+    'ApplyGeneration': OperationDefinition('requirements', apply_generation, (), (), ('cem', 'pdm', 'schematic')),
     'MoveSymbol': OperationDefinition('schematic', move_symbol, ('cad',), ()),
     'UpdateSchematicLabel': OperationDefinition('schematic', update_label, ('cad',), ()),
     'UpdateJunctionPresentation': OperationDefinition('schematic', update_junction, ('cad',), ()),
@@ -111,6 +113,16 @@ def preview_operations(resolved: ResolvedDocument, request: OperationPreviewRequ
                 before_sha256=before_refs[kind], after_sha256=after, changed_fields=fields))
         if not changed_models:
             continue
+        if op.origin.kind == 'MANUAL':
+            intent = doc.generation_intent or GenerationIntent(
+                manual_models=['cem', 'pdm', 'schematic'] if candidate.snapshots.cem else [])
+            protected = set(intent.manual_models)
+            protected.update(k for k in changed_models if k != 'requirements')
+            if protected:
+                intent.manual_models = sorted(protected)
+                if op.type in ('MoveComponent', 'RotateComponent') and op.target.cem_component_id not in intent.locked_placements:
+                    intent.locked_placements.append(op.target.cem_component_id)
+                doc.generation_intent = intent
         for stage in definition.dirty_stages:
             if stage not in doc.dirty_stages:
                 doc.dirty_stages.append(stage)

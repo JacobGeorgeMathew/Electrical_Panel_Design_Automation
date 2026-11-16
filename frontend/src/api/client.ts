@@ -46,6 +46,10 @@ export const commitOperations = (projectId: string, data: import('../types/opera
   request<import('../types/operations').OperationCommit>(operationPath(projectId) + '/commit', {...json('POST', data), headers: {'Idempotency-Key': key}, signal}, 90000);
 export const applyOperationHistory = (projectId: string, data: import('../types/operations').HistoryRequest, key: string, signal?: AbortSignal) =>
   request<import('../types/operations').OperationCommit>(operationPath(projectId) + '/history', {...json('POST', data), headers: {'Idempotency-Key': key}, signal}, 90000);
+export const proposeGeneration = (projectId: string, overrides: Record<string, unknown> = {}, signal?: AbortSignal) =>
+  request<import('../types/operations').GenerationProposal>('/projects/' + id(projectId) + '/design/generation-proposal', {...json('POST', overrides), signal}, 90000);
+export const acceptGenerationProposal = (projectId: string, batch: import('../types/operations').OperationPreviewRequest, key: string, signal?: AbortSignal) =>
+  request<import('../types/operations').OperationCommit>('/projects/' + id(projectId) + '/design/generation-proposal/accept', {...json('POST', batch), headers: {'Idempotency-Key': key}, signal}, 90000);
 export const fetchDocument = (projectId: string, signal?: AbortSignal) =>
   request<DocumentView>('/v1/projects/' + id(projectId) + '/document', { signal });
 export const saveDocument = (projectId: string, data: DocumentSave) =>

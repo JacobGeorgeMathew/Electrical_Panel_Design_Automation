@@ -46,6 +46,7 @@ export interface WorkingDocument {
   base_revision_id: StableID | null;
   models: DocumentReferences;
   configuration: Record<string, unknown>;
+  generation_intent?: { manual_models: ('cem' | 'pdm' | 'schematic')[]; locked_placements: string[] } | null;
   pins: PinnedVersions;
   provenance: DocumentProvenance;
   dirty_stages: DirtyStage[];

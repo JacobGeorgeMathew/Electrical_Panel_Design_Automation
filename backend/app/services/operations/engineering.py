@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from sqlalchemy import select
 
 from app.models.cem import ComponentRef
+from app.models.document import ResolvedDocument
 from app.models.pdm import EnclosureSpec
 from app.models.requirements import QuestionSchema, RequirementState
 from app.persistence import models as m
@@ -29,6 +30,7 @@ class EngineeringChoices:
     # Keyed by exact published version, not latest catalog identity.
     components: dict[str, dict] = field(default_factory=dict)
     products: frozenset[tuple[str, str]] = frozenset()
+    generation: ResolvedDocument | None = None
 
 
 def load_choices(session, assets, base, request, archetype_version_id=None):
@@ -59,7 +61,7 @@ def load_choices(session, assets, base, request, archetype_version_id=None):
                 m.product_versions.c.status == 'PUBLISHED'))
             if product is not None:
                 products.add((version, str(product)))
-    return EngineeringChoices(questions, choices, frozenset(products))
+    return EngineeringChoices(questions=questions, components=choices, products=frozenset(products))
 
 
 def update_requirement(candidate, op, choices):

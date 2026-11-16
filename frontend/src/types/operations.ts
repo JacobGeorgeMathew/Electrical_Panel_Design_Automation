@@ -11,6 +11,13 @@ export interface OperationCommit {
   result: import('./document').DocumentView;
 }
 
+export interface GenerationProposal {
+  status: 'REVIEW_REQUIRED' | 'CONFLICT'; persisted: false;
+  conflicts: { target: string; reason: string }[];
+  batch: OperationPreviewRequest | null;
+  preview: OperationPreview | null;
+}
+
 export interface OperationOrigin {
   kind: DocumentProvenance['origin'];
   actor_id: string;
@@ -34,6 +41,9 @@ export interface ConductorIntent {
 }
 
 export type Operation = OperationBase & (
+  | { type: 'ApplyGeneration'; target: { panel_id: string };
+      parameters: { overrides: Record<string, unknown>; candidate_sha256: string };
+      affected_models?: ['requirements', 'cem', 'pdm', 'schematic'] }
   | { type: 'MoveComponent'; target: { cem_component_id: string; pdm_component_id: string };
       parameters: { position_mm: { x: number; y: number; z: number } }; affected_models?: ['pdm'] }
   | { type: 'RotateComponent'; target: { cem_component_id: string; pdm_component_id: string };
@@ -93,7 +103,7 @@ export interface OperationPreview {
   after_content_sha256: string;
   consequences: Record<string, CascadeConfirmation>;
   changes: { operation_id: string; model: 'requirements' | 'cem' | 'pdm' | 'schematic'; target_id: string;
-    before_sha256: string; after_sha256: string;
+    before_sha256: string | null; after_sha256: string | null;
     changed_fields: ('position_mm' | 'terminals_mm' | 'rotation_deg' | 'value' | 'state' | 'source' | 'message' | 'validation' |
       'component_catalog' | 'enclosure_catalog' | 'components' | 'cascade' | 'presentation' | 'connections')[] }[];
   required_checks: { code: 'requirement_rules' | 'physical_constraints' | 'routing' | 'physical_validation';

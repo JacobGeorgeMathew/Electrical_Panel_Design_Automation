@@ -1,5 +1,5 @@
 """Allowlisted preview contracts. Preview is never an approval or a commit."""
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from pydantic import Field, model_validator
@@ -262,7 +262,19 @@ class RegenerateSchematic(OperationBase):
     affected_models: tuple[Literal['schematic']] = ('schematic',)
 
 
-Operation = Annotated[MoveComponent | RotateComponent | UpdateRequirement | ChangeComponentRating | ResizeEnclosure | AddComponent | RemoveComponent | MoveSymbol | UpdateSchematicLabel | UpdateJunctionPresentation | ModifyElectricalConnection | RegenerateSchematic,
+class GenerationParameters(ContractModel):
+    overrides: dict[str, Any] = Field(default_factory=dict)
+    candidate_sha256: SHA256
+
+
+class ApplyGeneration(OperationBase):
+    type: Literal['ApplyGeneration']
+    target: PanelTarget
+    parameters: GenerationParameters
+    affected_models: tuple[Literal['requirements'], Literal['cem'], Literal['pdm'], Literal['schematic']] = ('requirements', 'cem', 'pdm', 'schematic')
+
+
+Operation = Annotated[ApplyGeneration | MoveComponent | RotateComponent | UpdateRequirement | ChangeComponentRating | ResizeEnclosure | AddComponent | RemoveComponent | MoveSymbol | UpdateSchematicLabel | UpdateJunctionPresentation | ModifyElectricalConnection | RegenerateSchematic,
                       Field(discriminator='type')]
 
 
@@ -316,8 +328,8 @@ class OperationChange(ContractModel):
     operation_id: UUID
     model: ModelKind
     target_id: StableID
-    before_sha256: SHA256
-    after_sha256: SHA256
+    before_sha256: SHA256 | None
+    after_sha256: SHA256 | None
     changed_fields: list[Literal['position_mm', 'terminals_mm', 'rotation_deg', 'value', 'state', 'source',
                                  'message', 'validation', 'component_catalog', 'enclosure_catalog', 'components', 'cascade',
                                  'presentation', 'connections']]
@@ -340,3 +352,16 @@ class OperationPreview(ContractModel):
     dirty_stages: list[DirtyStage]
     candidate: ResolvedDocument
     consequences: dict[str, CascadeConfirmation] = Field(default_factory=dict)
+
+
+class GenerationConflict(ContractModel):
+    target: StableID
+    reason: str
+
+
+class GenerationProposal(ContractModel):
+    status: Literal['REVIEW_REQUIRED', 'CONFLICT']
+    persisted: Literal[False] = False
+    conflicts: list[GenerationConflict]
+    batch: OperationPreviewRequest | None
+    preview: OperationPreview | None = None

@@ -1,12 +1,26 @@
 from typing import Any
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Header
 from app.api.dependencies import get_service
 from app.models.api import ChangeInput, DesignPackage
 from app.models.pdm import PhysicalDesignModel
+from app.models.operations import OperationPreviewRequest, GenerationProposal
 from app.services.validation_engine import ValidationEngine
 from app.services.design_errors import DesignError
 
 router=APIRouter(prefix='/api/projects/{project_id}/design',tags=['design'])
+
+
+@router.post('/generation-proposal', response_model=GenerationProposal)
+def generation_proposal(project_id:str,overrides:dict[str,Any]|None=None,service=Depends(get_service)):
+    from app.services.generation_proposals import propose_generation
+    return propose_generation(service.db, project_id, overrides)
+
+
+@router.post('/generation-proposal/accept')
+def accept_generation_proposal(project_id:str, data:OperationPreviewRequest,
+        idempotency_key:str=Header(alias='Idempotency-Key'), service=Depends(get_service)):
+    from app.persistence.operations import OperationBatchRepository
+    return OperationBatchRepository(service.db).accept_generation(project_id, data, idempotency_key)
 
 @router.get('',response_model=DesignPackage)
 def get_design(project_id:str,service=Depends(get_service)):

@@ -1,4 +1,4 @@
-"""Atomic draft-operation storage; no HTTP apply or engineering approval boundary.
+"""Atomic draft-operation storage with explicit generation acceptance.
 
 The existing allowlist validates detached candidates before the write transaction.
 Engineering checks remain unresolved and derived outputs dirty. Future operation
@@ -35,7 +35,7 @@ class _PreparedBatch:
     changed: bool
 
 
-def _prepare(base, request, choices=None):
+def _prepare(base, request, choices=None, *, accept_generation=False):
     """Materialize canonical values without a database transaction or file I/O."""
     candidate = ResolvedDocument.model_validate(base.model_dump(mode='json', include={'document', 'snapshots'}))
     before = candidate.document.model_dump(mode='json')
@@ -43,9 +43,9 @@ def _prepare(base, request, choices=None):
     changed = False
     last_changed = None
     for index, operation in enumerate(request.operations):
-        # A previewed proposal is never evidence of human acceptance. Acceptance
-        # and authoritative physical/engineering handlers belong to later tasks.
-        if operation.proposal_status == 'PROPOSED':
+        # A previewed proposal is never evidence of acceptance. Only the explicit
+        # generation acceptance entry point may apply a retained server proposal.
+        if operation.proposal_status == 'PROPOSED' and not (accept_generation and operation.type == 'ApplyGeneration'):
             raise PersistenceError('OPERATION_PROPOSAL_REQUIRES_ACCEPTANCE',
                 'Proposed operations require a separate explicit acceptance workflow.', 409)
         if operation.type == 'RemoveComponent' and operation.parameters.confirmed_cascade is None:
@@ -72,7 +72,7 @@ def _prepare(base, request, choices=None):
             value = check.model_dump(mode='json')
             if value not in checks:
                 checks.append(value)
-        if preview.changes:
+        if preview.before_content_sha256 != preview.after_content_sha256:
             changed = True
             last_changed = operation
     if changed:
@@ -81,7 +81,7 @@ def _prepare(base, request, choices=None):
         doc.lock_version += 1
         doc.provenance = DocumentProvenance(origin=last_changed.origin.kind,
             actor_id=last_changed.origin.actor_id, last_operation_id=str(last_changed.operation_id),
-            job_id=last_changed.origin.job_id)
+            job_id=last_changed.origin.job_id, proposal_id=last_changed.origin.proposal_id)
     after = DocumentView(**candidate.model_dump(mode='json'),
                          content_sha256=document_hash(candidate.document))
     return _PreparedBatch(before, after, tuple(members), tuple(snapshots), tuple(checks), changed)
@@ -145,7 +145,13 @@ class OperationBatchRepository:
         request = HistoryRequest.model_validate(request.model_dump(mode='json'))
         return self._commit(key, request, idempotency_key)
 
-    def _commit(self, key, request, idempotency_key):
+    def accept_generation(self, key, request: OperationPreviewRequest, idempotency_key: str):
+        request = OperationPreviewRequest.model_validate(request.model_dump(mode='json'))
+        if len(request.operations) != 1 or request.operations[0].type != 'ApplyGeneration':
+            raise PersistenceError('GENERATION_BATCH', 'Acceptance requires exactly one generation operation.', 409)
+        return self._commit(key, request, idempotency_key, accept_generation=True)
+
+    def _commit(self, key, request, idempotency_key, *, accept_generation=False):
         idempotency_key = TypeAdapter(StableID).validate_python(idempotency_key)
         if len(idempotency_key) > 200:
             raise PersistenceError('IDEMPOTENCY_KEY', 'Idempotency keys must have at most 200 characters.')
@@ -169,7 +175,11 @@ class OperationBatchRepository:
                                        project['archetype_version_id'])
         # All operation validation and canonical serialization occur after the
         # read session closes. Nothing expensive runs under the project lock.
+        if not isinstance(request, HistoryRequest):
+            from app.services.generation_proposals import generation_choices
+            choices = generation_choices(self.db, key, base, request, choices)
         prepared = (_prepare_history(base, request, context) if isinstance(request, HistoryRequest)
+                    else _prepare(base, request, choices, accept_generation=True) if accept_generation
                     else _prepare(base, request, choices))
         try:
             with self.db.sessions.begin() as session:

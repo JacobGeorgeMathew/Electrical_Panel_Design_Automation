@@ -50,6 +50,8 @@ class DocumentService:
             base = DocumentRepository(session).load(project)
             choices = load_choices(session, AssetStore(self.db.settings.asset_root), base, request,
                                    project['archetype_version_id'])
+        from app.services.generation_proposals import generation_choices
+        choices = generation_choices(self.db, key, base, request, choices)
         return preview_operations(base, request, choices)
 
     def operation_history(self, key):
