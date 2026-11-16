@@ -255,7 +255,7 @@ def test_change_diff_reports_actual_field_values_and_stages():
     new = {"components": [{"category": "MCB"}, {"category": "MCB"}], "nets": []}
     report = engine.compute_diff(old, new, {}, {}, "num_feeders", {"num_feeders": 1}, {"num_feeders": 2})
     assert report["modified_field"] == "num_feeders"
-    assert "COMPONENT_SELECTION" in report["affected_stages"]
+    assert "selection" in report["affected_stages"]
     requirement_diff = report["diffs"][0]
     assert (requirement_diff["before"], requirement_diff["after"], requirement_diff["changed"]) == ("1", "2", True)
 

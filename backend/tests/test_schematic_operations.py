@@ -67,7 +67,7 @@ def test_move_symbol_translates_pins_and_endpoints_without_touching_connectivity
     assert candidate.snapshots.pdm == base.snapshots.pdm
     assert candidate.snapshots.schematic.symbols[0].pins[0].position.model_dump() == dict(x=270, y=230)
     assert candidate.snapshots.schematic.wires[0].waypoints[0].model_dump() == dict(x=270, y=230)
-    assert candidate.document.dirty_stages == ['routes', 'cad']
+    assert candidate.document.dirty_stages == ['routes', 'cad', 'schematic']
     assert base.snapshots.schematic.symbols[0].position.x == 100
 
 

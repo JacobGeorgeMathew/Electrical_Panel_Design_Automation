@@ -19,6 +19,7 @@ from app.persistence.documents import document_hash
 from app.persistence.repositories import PersistenceError
 from app.services.design_errors import DesignError
 from app.services.generation_proposals import apply_generation
+from app.services.stages.contracts import STAGE_REGISTRY
 
 
 def reject(operation, code, message):
@@ -29,7 +30,7 @@ def reject(operation, code, message):
 class OperationDefinition:
     model: str
     handler: Callable
-    dirty_stages: tuple[str, ...]
+    changed_paths: tuple[str, ...]
     checks: tuple[str, ...]
     additional_models: tuple[str, ...] = ()
 
@@ -37,34 +38,40 @@ class OperationDefinition:
     def models(self):
         return (self.model, *self.additional_models)
 
+    @property
+    def dirty_stages(self):
+        return STAGE_REGISTRY.invalidate(self.changed_paths).stages
+
 
 REGISTRY = MappingProxyType({
     'ApplyGeneration': OperationDefinition('requirements', apply_generation, (), (), ('cem', 'pdm', 'schematic')),
-    'MoveSymbol': OperationDefinition('schematic', move_symbol, ('cad',), ()),
-    'UpdateSchematicLabel': OperationDefinition('schematic', update_label, ('cad',), ()),
-    'UpdateJunctionPresentation': OperationDefinition('schematic', update_junction, ('cad',), ()),
-    'RegenerateSchematic': OperationDefinition('schematic', regenerate_schematic, ('schematic', 'cad'), ()),
+    'MoveSymbol': OperationDefinition('schematic', move_symbol, ('schematic.symbols.*.position',), ()),
+    'UpdateSchematicLabel': OperationDefinition('schematic', update_label,
+        ('schematic.symbols.*.label', 'schematic.wires.*.label'), ()),
+    'UpdateJunctionPresentation': OperationDefinition('schematic', update_junction, ('schematic.junctions',), ()),
+    'RegenerateSchematic': OperationDefinition('schematic', regenerate_schematic, ('schematic',), ()),
     'ModifyElectricalConnection': OperationDefinition('cem', modify_connection,
-        ('connectivity', 'schematic', 'routes', 'physical_validation', 'bom', 'cad'),
+        ('cem.connections', 'cem.nets'),
         ('requirement_rules', 'routing', 'physical_validation'), ('pdm', 'schematic')),
     'AddComponent': OperationDefinition('cem', add_component,
-        ('calculations', 'selection', 'connectivity', 'schematic', 'placement', 'routes', 'physical_validation', 'bom', 'cad'),
+        ('cem.components',),
         ('requirement_rules', 'physical_constraints', 'routing', 'physical_validation'), ('pdm',)),
     'RemoveComponent': OperationDefinition('cem', remove_component,
-        ('calculations', 'selection', 'connectivity', 'schematic', 'placement', 'routes', 'physical_validation', 'bom', 'cad'),
+        ('cem.components',),
         ('requirement_rules', 'physical_constraints', 'routing', 'physical_validation'), ('pdm', 'schematic')),
     'MoveComponent': OperationDefinition('pdm', move_component,
-        ('routes', 'physical_validation', 'cad'), ('physical_constraints', 'routing', 'physical_validation')),
+        ('pdm.components.*.position', 'pdm.components.*.terminals'),
+        ('physical_constraints', 'routing', 'physical_validation')),
     'RotateComponent': OperationDefinition('pdm', rotate_component,
-        ('routes', 'physical_validation', 'cad'), ('physical_constraints', 'routing', 'physical_validation')),
+        ('pdm.components.*.rotation_deg', 'pdm.components.*.terminals'),
+        ('physical_constraints', 'routing', 'physical_validation')),
     'UpdateRequirement': OperationDefinition('requirements', update_requirement,
-        ('requirements', 'calculations', 'selection', 'connectivity', 'schematic',
-         'placement', 'routes', 'physical_validation', 'bom', 'cad'), ('requirement_rules',)),
+        ('requirements.items.*.value',), ('requirement_rules',)),
     'ChangeComponentRating': OperationDefinition('cem', change_component_rating,
-        ('calculations', 'selection', 'connectivity', 'schematic', 'placement', 'routes',
-         'physical_validation', 'bom', 'cad'), ('requirement_rules', 'physical_constraints', 'routing', 'physical_validation')),
+        ('cem.components.*.current_rating', 'cem.components.*.component_version_id'),
+        ('requirement_rules', 'physical_constraints', 'routing', 'physical_validation')),
     'ResizeEnclosure': OperationDefinition('pdm', resize_enclosure,
-        ('placement', 'routes', 'physical_validation', 'bom', 'cad'),
+        ('pdm.enclosure_id', 'pdm.enclosure_width', 'pdm.enclosure_height', 'pdm.enclosure_depth'),
         ('physical_constraints', 'routing', 'physical_validation')),
 })
 
