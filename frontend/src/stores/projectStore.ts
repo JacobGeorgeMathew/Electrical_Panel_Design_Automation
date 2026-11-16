@@ -9,7 +9,7 @@ import type { Artifact, Archetype, DesignPackage, ProjectConfiguration, ProjectR
 import { readRecovery, writeRecovery, clearRecovery, parseRecovery, compatibleRecovery, type Checkpoint, type RecoveryDocument } from './projectRecovery';
 import type { RecoveryBaseDocument } from '../types/recovery';
 import { ApiError, fetchDocument, saveDocument, fetchRevision } from '../api/client';
-import { documentFields, documentSave } from './documentStore';
+import { documentFields, documentSave, publicationAvailability } from './documentStore';
 import type { DocumentView } from '../types/document';
 import {applyHistory, canEditEngineering, commitPlacement} from './operationActions';
 import {useCommandStore} from './commandStore';
@@ -511,9 +511,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const state = get();
     if (!state.projectId) { set({ errorMessage: 'Create or open a project before generating a design.' }); return; }
     if(state.isSaving||state.isGenerating||state.isLoadingProject||state.pendingRecovery)return;
-    if(state.document?.document.provenance.last_operation_id && state.document.document.dirty_stages.length){
-      set({errorMessage:'Working-document operations require explicit Recompute support before Publish. Save preserves these edits.'});return;
-    }
+    const publication = publicationAvailability(state);
+    if(publication.unavailable){set({errorMessage:publication.reason});return;}
     if(state.document && (state.hasUnsavedChanges || Object.keys(state.editorTransforms).length ||
       JSON.stringify(state.schematicData)!==JSON.stringify(documentSchematicGraph(state.document)) ||
       Object.entries(overrides||{}).some(([key,value])=>JSON.stringify(value)!==JSON.stringify(state.requirementValues[key])))){
@@ -534,7 +533,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
   applyChangePropagation: async (field, newValue) => {
     if(get().viewedRevisionId)return;
-    if(get().document){set({errorMessage:'Save the complete draft, then use Publish to recompute and publish its inputs.'});return;}
+    if(get().document){set({errorMessage:'Single-field automatic publication is unavailable for working documents. Save preserves the draft; generation proposals require explicit review and acceptance through the API and do not publish.'});return;}
     const state = get();
     if(state.isSaving||state.isGenerating||state.pendingRecovery)return;
     const token=projectRequest;

@@ -1,14 +1,17 @@
 # Project lifecycle
 
-Apply the additive `0004_projects` migration before starting the updated application:
+Apply the additive migrations during an intended database setup or upgrade before
+starting the application. The current head is `0006_operations`, following
+`0004_projects` and `0005_design_documents`:
 
 ```sh
 cd backend
 python -m app.persistence.manage initialize
 ```
 
-Use the existing private PostgreSQL configuration. No development project or saved
-engineering revision is rewritten by this migration. `/ready` now expects this head.
+Use the existing private PostgreSQL configuration and preserve valuable data before
+upgrading. `/ready` checks the current migration head. Do not run initialization as
+incidental verification against a development database.
 
 The landing dashboard creates a project with name, description, location, and a
 supported panel archetype. DB remains the supported engineering pipeline. Every
@@ -20,12 +23,16 @@ and location. The dashboard supports rename, duplicate, delete, import and expor
 Delete is a tombstone: normal project routes return 404 and listings omit the
 project, while immutable history and shared assets remain retained.
 
-Save project writes requirements, enclosure configuration and editor draft state.
+Save project writes requirements and enclosure configuration to the versioned
+working document. Physical, schematic and electrical operations already persist
+their accepted changes to that document, independently of Save.
 Save & close returns to the dashboard only after a successful save. Save failures
-and concurrent modification conflicts retain local edits. Editor placement and
-schematic changes remain drafts; saving them does not change CEM connectivity or
-publish manually placed engineering revisions. Automatic generation remains in
-the workspace and creates a new immutable design revision using the existing engine.
+and concurrent modification conflicts retain local edits. `MoveComponent` changes
+working PDM geometry; `MoveSymbol` changes page presentation; electrical connection
+operations change working CEM connectivity. Save does not regenerate, reroute or
+publish any of these drafts. Reopen installs the saved working snapshots, and
+shared undo/redo uses durable server history. Historical revisions remain frozen.
+Legacy documents without a working aggregate retain their separate overlay adapter.
 
 Autosave writes an immediate browser checkpoint and, after 1.5 seconds of inactivity,
 a server recovery checkpoint. Recovery accepts unfinished requirement input without
@@ -107,26 +114,59 @@ The saved aggregate supplies the answers and enclosure configuration on reopen,
 even when legacy project inputs or published outputs differ. Workspace camera,
 selection and visibility are excluded from that contract.
 
-Existing placement and schematic overlays are saved separately through the
-legacy workspace PATCH. These two saves are sequential, not atomic: if the
-overlay write fails after the document Save succeeds, the frontend retains the
-advanced document fence, all local edits and an error for retry. It does not
-report a fully saved draft or publish anything. The workspace PATCH retains its
-existing recovery-clear semantics; the input-only document PUT itself does not
-clear recovery. Recovery checkpoints now use the actual loaded document base.
+Versioned Save follows the input-only document PUT with a project metadata PATCH;
+it excludes transient placement transforms and schematic overlays from that PATCH.
+These writes are sequential, not atomic: if the PATCH fails after the document
+Save succeeds, the frontend retains the advanced document fence, local edits and
+an error for retry. It does not report a fully saved draft or publish anything.
+The project PATCH retains its existing recovery-clear semantics; the document PUT
+itself does not clear recovery. Recovery checkpoints use the loaded document base
+and can retain unfinished local previews for explicit Recover or Discard.
 
 The workspace labels saved/unsaved drafts separately from dirty engineering
 output, historical read-only views and unsupported legacy missing outputs.
-Publish explicitly invokes the existing combined compute/publication endpoint;
-this frontend change does not introduce a separate recompute service. Supported
-documents must Save their input edits first. Placement/schematic overlays cannot
-be published by that pipeline and are blocked with an explanation. Single-field
-legacy propagation is also blocked for versioned documents. Historical viewing
+`Save project` / `Save draft` persists drafts. `Recompute required before Publish`
+is a status message; no standalone Recompute control/service is available yet.
+`Generate & publish revision (legacy)` names the combined compute/publication
+endpoint accurately. It can initialize an untouched, input-only document. After
+any changed-input Save, existing CEM snapshot or generation intent, every frontend
+entry point shows disabled `Publish unavailable` with an explanation that separate
+Recompute and Publish are pending. The store independently blocks those requests;
+the server retains `GENERATION_PROPOSAL_REQUIRED`. Saving input drafts cannot make
+that legacy action eligible again. Questionnaire single-field generation also shows
+disabled `Automatic change unavailable` for versioned documents. Historical viewing
 uses the explicit revision GET and guards Save, recovery writes, engineering
 edits, rerouting, preview jobs and publication in the store as well as the UI.
 Return to working draft reloads the saved aggregate. Missing working aggregates
 use the legacy adapter only on `DOCUMENT_NOT_INITIALIZED`; network, integrity and
 unknown-schema failures retain local data instead of falling back.
+
+The [automatic generation proposal API](GENERATION_PROPOSALS.md) runs the bounded
+DB pipeline against saved inputs without publishing. Review then explicitly accept
+the returned `ApplyGeneration` batch to change the working document as one undo
+group. Exact retries are idempotent; changed bases, protected manual models and
+locked placements cannot be overwritten. Acceptance leaves CAD dirty and creates
+no revision or artifact. The workspace has API helpers but no proposal review UI;
+the Save → Recompute → Publish workflow for edited documents is incomplete.
+
+The input-only Save remains the explicit P1 compatibility boundary in
+[working-document-api.md](architecture/working-document-api.md). It advances project
+and document versions for changed inputs but does not create an operation undo
+group or replace CEM/PDM. Local unfinished entries and enclosure configuration
+remain recoverable; accepted operations need no duplicate Save write. The literal
+P2 acceptance criterion “All user mutation paths use shared operations” conflicts
+with that retained boundary and the approved D01 Save direction. Human resolution
+must specify whether input Save is an intended exception or a separately reviewed
+operation-based submission rollout. This task does not change those definitions or
+claim the literal criterion passes. See the [acceptance evidence](verification/phase-2-acceptance.md).
+
+Physical operations enforce the saved placement policy but retain obsolete routes
+as dirty. Required routing/physical/requirement checks may be `UNRESOLVED`; a
+successful operation or a geometric PASS is not engineering approval. See
+[workspace operation coverage](CAD_WORKSPACE.md) and the
+[P2 acceptance evidence](verification/phase-2-acceptance.md) for tested paths and
+current limitations. DB calculations, catalog geometry and thermal/fill limits are
+prototype assumptions; native CAD and standards compliance are not established.
 
 - `GET /api/projects?q=&recent=false&page=1&page_size=50`
 - `POST /api/projects`: existing contract plus `description` and `location`

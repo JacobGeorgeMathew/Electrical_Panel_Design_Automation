@@ -34,7 +34,7 @@ export function WorkspaceBottomPanel(){
         </div>}
         {state.isGenerating&&<div className="console-row"><progress aria-label="Design generation progress"/><span>Running requirements, electrical design, placement, routing and validation…</span></div>}
         {state.errorMessage&&<div role="alert" className="console-row error"><AlertCircle size={13}/>{state.errorMessage}</div>}
-        <div className="console-row"><Info size={13}/>{state.autosaveStatus||'Ready. Save writes project inputs and editor drafts; Generate publishes an engineering revision.'}</div>
+        <div className="console-row"><Info size={13}/>{state.autosaveStatus||'Ready. Save preserves input drafts; accepted operations are already durable. Edited-document Recompute and Publish are unavailable.'}</div>
         <div className="console-row">CAD preview: {state.cadJobStatus||'No active job'} · {state.currentRevisionNo?`Active revision r${state.currentRevisionNo}`:'No published revision'}</div>
       </>}
       {ui.bottomTab==='engineering'&&<>

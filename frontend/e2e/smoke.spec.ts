@@ -1,5 +1,5 @@
 import {test, expect, openHarness, readDocument, moveRequest, propose, pickComponent,
-  drag, saveAndReopen, stalePeer} from './fixtures';
+  drag, saveAndReopen, stalePeer, expectAuthoritativeXMove} from './fixtures';
 
 test('viewport renders WebGL, picks a component, commits a gizmo drag and resizes fullscreen', async ({page, projectId}) => {
   await openHarness(page, projectId);
@@ -23,7 +23,9 @@ test('viewport renders WebGL, picks a component, commits a gizmo drag and resize
   expect(state.proposal).toBeNull();
   expect(state.document!.snapshots.pdm!.routes).toEqual(before.snapshots.pdm!.routes);
   const saved = await page.request.get(`/api/v1/projects/${projectId}/document`);
-  expect(await saved.json()).toEqual(state.document);
+  const durable = await saved.json();
+  expect(durable).toEqual(state.document);
+  expectAuthoritativeXMove(before, durable, await page.evaluate(() => window.panelE2E.renderedX()));
   const history=await page.request.get(`/api/v1/projects/${projectId}/document/operations/history`);
   expect((await history.json()).undo_batch_ids).toHaveLength(1);
   await page.getByTitle('Undo transform',{exact:true}).click();

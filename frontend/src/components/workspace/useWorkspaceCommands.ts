@@ -40,7 +40,7 @@ export function useWorkspaceCommands(openDialog:(dialog:'project'|'help')=>void)
     layout:{label:'Reset workspace layout',run:ui.resetLayout,disabled:false},
     fit:{label:'Fit design',shortcut:'F',run:()=>ui.camera('fit'),disabled:!['threeD','layout2d','schematic'].includes(state.activeTab)||(!state.pdm&&!state.schematicData)},
     fullscreen:{label:'Full-screen viewport',shortcut:'Shift+F',run:()=>ui.camera('fullscreen'),disabled:!['threeD','layout2d','schematic'].includes(state.activeTab)},
-    generate:{label:'Publish engineering revision (compute & publish)',run:()=>{ui.setBottomTab('output');void state.runDesignPipeline().then(()=>{const current=useProjectStore.getState();if(current.projectId===state.projectId&&!current.errorMessage&&current.pdm)current.setActiveTab('threeD');});},disabled:busy||(!!state.document&&state.hasUnsavedChanges)},
+    generate:{label:docState.publication.label,explanation:docState.publication.reason,run:()=>{ui.setBottomTab('output');void state.runDesignPipeline().then(()=>{const current=useProjectStore.getState();if(current.projectId===state.projectId&&!current.errorMessage&&current.pdm)current.setActiveTab('threeD');});},disabled:busy||!!command.proposal||docState.publication.unavailable},
     requirements:{label:'Requirements',run:()=>state.setActiveTab('requirements'),disabled:false},
     catalog:{label:'Component library…',run:()=>state.setActiveTab('catalog'),disabled:false},
     select:{label:'Select',shortcut:'V',run:()=>tool('select'),disabled:busy},

@@ -38,6 +38,16 @@ export async function readDocument(page: Page) {
   return (await page.evaluate(() => window.panelE2E.state())).document!;
 }
 
+/** A visible displacement counts only when the independently fetched PDM moved. */
+export function expectAuthoritativeXMove(before: DocumentView, saved: DocumentView, renderedX: number) {
+  const original = before.snapshots.pdm!.components[0];
+  const component = saved.snapshots.pdm!.components.find(c => c.id === original.id)!;
+  expect(component.position.x, 'Saved PDM must move; a mesh-only displacement is not an engineering edit')
+    .not.toBe(original.position.x);
+  expect(component.position.x).toBeCloseTo(renderedX, 5);
+  expect(saved.document.document_sequence).toBeGreaterThan(before.document.document_sequence);
+}
+
 export function moveRequest(view: DocumentView, x = 140): OperationPreviewRequest {
   const component = view.snapshots.pdm!.components[0];
   return {schema_version: '1.0.0', batch_id: crypto.randomUUID(),
@@ -57,11 +67,12 @@ export async function propose(page: Page, projectId: string, request: OperationP
 }
 
 export async function pickComponent(page: Page, id: string) {
-  const point = await page.evaluate(value => window.panelE2E.point(value), id);
+  let point = {x: 0, y: 0};
   // Hover/poll waits for the live scene, fonts and camera to become pickable.
   await expect(async () => {
+    point = await page.evaluate(value => window.panelE2E.point(value), id);
     await page.mouse.click(point.x, point.y + 3);
-    await expect(page.getByRole('status', {name: 'Harness selection'})).toHaveText(id);
+    await expect(page.getByRole('status', {name: 'Harness selection'})).toHaveText(id, {timeout: 1000});
   }).toPass();
   return point;
 }

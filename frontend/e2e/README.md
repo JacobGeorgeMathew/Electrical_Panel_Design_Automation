@@ -84,6 +84,11 @@ existing qualified schematic fixture; production code does not infer those roles
 `catalog.spec.ts` checks exact catalog-version insertion, unconnected terminals,
 reopen, dependency review, blocked unconfirmed removal, cancellation and durable undo.
 
-P2-T10/P2-T11 supply those bounded feature bindings and specs. P2-T14 retains final
-integrated cross-view acceptance; this harness does not implement that subsequent
-task. Tauri, native CAD, other browsers and hardware WebGL remain separate checks.
+P2-T14 adds `acceptance.spec.ts`: deliberate movement of only the live Three.js
+object must fail the same saved-PDM oracle used by the positive gizmo test, leave
+server history unchanged and disappear on reopen. This test-only fault injection
+does not change production gesture bindings or write snapshots. The automatic
+proposal case uses the actual API for review/acceptance/retry/stale rejection,
+then the production viewer, Save and shared undo after reopen. It does not claim
+an automatic proposal UI exists. See [phase 2 evidence](../../docs/verification/phase-2-acceptance.md).
+Tauri, native CAD, other browsers and hardware WebGL remain separate checks.

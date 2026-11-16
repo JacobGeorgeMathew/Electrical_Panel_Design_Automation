@@ -41,6 +41,18 @@ async function load(projectId: string) {
   return view;
 }
 
+function selectedMesh() {
+  const canvas = document.querySelector('canvas')!;
+  const scene = _roots.get(canvas)?.store.getState();
+  let object: Object3D | undefined;
+  scene?.scene.traverse(o => {
+    const control = o as Object3D & {isTransformControls?: boolean; object?: Object3D};
+    if (control.isTransformControls) object = control.object;
+  });
+  if (!scene || !object) throw new Error('Select a component and enable its move gizmo.');
+  return {scene, object};
+}
+
 /** Test-only bridge to existing clients. It never writes a durable snapshot or
  * binds a pointer gesture to an operation. Production entry points exclude it. */
 const bridge = {
@@ -57,6 +69,18 @@ const bridge = {
   propose: (proposal: CommandProposal) => useCommandStore.getState().propose(proposal),
   preview: () => useCommandStore.getState().previewProposal(),
   commit: () => useCommandStore.getState().commitProposal(),
+  renderedX: () => {
+    const state = useProjectStore.getState();
+    const component = state.pdm!.components.find(c => c.cem_component_id === state.selectedObjectId)!;
+    return selectedMesh().object.position.x / .01 - component.width / 2;
+  },
+  // Deliberate fault injection for the acceptance oracle: move only the actual
+  // Three.js object, bypassing gestures/stores/HTTP. Never used by a positive test.
+  shiftMeshOnly: (deltaMm: number) => {
+    const {scene, object} = selectedMesh();
+    object.position.x += deltaMm * .01;
+    scene.invalidate();
+  },
   // Read the live test canvas, rather than assuming a pixel offset from a
   // component center. Pointer events must still hit the real TransformControls.
   gizmoPoint: () => {

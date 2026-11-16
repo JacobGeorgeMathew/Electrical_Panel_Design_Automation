@@ -42,6 +42,20 @@ export function documentSave(state: ProjectState): DocumentSave {
     configuration: state.projectConfiguration };
 }
 
+/** Match the server's bounded legacy generation guard. This is not the future
+ * Publish action, which must snapshot already recomputed output. */
+export function publicationAvailability(state: ProjectState) {
+  const view = state.document;
+  const needsProposal = !!view && (view.document.document_sequence > 0 ||
+    view.snapshots.cem !== null || !!view.document.generation_intent);
+  const reason = state.viewedRevisionId ? 'Historical revisions are read-only.'
+    : needsProposal ? 'Publication of edited working documents is unavailable until separate Recompute and Publish support is implemented. Generation proposals can be reviewed and accepted through the API; acceptance changes only the working draft. Save preserves your edits.'
+    : view && state.hasUnsavedChanges ? 'Save input drafts first. Changed-input Save requires the proposal workflow; publication of that edited document is unavailable.'
+    : null;
+  return { unavailable: !!reason, reason,
+    label: reason ? 'Publish unavailable' : 'Generate & publish revision (legacy)' };
+}
+
 export function documentStatus(state: ProjectState) {
   const historical = !!state.viewedRevisionId;
   const unsupported = state.publishedDesign?.output_status === 'MISSING_OUTPUTS';
@@ -63,5 +77,5 @@ export function documentStatus(state: ProjectState) {
 export function useDocumentStore() {
   const state = useProjectStore();
   return { ...documentStatus(state), document: state.document,
-    save: state.saveCurrentProject, publish: state.runDesignPipeline };
+    publication: publicationAvailability(state), save: state.saveCurrentProject, publish: state.runDesignPipeline };
 }

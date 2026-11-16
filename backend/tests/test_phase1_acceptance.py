@@ -67,16 +67,47 @@ def test_document_lifecycle_keeps_current_and_historical_outputs_frozen(
             'expected_recovery_version': checkpoint['recovery_version'], 'document': None}))
         assert cleared['recovery'] is None
 
+    # P2 requires a reviewed generation proposal after changed-input Save. This
+    # legacy publication request must retain the saved intent and frozen output.
+    rejected = api.post(root + '/revisions', json={
+        'expected_version': saved['document']['lock_version'],
+        'requirements': {'num_feeders': 5}})
+    assert rejected.status_code == 409
+    assert rejected.json()['error']['code'] == 'GENERATION_PROPOSAL_REQUIRED'
+    assert ok(api.get(document_path)) == saved
+    assert len(ok(api.get(root + '/revisions'))) == 1
+    frozen = ok(api.get(root + '/design'))
+    for field in ('cem', 'pdm', 'schematic', 'bom', 'cad', 'validation_errors',
+                  'snapshot_sha256', 'output_manifest', 'output_manifest_sha256'):
+        assert frozen[field] == first[field]
+
+
+def test_untouched_legacy_publications_keep_distinct_history_frozen(
+        api, postgres_database, monkeypatch):
+    # This independent legacy fixture never Saves or edits the input-only working
+    # document. It preserves the two different-output publication/read/Restore
+    # checks without pretending that P2 acceptance publishes edited documents.
+    project = create(api, 'Frozen legacy publications')
+    root = '/api/projects/' + project['id']
+    document_path = '/api/v1/projects/' + project['id'] + '/document'
+    initial = ok(api.get(document_path))
+    first = ok(api.post(root + '/revisions', json={
+        'expected_version': project['lock_version'], 'requirements': {'num_feeders': 4}}), 201)
+    source = ok(api.get(document_path))
+    assert source['document']['document_sequence'] == 0
+    assert source['snapshots']['cem'] is None
+
     # Publish with a changed installed engine pin, then make every computation
     # entry point unavailable before reading either publication.
     monkeypatch.setattr(project_service, 'ENGINE_VERSION', 'p1-acceptance-engine-change')
     second = ok(api.post(root + '/revisions', json={
-        'expected_version': saved['document']['lock_version'],
+        'expected_version': first['lock_version'],
         'requirements': {'num_feeders': 5}}), 201)
     assert second['manifest']['engine_version'] != first['manifest']['engine_version']
     assert second['revision_id'] != first['revision_id']
     assert second['revision_no'] == first['revision_no'] + 1
-    assert second['output_manifest']['source_document']['sha256'] == saved['content_sha256']
+    assert second['output_manifest']['source_document']['sha256'] == source['content_sha256']
+    assert second['cem']['components'] != first['cem']['components']
     originals = {r['revision_id']: read_bundle(postgres_database, identifier(r['revision_id']))
                  for r in (first, second)}
     original_bytes = {}
@@ -86,6 +117,9 @@ def test_document_lifecycle_keeps_current_and_historical_outputs_frozen(
             assert response.status_code == 200
             assert sha256(response.content).hexdigest() == artifact['sha256']
             original_bytes[artifact['sha256']] = response.content
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError('Historical read/Restore invoked generation or routing')
 
     disable_generators(monkeypatch)
     monkeypatch.setattr(DesignOrchestrator, '__init__', forbidden)

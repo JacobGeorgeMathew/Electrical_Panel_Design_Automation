@@ -38,13 +38,20 @@ test('connection replace/delete previews list exact invalidated routes and empti
   const base=await readDocument(page);
   await page.getByRole('button',{name:'schematic',exact:true}).click();
   const selectWire=async()=>{
+    const path=page.locator('.react-flow__edge[data-id="wire-1"] .react-flow__edge-path');
+    // A receipt replaces nodes and edges together; React Flow renders edges
+    // after measuring the replacement node handles. Wait for that hydration
+    // explicitly instead of spending the entire click retry budget in evaluate.
+    await expect(path).toHaveCount(1);
     // A vertical SVG path has a zero-width DOM box. Pick the stroked path
     // away from its middle label; locator.click's box visibility cannot do this.
     await expect(async()=>{
-      const point=await page.locator('.react-flow__edge[data-id="wire-1"] .react-flow__edge-path').evaluate(e=>{
-        const path=e as SVGPathElement,p=path.getPointAtLength(path.getTotalLength()*.25);
+      const point=await path.evaluate(e=>{
+        const path=e as SVGPathElement;
+        if(path.getTotalLength()<=0||!path.getScreenCTM())throw new Error('Wire path is not ready for picking');
+        const p=path.getPointAtLength(path.getTotalLength()*.25);
         const point=new DOMPoint(p.x,p.y).matrixTransform(path.getScreenCTM()!);return {x:point.x,y:point.y};
-      });
+      },undefined,{timeout:1000});
       await page.mouse.click(point.x,point.y);
       await expect(page.getByRole('button',{name:'Edit connection',exact:true})).toBeVisible({timeout:1000});
     }).toPass({timeout:5000});
