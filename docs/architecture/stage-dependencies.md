@@ -8,7 +8,7 @@ obligations and any conservative fallback roots. It performs no engineering,
 database, file, revision or job mutation.
 
 This is the contract boundary for adapters and execution work. Detached electrical
-adapters are described below. The
+and physical/documentation adapters are described below. The
 [full generator](../../backend/app/services/orchestrator.py) still runs its existing
 pipeline, including its enclosure candidate/retry loop. The registry and adapters
 do not implement a cache/scheduler or replace propagation's current full
@@ -57,7 +57,7 @@ Coarse boundaries preserve the existing document vocabulary. In particular,
 | `connectivity` | Components, canonical connection/net intent, supply/phase answers, explicit terminal-domain evidence and enclosure interfaces | CEM graph, nets and connections | selection | Terminal references, netlist integrity, electrical consistency |
 | `schematic` | Connectivity, components, saved symbols/wires/junctions, manual presentation intent | Schematic presentation | connectivity | Reference integrity; preserve manual presentation |
 | `placement` | Components and connection pairs, enclosure geometry/catalog, assembly catalog, locks and saved policy | Selected enclosure/plate frame, components, zones, rails, ducts, accessories, construction, heat loss and policy | selection, connectivity | Hard physical constraints, locked placements, enclosure mm |
-| `routes` | Placement and connected duct network, canonical connections/nets, saved policy | PDM routes and exact wire geometry | placement, connectivity | Duct routing, endpoint identity, finite geometry |
+| `routes` | Placement and connected duct network, canonical connections/nets, saved policy | PDM routes, exact wire geometry and duct bundle accounting | placement, connectivity | Duct routing, endpoint identity, finite geometry |
 | `physical_validation` | Placement, routes, CEM intent and saved policy | Physical/thermal validation results | placement, routes | Empty physical violation list, including warnings |
 | `bom` | Electrical components, accessories, rails and ducts | BOM rows | selection, placement | Stable IDs, catalog quantities and cut lengths |
 | `cad` | Validated physical geometry, schematic presentation, generator/model pins | CAD/output descriptors | physical_validation, schematic | Strict validation, stable references and managed asset integrity |
@@ -238,7 +238,7 @@ explicitly request regeneration. Calculations continue using requirement-derived
 prototype methods; adapters do not reinterpret manual ratings as new engineering
 methods. They return owned slices, never mutate a working document, and do not
 publish anything. These extraction boundaries do not implement the later scheduler,
-cache, physical adapters or manual-intent reconciliation.
+cache or manual-intent reconciliation.
 
 The full generator remains unchanged as the independent oracle. Adapter tests in
 [test_electrical_stages.py](../../backend/tests/test_electrical_stages.py) compare
@@ -249,3 +249,87 @@ test poisons file access, repository construction and database transaction/query
 entry after input materialization and executes all five stages successfully.
 No wire-schema or engine/generator version change is needed for this extraction:
 the original algorithms and baseline engineering output remain unchanged.
+
+## Detached physical and documentation adapters (P3-T03)
+
+[physical.py](../../backend/app/services/stages/physical.py) and
+[artifacts.py](../../backend/app/services/stages/artifacts.py) expose the existing
+algorithms behind frozen, serializable inputs and outputs. These are detached
+execution functions; the full generator remains an independent oracle. No HTTP
+route, scheduler, cache, persistence transaction or publication flow is changed.
+
+The ten registry stage IDs remain unchanged. Physical substeps have this order:
+
+| Registry stage | Adapter order and inputs | Output |
+| --- | --- | --- |
+| `placement` | `enclosure_stage`: CEM, pinned enclosure rows, layout, required IP and optional fixed enclosure ID | Ordered feasible candidates |
+| `placement` | `zoning_stage`: one candidate, layout and pinned hardware | Existing enclosure zones, category preferences and hard trough reservations |
+| `placement` | `placement_stage`: zoning, CEM, generation intent and optional accepted layout | CP-SAT components/rails or retained accepted placement |
+| `placement` | `ducts_stage`: placement and its pinned zoning/hardware | Physical ducts, construction and accessories |
+| `routes` | `routes_stage`: placed/edited PDM, CEM, layout and route locks | Whole connected duct network, checked wire geometry and bundle accounting |
+| `physical_validation` | `physical_validation_stage`: routed PDM and CEM | Zero physical violations plus checked component/wire geometry |
+| `bom` | `bom_stage`: CEM selection and assembled PDM | Existing quantities, identities and cut lengths |
+| `cad` | `cad_stage`: PDM, CEM, schematic dependency and generator/model pins | Eligible primitive payload and optional FreeCAD script text |
+
+The caller closes catalog/document read transactions before execution and supplies
+exact versioned enclosure/hardware rows, context/engine identity and layout.
+Substeps use the registered `db-placement-1` algorithm version; other adapters use
+their corresponding registry version. Enclosure retry belongs to the caller:
+iterate the returned candidates in order and retain the existing retryable error
+policy. A supplied fixed enclosure ID filters candidates before feasibility, so
+it cannot silently select another enclosure. Zoning means the current metadata
+and layout preferences/reservations, not a new zoning solver.
+
+`GenerationIntent.locked_placements` contains CEM component IDs. Locked/manual
+placement requires an accepted PDM. The adapter conservatively retains that entire
+placement and assembly, validates it against current component geometry/heat and
+the selected enclosure frame, and clears routes for explicit network rerouting.
+It neither repositions unlocked neighbours nor claims partial fixed-variable
+CP-SAT support. Missing locked components, a changed enclosure frame or incompatible
+selected components fail. Without an accepted PDM, ordinary generation uses the
+unchanged CP-SAT constraints and independent geometry checks. Nonzero rotations
+remain unsupported for the existing obstacle model.
+
+`routes_stage` invokes **DuctRouter** for the complete network; routes are never
+mixed with an old subset. Saved PDM policy controls clearance/validation. A route
+lock blocks full network rerouting with a structured conflict. Disconnected or
+obstructed trunks, bad placement, duct collision/fill, missing routes and stale
+endpoint/conductor references fail. Opaque document component/net/connection IDs
+remain intact; supplied role bindings isolate the legacy main-net diameter/color
+heuristics from renamed net IDs. Terminal IDs and exact off-grid endpoints remain
+the existing router's responsibility.
+The registry explicitly includes duct `route_ids`, `wire_area_mm2` and
+`capacity_pct` in the routes result: DuctRouter updates these after whole-network
+routing. Placement owns duct geometry/catalog definitions and local component
+geometry; routing owns conductor paths/fillets and bundle accounting.
+
+`local_geometry_stage` regenerates component meshes and wire fillets from existing
+placements and waypoints after independent physical checks. It never calls a path
+router, moves a component, changes a route ID or replaces waypoints. A component
+move with stale terminal endpoints requires explicit network rerouting and fails
+local geometry validation. Physical validation uses this same geometry boundary.
+CAD revalidates current PDM/CEM and rebuilds derived geometry before serialization;
+stored validation lists and old wire PASS flags cannot authorize eligible output.
+Any computed physical violation, including a warning, blocks CAD. BOM can run after
+assembly without waiting for routing, as the registry already specifies.
+
+`LayoutSnapshot` sorts category sets for deterministic JSON round trips.
+`PhysicalSnapshot` validates the PDM and retains legacy numeric representation:
+the router assigns integer zero to unused duct accounting fields, and ordinary
+typed JSON rehydration would turn it into `0.0` and change snapshot hashes. The
+snapshot preserves that representation after validation; it does not omit or
+normalize any geometry, identity or engineering value. Reads return fresh models.
+
+The adapters produce payloads/script text only. Existing content-addressed assets,
+revision writing and compatibility pins remain caller responsibilities. Generator
+and model versions must be resolved before calling CAD. No new engine/generator
+version is needed for this extraction because baseline output stays unchanged.
+Native FreeCAD/STEP execution and electrical/manufacturing qualification remain
+unverified; geometry, thermal and duct fill are prototype assumptions.
+
+[Physical adapter tests](../../backend/tests/test_physical_stages.py) compare both
+frozen DB baselines, PDM/CAD/BOM hashes, GLB bytes and script bytes; check exact
+terminal endpoints, opaque identities, locks, schema round trips and immutable
+inputs; poison file/repository/database access after materializing inputs; and
+reject invalid physical data before CAD serialization. Verification commands and
+limits are recorded in the [attempt report](../../planning/task_reports/P3-T03/attempt-01.md).
