@@ -12,6 +12,9 @@ It evaluates the allowlisted members in order on detached candidates, validates
 identities, finite values, snapshot hashes and references, and retains intermediate
 model states. These are structurally validated drafts: requirement rules, physical
 constraints, routing and validation remain unresolved as reported by the registry.
+P2-T04 rejects known placement violations and unsupported rotations through the
+shared physical handlers before any write. Routes are retained as dirty data;
+full routing/physical validation and CAD still require explicit Recompute.
 P2-T03 checks each edited requirement against the pinned questionnaire and permitted
 DB choices, and materializes exact published catalog versions for rating/enclosure
 edits in the read session. Detached evaluation follows after the session closes.
@@ -38,7 +41,7 @@ reversing edits still record their ordered transitions and advance once.
 The document provenance records the last state-changing member. Existing revision
 head, immutable revisions, assets, display/workspace and independent recovery
 state remain intact. Unaccepted `PROPOSED` operations are rejected: this storage
-boundary cannot supply human acceptance. Further physical operation validation
+boundary cannot supply human acceptance. Oriented geometry/mounting validation
 and any explicit acceptance workflow require their own tasks.
 
 ## Retry identity and result

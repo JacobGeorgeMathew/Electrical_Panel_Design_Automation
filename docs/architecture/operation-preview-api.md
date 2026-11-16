@@ -17,22 +17,42 @@ previous candidate snapshot hash. No silent rebase or partial result is returned
 An opaque logical target ID must be nonempty, without surrounding whitespace or
 control characters; unknown targets are rejected separately from malformed IDs.
 
-The immutable registry permits these draft operations (P2-T03 extends the original preview contract):
+The immutable registry permits these draft operations (P2-T03/P2-T04 extend the original preview contract):
 
 | Type | Target and parameters | Affected model | Newly dirty stages | Required unresolved checks |
 | --- | --- | --- | --- | --- |
 | `MoveComponent` | Matching PDM/CEM component IDs; finite `position_mm` x/y/z | `pdm` | routes, physical_validation, cad | physical_constraints, routing, physical_validation |
+| `RotateComponent` | Matching PDM/CEM component IDs; finite absolute Z `rotation_deg`; only zero supported | `pdm` | routes, physical_validation, cad (no-op adds none) | physical_constraints, routing, physical_validation (no-op adds none) |
 | `UpdateRequirement` | Existing requirement ID; scalar or null `value` | requirements | all stages | requirement_rules |
 | `ChangeComponentRating` | Existing `cem_component_id`; exact `catalog_id`, `component_version_id`, `current_rating` | cem | calculations, selection, connectivity, schematic, placement, routes, physical_validation, bom, cad | requirement_rules, physical_constraints, routing, physical_validation |
 | `ResizeEnclosure` | Current `enclosure_id`; exact replacement `catalog_id`, `component_version_id`, `width`, `height`, `depth` in mm | pdm | placement, routes, physical_validation, bom, cad | physical_constraints, routing, physical_validation |
 
 Optional `affected_models` defaults to the registry declaration; a supplied value
-must match exactly. Unknown fields, operations, arbitrary snapshots, rotations,
+must match exactly. Unknown fields, operations, arbitrary snapshots, rotation fields on moves,
 nonfinite coordinates and duplicate operation IDs fail request validation.
-Movement of an already rotated component is rejected. Movement translates absolute
-physical terminal coordinates along with the component, preserving identities and
+Any nonzero rotation in the layout blocks physical edits. `RotateComponent`
+rejects every nonzero requested angle, including full turns and tiny angles,
+without normalization. Zero on a zero-rotation layout is a validated no-op;
+resetting an imported rotated layout is unsupported until P4-T10 supplies shared
+oriented geometry and terminal/obstacle transforms.
+
+Movement translates absolute physical terminal coordinates along with the
+component, preserving identities and
 mounting-plate offsets. Routes and other derived values are retained as dirty;
-the candidate is not a rerouted or physically validated design.
+the candidate is not a rerouted or physically validated design. Coordinates are
+absolute enclosure millimetres, so mounting offsets are not added a second time.
+Dimensions, clearance policy and mounting-plate extents come from the saved server
+PDM; the request cannot override them. The physical handler checks positive finite
+dimensions and uses `ValidationEngine` on a detached placement-only copy to enforce
+backplate and enclosure bounds, cabinet depth, overlaps, saved-policy clearances,
+duct/device collisions and prototype thermal density. Any returned violation rejects the edit,
+including a no-op on an invalid placement. This does not add mounting/oriented-solid
+checks reserved for P4 or establish route validity. Obsolete routes are excluded
+only from this placement check and retained unchanged in the dirty draft. Thermal
+and validation metadata are not refreshed by Apply. Explicit Recompute must resolve
+the dirty outputs and outstanding checks before publication; no routing, CAD,
+optimization or publication runs during preview, batch commit or Save. Separate
+Recompute/Publish service implementation remains outside P2-T04.
 
 Requirement edits retain ID, label and unit, replace the value and set state
 to PROPOSED, source to USER for manual edits (otherwise the operation origin),
@@ -73,11 +93,12 @@ No-ops produce no change or newly required check, retaining existing dirty stage
 
 Base conflicts and snapshot precondition mismatches return structured 409
 `DOCUMENT_CONFLICT` / `OPERATION_PRECONDITION`. Unknown or mismatched target IDs,
-unsupported existing rotation and missing terminal geometry return structured
+unsupported rotation, missing terminal geometry and known physical constraint failures return structured
 422 design errors. Malformed requests return FastAPI's 422 validation details.
 Missing, corrupt or uninitialized documents use the existing document error path.
-Even a successful response makes no engineering PASS claim. A future apply service
-must revalidate, enforce constraints and fence its own durable transaction.
+Physical failures use `OPERATION_PHYSICAL_CONSTRAINT` with operation ID and
+structured violations. Even a successful response makes no whole-design PASS claim.
+The internal batch repository reuses these handlers and fences its durable transaction.
 
 Backend contracts live in `app/models/operations.py`; frontend interfaces and the
 shared JSON request fixture live in `frontend/src/types/operations.ts` and

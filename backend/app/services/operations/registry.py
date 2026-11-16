@@ -11,6 +11,7 @@ from app.models.document import ResolvedDocument, SnapshotReference, snapshot_sh
 from app.models.operations import OperationPreview, OperationPreviewRequest, OperationChange, RequiredCheck
 from app.services.operations.engineering import (EngineeringChoices, update_requirement,
     change_component_rating, resize_enclosure)
+from app.services.operations.physical import move_component, rotate_component
 from app.persistence.documents import document_hash
 from app.persistence.repositories import PersistenceError
 from app.services.design_errors import DesignError
@@ -18,27 +19,6 @@ from app.services.design_errors import DesignError
 
 def reject(operation, code, message):
     raise DesignError(code, message, {'operation_id': str(operation.operation_id)})
-
-
-def move_component(candidate, op):
-    pdm = candidate.snapshots.pdm
-    component = next((c for c in pdm.components if c.id == op.target.pdm_component_id), None)
-    if component is None or component.cem_component_id != op.target.cem_component_id:
-        reject(op, 'OPERATION_TARGET', 'Physical and electrical target IDs must match an existing component.')
-    if component.rotation_deg != 0:
-        reject(op, 'UNSUPPORTED_ROTATION', 'Moving rotated components is not supported.')
-    before = component.position.model_dump()
-    after = op.parameters.position_mm.model_dump()
-    if before == after:
-        return []
-    # Physical terminal dictionaries contain absolute enclosure millimetres.
-    for terminal in component.terminals:
-        for axis in ('x', 'y', 'z'):
-            if type(terminal.get(axis)) not in (int, float):
-                reject(op, 'OPERATION_GEOMETRY', 'Physical terminal coordinates are required for movement preview.')
-            terminal[axis] += after[axis] - before[axis]
-    component.position = type(component.position)(**after)
-    return ['position_mm', 'terminals_mm'] if component.terminals else ['position_mm']
 
 
 @dataclass(frozen=True)
@@ -51,6 +31,8 @@ class OperationDefinition:
 
 REGISTRY = MappingProxyType({
     'MoveComponent': OperationDefinition('pdm', move_component,
+        ('routes', 'physical_validation', 'cad'), ('physical_constraints', 'routing', 'physical_validation')),
+    'RotateComponent': OperationDefinition('pdm', rotate_component,
         ('routes', 'physical_validation', 'cad'), ('physical_constraints', 'routing', 'physical_validation')),
     'UpdateRequirement': OperationDefinition('requirements', update_requirement,
         ('requirements', 'calculations', 'selection', 'connectivity', 'schematic',
@@ -85,14 +67,14 @@ def preview_operations(resolved: ResolvedDocument, request: OperationPreviewRequ
         before = snapshot_sha256(snapshot)
         if before != op.preconditions.snapshot_sha256:
             raise PersistenceError('OPERATION_PRECONDITION', 'Target snapshot changed. Repreview against current inputs.', 409)
-        fields = (definition.handler(candidate, op) if op.type == 'MoveComponent'
+        fields = (definition.handler(candidate, op) if op.type in ('MoveComponent', 'RotateComponent')
                   else definition.handler(candidate, op, choices or EngineeringChoices()))
         after = snapshot_sha256(snapshot)
         if before == after:
             continue
         setattr(doc.models, definition.model, SnapshotReference(sha256=after))
         changes.append(OperationChange(operation_id=op.operation_id, model=definition.model,
-            target_id=getattr(op.target, {'MoveComponent': 'pdm_component_id',
+            target_id=getattr(op.target, {'MoveComponent': 'pdm_component_id', 'RotateComponent': 'pdm_component_id',
                            'UpdateRequirement': 'requirement_id', 'ChangeComponentRating': 'cem_component_id',
                            'ResizeEnclosure': 'enclosure_id'}[op.type]),
             before_sha256=before, after_sha256=after, changed_fields=fields))

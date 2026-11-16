@@ -65,6 +65,19 @@ class MoveComponent(OperationBase):
     affected_models: tuple[Literal['pdm']] = ('pdm',)
 
 
+class RotationParameters(ContractModel):
+    # Absolute degrees about the existing Z axis; nonzero values are rejected by
+    # the physical handler until oriented geometry/routing support is validated.
+    rotation_deg: float = Field(strict=True)
+
+
+class RotateComponent(OperationBase):
+    type: Literal['RotateComponent']
+    target: MoveTarget
+    parameters: RotationParameters
+    affected_models: tuple[Literal['pdm']] = ('pdm',)
+
+
 class RequirementTarget(ContractModel):
     requirement_id: StableID
 
@@ -113,7 +126,7 @@ class ResizeEnclosure(OperationBase):
     affected_models: tuple[Literal['pdm']] = ('pdm',)
 
 
-Operation = Annotated[MoveComponent | UpdateRequirement | ChangeComponentRating | ResizeEnclosure,
+Operation = Annotated[MoveComponent | RotateComponent | UpdateRequirement | ChangeComponentRating | ResizeEnclosure,
                       Field(discriminator='type')]
 
 
@@ -138,7 +151,7 @@ class OperationChange(ContractModel):
     target_id: StableID
     before_sha256: SHA256
     after_sha256: SHA256
-    changed_fields: list[Literal['position_mm', 'terminals_mm', 'value', 'state', 'source',
+    changed_fields: list[Literal['position_mm', 'terminals_mm', 'rotation_deg', 'value', 'state', 'source',
                                  'message', 'validation', 'component_catalog', 'enclosure_catalog']]
 
 

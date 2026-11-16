@@ -18,6 +18,8 @@ interface OperationBase {
 export type Operation = OperationBase & (
   | { type: 'MoveComponent'; target: { cem_component_id: string; pdm_component_id: string };
       parameters: { position_mm: { x: number; y: number; z: number } }; affected_models?: ['pdm'] }
+  | { type: 'RotateComponent'; target: { cem_component_id: string; pdm_component_id: string };
+      parameters: { rotation_deg: number }; affected_models?: ['pdm'] }
   | { type: 'UpdateRequirement'; target: { requirement_id: string };
       parameters: { value: number | string | boolean | null }; affected_models?: ['requirements'] }
   | { type: 'ChangeComponentRating'; target: { cem_component_id: string };
@@ -46,7 +48,7 @@ export interface OperationPreview {
   after_content_sha256: string;
   changes: { operation_id: string; model: 'requirements' | 'cem' | 'pdm'; target_id: string;
     before_sha256: string; after_sha256: string;
-    changed_fields: ('position_mm' | 'terminals_mm' | 'value' | 'state' | 'source' | 'message' | 'validation' |
+    changed_fields: ('position_mm' | 'terminals_mm' | 'rotation_deg' | 'value' | 'state' | 'source' | 'message' | 'validation' |
       'component_catalog' | 'enclosure_catalog')[] }[];
   required_checks: { code: 'requirement_rules' | 'physical_constraints' | 'routing' | 'physical_validation';
     status: 'UNRESOLVED' }[];
