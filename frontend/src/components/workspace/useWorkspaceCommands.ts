@@ -1,6 +1,7 @@
 import {useProjectStore} from '../../stores/projectStore';
 import {useWorkspaceStore,type WorkspaceTool} from '../../stores/workspaceStore';
 import {useDocumentStore} from '../../stores/documentStore';
+import {useCommandStore} from '../../stores/commandStore';
 import {assetUrl,exportProject,fetchFreeCADScript} from '../../api/client';
 
 export function downloadFile(data:Blob,name:string){
@@ -10,7 +11,8 @@ export function downloadFile(data:Blob,name:string){
 export function useWorkspaceCommands(openDialog:(dialog:'project'|'help')=>void){
   const state=useProjectStore(),ui=useWorkspaceStore();
   const docState=useDocumentStore();
-  const busy=docState.readOnly||state.isGenerating||state.isSaving||state.isLoadingProject||!!state.pendingRecovery;
+  const command=useCommandStore();
+  const busy=command.pending||docState.readOnly||state.isGenerating||state.isSaving||state.isLoadingProject||!!state.pendingRecovery;
   const tool=(value:WorkspaceTool)=>{
     ui.setTool(value);state.setEditorMode(value==='measure'?'select':value);
     if(value==='measure')useWorkspaceStore.setState({inspectorOpen:true});
@@ -19,6 +21,9 @@ export function useWorkspaceCommands(openDialog:(dialog:'project'|'help')=>void)
   const run=async(action:()=>Promise<unknown>)=>{try{await action();}catch(error){reportError(error);}};
   const preview=state.artifacts.find(a=>a.file_format==='GLB'&&a.status==='READY');
   const commands={
+    previewCommand:{label:'Preview proposal',run:()=>void command.previewProposal(),disabled:busy||command.proposal?.kind!=='operations'},
+    commitCommand:{label:'Apply proposal',run:()=>void command.commitProposal(),disabled:busy||!command.proposal},
+    cancelCommand:{label:'Cancel command request',run:command.cancel,disabled:!command.pending},
     projects:{label:'Project dashboard…',shortcut:'',run:()=>{if(state.hasUnsavedChanges)openDialog('project');else state.closeProject();},disabled:busy},
     newProject:{label:'New project…',run:()=>{if(state.hasUnsavedChanges)openDialog('project');else state.closeProject();},disabled:busy},
     openProject:{label:'Open project…',run:()=>{if(state.hasUnsavedChanges)openDialog('project');else state.closeProject();},disabled:busy},

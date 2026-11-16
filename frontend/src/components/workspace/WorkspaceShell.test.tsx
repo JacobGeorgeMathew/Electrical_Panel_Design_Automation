@@ -3,6 +3,8 @@ import {createRoot,Root} from 'react-dom/client';
 import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
 import {useProjectStore} from '../../stores/projectStore';
 import {useWorkspaceStore,panelSize} from '../../stores/workspaceStore';
+import {useCommandStore} from '../../stores/commandStore';
+import {ApiError} from '../../api/client';
 const lifecycle=vi.hoisted(()=>({mounted:vi.fn(),unmounted:vi.fn()}));
 vi.mock('../threeD/Panel3DViewer',()=>({Panel3DViewer:({embedded}:any)=>{React.useEffect(()=>{lifecycle.mounted();return()=>lifecycle.unmounted();},[]);return <div data-testid="assembly" data-embedded={embedded}><button onClick={()=>useProjectStore.getState().selectObject('PDM-Q1')}>Pick assembly component</button></div>;}}));
 vi.mock('../layout/Layout2DViewer',()=>({Layout2DViewer:({embedded}:any)=><div data-testid="layout" data-embedded={embedded}><button onClick={()=>useProjectStore.getState().selectObject('Q1')}>Pick layout component</button></div>}));
@@ -26,6 +28,19 @@ beforeEach(()=>{
 afterEach(()=>{act(()=>root.unmount());host.remove();vi.restoreAllMocks();});
 const click=(selector:string)=>act(()=>(host.querySelector(selector) as HTMLButtonElement).click());
 describe('engineering workspace',()=>{
+  it('renders structured command rejection in the console and retains the proposal',()=>{
+    const proposal={kind:'operations' as const,projectId:'P',key:'retained-key',request:{batch_id:'batch',
+      document_id:'document',base_sequence:0,expected_version:1,base_revision_id:null,operations:[]}};
+    useCommandStore.getState().propose(proposal);
+    useCommandStore.setState({error:new ApiError('Duct obstructed by Q1.',422,'PHYSICAL_CONSTRAINT')});
+    useWorkspaceStore.getState().setBottomTab('output');
+    act(()=>root.render(<ProjectPage/>));
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('PHYSICAL_CONSTRAINT');
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('Duct obstructed by Q1.');
+    expect(host.textContent).toContain('Engineering proposal retained');
+    expect(useCommandStore.getState().proposal).toEqual(proposal);
+    act(()=>useCommandStore.getState().clear());
+  });
   it('labels historical legacy output and disables editing, Save and Publish shortcuts',()=>{
     const save=vi.spyOn(useProjectStore.getState(),'saveCurrentProject').mockResolvedValue();
     useProjectStore.setState({viewedRevisionId:'OLD',publishedDesign:{output_status:'MISSING_OUTPUTS',cem:{requirements:[]}} as any,selectedObjectId:'Q1'});

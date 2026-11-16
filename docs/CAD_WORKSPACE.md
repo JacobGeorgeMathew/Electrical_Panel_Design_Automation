@@ -13,9 +13,20 @@ the window closes them automatically; they can be reopened through the toolbar.
 
 The existing React Three Fiber, SVG layout, React Flow schematic, BOM and questionnaire
 components are integrated, with embedded modes removing duplicated docks. The shared
-selection is the existing project store selection; PDM component IDs normalize to CEM
-component IDs and physical route IDs normalize to conductor IDs. No CEM/PDM instances,
+selection is an opaque engineering ID in `selectionStore`, with a compatibility
+facade for existing project-store consumers. PDM component and schematic symbol IDs
+normalize to CEM component IDs; physical routes and schematic wires normalize to
+conductor IDs, and schematic pins normalize to terminal IDs. No CEM/PDM instances,
 connectivity, sizing or catalog specifications are recreated by the shell.
+
+`commandStore` retains an explicit operation or history proposal and its idempotency
+key. Preview, commit and undo/redo history requests use the central HTTP client.
+Cancellation, changed local inputs and changed document/project context fence late
+responses. Rejection retains the proposal and shows the server code and message in
+the console. Successful commits advance only the returned working document; saved
+published revisions stay immutable. Existing placement gestures and schematic tools
+still use the display/draft adapters below; their operation bindings belong to the
+subsequent lifecycle tasks.
 
 Properties support the existing physical transform draft and schematic net-label draft.
 Catalog specifications and mechanical hardware are inspected read-only. Components

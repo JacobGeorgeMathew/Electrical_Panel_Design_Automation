@@ -60,6 +60,10 @@ class DocumentService:
             rows = verified_rows(session, project['id'], base.document.document_id)
         return history_view(base, rows)
 
+    def commit_operations(self, key, request, idempotency_key):
+        from app.persistence.operations import OperationBatchRepository
+        return OperationBatchRepository(self.db).commit(key, request, idempotency_key)
+
     def apply_history(self, key, request, idempotency_key):
         from app.persistence.operations import OperationBatchRepository
         return OperationBatchRepository(self.db).apply_history(key, request, idempotency_key)

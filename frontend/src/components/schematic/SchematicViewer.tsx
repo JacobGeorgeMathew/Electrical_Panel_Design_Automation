@@ -9,6 +9,7 @@ import { DesignViewport, type DesignViewportHandle } from '../common/DesignViewp
 import {useWorkspaceStore} from '../../stores/workspaceStore';
 import { GitBranch, Plus, TriangleAlert, X } from 'lucide-react';
 import { useProjectStore } from '../../stores/projectStore';
+import {engineeringId} from '../../stores/selectionStore';
 import { buildSchematicGraph, validateSchematicGraph, type SchematicEdge, type SchematicGraphData,
   type SchematicNode, type SchematicEdgeData, type WireClass } from './schematicGraph';
 
@@ -116,10 +117,11 @@ const SchematicCanvas: React.FC<{ data: SchematicGraphData;embedded?:boolean }> 
   }, [data, setNodes, setEdges]);
 
   const violations = useMemo(() => validateSchematicGraph(nodes, edges), [nodes, edges]);
-  const selectedNode = nodes.find((node) => node.selected) || null;
+  const matchesSelection = (id: string) => engineeringId(id, useProjectStore.getState()) === selectedObjectId;
+  const selectedNode = nodes.find((node) => matchesSelection(node.id)) || null;
   const selectedEdge = edges.find((edge) => edge.id === selectedEdgeId) || null;
   const selectedNet=edges.find(e=>e.id===selectedObjectId||e.data?.net_id===selectedObjectId)?.data?.net_id;
-  const visibleEdges = edges.filter((edge) => wireFilter === 'ALL' || edge.data?.wire_class === wireFilter).map(edge=>({...edge,selected:edge.selected||edge.id===selectedObjectId||!!selectedNet&&edge.data?.net_id===selectedNet}));
+  const visibleEdges = edges.filter((edge) => wireFilter === 'ALL' || edge.data?.wire_class === wireFilter).map(edge=>({...edge,selected:matchesSelection(edge.id)||!!selectedNet&&edge.data?.net_id===selectedNet}));
 
   const onConnect = useCallback((connection: Connection) => {
     if(readOnly)return;
@@ -177,7 +179,7 @@ const SchematicCanvas: React.FC<{ data: SchematicGraphData;embedded?:boolean }> 
           <select aria-label="Filter schematic wire class" value={wireFilter} onChange={e=>setWireFilter(e.target.value as 'ALL'|WireClass)}><option value="ALL">All wires</option>{wireClasses.map(value=><option key={value} value={value}>{value}</option>)}</select>
           <button onClick={addJunction}>Add junction</button>
         </div>}
-        <ReactFlow nodes={nodes.map(n=>({...n,selected:n.selected||n.id===selectedObjectId}))} edges={visibleEdges} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
+        <ReactFlow nodes={nodes.map(n=>({...n,selected:matchesSelection(n.id)}))} edges={visibleEdges} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
           onNodesChange={changes=>{if(changes.some(c=>c.type!=='select'&&c.type!=='dimensions'))edited.current=true;onNodesChange(changes);}} onEdgesChange={changes=>{if(changes.some(c=>c.type!=='select'))edited.current=true;onEdgesChange(changes);}} onConnect={onConnect}
           onNodeClick={(_, node) => { selectObject(node.id); setSelectedEdgeId(null); }}
           onEdgeClick={(_, edge) => {setSelectedEdgeId(edge.id);selectObject(edge.id);}}

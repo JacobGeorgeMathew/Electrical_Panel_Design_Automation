@@ -4,7 +4,7 @@ import type { PhysicalDesignModel } from '../types/pdm';
 import type { ProjectRecord, ProjectConfiguration, DesignPackage, RevisionSummary, Question, Archetype, CatalogPage, CatalogComponent, Enclosure, Artifact } from '../types/api';
 
 export class ApiError extends Error {
-  constructor(message: string, public status = 0, public code = 'NETWORK_ERROR') { super(message); }
+  constructor(message: string, public status = 0, public code = 'NETWORK_ERROR', public details: unknown = null) { super(message); }
 }
 
 export async function request<T>(path: string, options: RequestInit = {}, timeoutMs = 30000): Promise<T> {
@@ -22,7 +22,7 @@ export async function request<T>(path: string, options: RequestInit = {}, timeou
       const errors = detail?.errors || detail?.details?.validation_errors;
       const message = Array.isArray(detail) ? detail.map((e: any) => e.msg).join(' ') :
         detail?.message || (typeof detail === 'string' ? detail : data?.message) || 'Request failed (' + response.status + ')';
-      throw new ApiError(message + (errors?.length ? ' ' + errors.join(' ') : ''), response.status, detail?.code || 'API_ERROR');
+      throw new ApiError(message + (errors?.length ? ' ' + errors.join(' ') : ''), response.status, detail?.code || 'API_ERROR', detail);
     }
     return data as T;
   } catch (error) {
@@ -37,6 +37,13 @@ export async function request<T>(path: string, options: RequestInit = {}, timeou
 
 const json = (method: string, body: unknown): RequestInit => ({ method, body: JSON.stringify(body) });
 const id = encodeURIComponent;
+const operationPath = (projectId: string) => '/v1/projects/' + id(projectId) + '/document/operations';
+export const previewOperations = (projectId: string, data: import('../types/operations').OperationPreviewRequest, signal?: AbortSignal) =>
+  request<import('../types/operations').OperationPreview>(operationPath(projectId) + '/preview', {...json('POST', data), signal});
+export const commitOperations = (projectId: string, data: import('../types/operations').OperationPreviewRequest, key: string, signal?: AbortSignal) =>
+  request<import('../types/operations').OperationCommit>(operationPath(projectId) + '/commit', {...json('POST', data), headers: {'Idempotency-Key': key}, signal}, 90000);
+export const applyOperationHistory = (projectId: string, data: import('../types/operations').HistoryRequest, key: string, signal?: AbortSignal) =>
+  request<import('../types/operations').OperationCommit>(operationPath(projectId) + '/history', {...json('POST', data), headers: {'Idempotency-Key': key}, signal}, 90000);
 export const fetchDocument = (projectId: string, signal?: AbortSignal) =>
   request<DocumentView>('/v1/projects/' + id(projectId) + '/document', { signal });
 export const saveDocument = (projectId: string, data: DocumentSave) =>

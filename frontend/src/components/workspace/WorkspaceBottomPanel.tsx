@@ -2,9 +2,12 @@ import {ChevronDown,ChevronUp,AlertCircle,CheckCircle2,Loader2,Info} from 'lucid
 import {useProjectStore} from '../../stores/projectStore';
 import {useWorkspaceStore} from '../../stores/workspaceStore';
 import {WireInspector} from '../common/WireInspector';
+import {useCommandStore} from '../../stores/commandStore';
 
 export function WorkspaceBottomPanel(){
   const state=useProjectStore(),ui=useWorkspaceStore();
+  const commandError=useCommandStore(s=>s.error);
+  const command=useCommandStore();
   const violations=state.pdm?.validation_results||[];
   const count=violations.length+state.validationErrors.length+state.validationWarnings.length+(state.errorMessage?1:0);
   return <section className="workspace-bottom" aria-label="Engineering console" style={{height:ui.bottomOpen?ui.bottomHeight:29}}>
@@ -14,6 +17,7 @@ export function WorkspaceBottomPanel(){
       <button className="console-toggle" aria-label={ui.bottomOpen?'Collapse console':'Expand console'} onClick={()=>ui.togglePanel('bottom')}>{ui.bottomOpen?<ChevronDown size={14}/>:<ChevronUp size={14}/>}</button>
     </div>
     {ui.bottomOpen&&<div className="bottom-content" role="tabpanel" aria-label={`${ui.bottomTab} console`}>
+      {commandError&&<div role="alert" className="console-row error"><b>{commandError.code}</b><span>{commandError.message}</span></div>}
       {ui.bottomTab==='validation'&&<>
         {state.errorMessage&&<div role="alert" className="console-row error"><AlertCircle size={13}/><span>{state.errorMessage}</span><button onClick={state.clearError}>Dismiss</button></div>}
         {state.validationErrors.map((message,i)=><div key={`error-${i}`} className="console-row error"><AlertCircle size={13}/>{message}</div>)}
@@ -23,6 +27,11 @@ export function WorkspaceBottomPanel(){
         {state.isValidatingPlacement&&<div className="console-row"><Loader2 size={13} className="animate-spin"/>Rerouting and validating placement draft…</div>}
       </>}
       {ui.bottomTab==='output'&&<>
+        {command.proposal&&<div className="console-row"><span>Engineering proposal retained · {command.proposal.request.batch_id}</span>
+          <button disabled={command.pending||command.proposal.kind!=='operations'} onClick={()=>void command.previewProposal()}>Preview proposal</button>
+          <button disabled={command.pending} onClick={()=>void command.commitProposal()}>Apply proposal</button>
+          {command.pending&&<button onClick={command.cancel}>Cancel request</button>}
+        </div>}
         {state.isGenerating&&<div className="console-row"><progress aria-label="Design generation progress"/><span>Running requirements, electrical design, placement, routing and validation…</span></div>}
         {state.errorMessage&&<div role="alert" className="console-row error"><AlertCircle size={13}/>{state.errorMessage}</div>}
         <div className="console-row"><Info size={13}/>{state.autosaveStatus||'Ready. Save writes project inputs and editor drafts; Generate publishes an engineering revision.'}</div>

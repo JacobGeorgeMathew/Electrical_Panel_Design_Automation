@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import {engineeringId, useSelectionStore} from './selectionStore';
 import { CanonicalEngineeringModel } from '../types/cem';
 import { PhysicalDesignModel } from '../types/pdm';
 import { createProject, generateDesign, propagateChange, validatePlacement, validateRequirements,
@@ -195,9 +196,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   
   setProjectId: (id) => set({ projectId: id }),
   setActiveTab: (tab) => set({ activeTab: tab }),
-  selectObject: (id) => set(state=>({ selectedObjectId: id===null?null:
-    state.pdm?.components.find(c=>c.id===id)?.cem_component_id ||
-    state.pdm?.routes.find(r=>r.id===id)?.conductor_id || id })),
+  selectObject: (id) => useSelectionStore.getState().select(engineeringId(id, get())),
   hoverObject: (id) => set({ hoveredObjectId: id }),
   
   setRequirementValue: (field, val) =>
@@ -558,6 +557,20 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
   },
 }));
+
+// Compatibility facade for existing viewers; engineering entities remain in the
+// document/project stores and selection contains only their persistent ID.
+useSelectionStore.subscribe(selection => {
+  const state = useProjectStore.getState();
+  const id = engineeringId(selection.selectedId, state);
+  if (selection.selectedId !== id) { useSelectionStore.getState().select(id); return; }
+  if (state.selectedObjectId !== id) useProjectStore.setState({selectedObjectId: id});
+});
+useProjectStore.subscribe((state, previous) => {
+  if (state.projectId !== previous.projectId) useSelectionStore.getState().select(null);
+  else if (state.selectedObjectId !== previous.selectedObjectId)
+    useSelectionStore.getState().select(engineeringId(state.selectedObjectId, state));
+});
 
 export function recoveryDocument(state: ProjectState): RecoveryDocument {
   return {schema_version:2,baseDocument:state.recoveryBaseDocument,

@@ -1,5 +1,15 @@
-/** Pure preview only; these contracts grant no apply or approval authority. */
+/** Versioned operation transport; preview never grants commit authority. */
 import type { DirtyStage, DocumentProvenance, ResolvedDocument, SchematicPoint } from './document';
+
+export interface OperationCommit {
+  schema_version: '1.0.0'; status: 'COMMITTED'; persisted: true;
+  batch_id: string; idempotency_key: string; payload_sha256: string;
+  base_sequence: number; document_sequence: number; lock_version: number;
+  first_operation_sequence: number; last_operation_sequence: number;
+  before_content_sha256: string; after_content_sha256: string;
+  required_checks: OperationPreview['required_checks'];
+  result: import('./document').DocumentView;
+}
 
 export interface OperationOrigin {
   kind: DocumentProvenance['origin'];
