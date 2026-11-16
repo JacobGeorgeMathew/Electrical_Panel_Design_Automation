@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "test": "vitest run --environment jsdom --maxWorkers=2 --minWorkers=1",
+    "test": "vitest run src --environment jsdom --maxWorkers=2 --minWorkers=1",
+    "test:e2e": "tsc -p e2e/tsconfig.json && playwright test",
     "preview": "vite preview",
     "tauri": "tauri"
   },
@@ -24,6 +25,7 @@
     "zustand": "^4.5.2"
   },
   "devDependencies": {
+    "@playwright/test": "1.65.1",
     "@tauri-apps/cli": "^2.12.1",
     "@types/node": "^20.12.12",
     "@types/react": "^18.3.2",

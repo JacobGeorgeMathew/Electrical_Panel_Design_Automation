@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useProjectStore } from '../../stores/projectStore';
+import {useDocumentStore} from '../../stores/documentStore';
 import { fetchQuestionnaire, fetchArchetype, fetchRequirementSuggestions } from '../../api/client';
 import type { Question, RequirementSuggestions } from '../../types/api';
 import { EnclosureConfigurator } from '../projects/EnclosureConfigurator';
@@ -31,7 +32,7 @@ export const Questionnaire: React.FC = () => {
     validationWarnings,
     setError,
     validateCurrentRequirements,
-    isSaving, isLoadingProject, pendingRecovery, viewedRevisionId, document: workingDocument, hasUnsavedChanges
+    isSaving, isLoadingProject, pendingRecovery, viewedRevisionId, document: workingDocument
   } = useProjectStore();
 
   const [suggestions,setSuggestions]=useState<RequirementSuggestions|null>(null);
@@ -44,6 +45,7 @@ export const Questionnaire: React.FC = () => {
   const submitting = useRef(false);
   const isProcessing = submissionPhase !== null || isGenerating;
   const busy = !!viewedRevisionId || isProcessing || isSaving || isLoadingProject || !!pendingRecovery;
+  const {publication} = useDocumentStore();
 
   useEffect(() => {
     const abort = new AbortController();
@@ -77,7 +79,7 @@ export const Questionnaire: React.FC = () => {
   };
 
   const handleValidate = async () => {
-    if (submitting.current || busy || !projectId) return;
+    if (submitting.current || busy || !projectId || publication.unavailable) return;
     submitting.current = true;
     setSubmissionPhase('validating');
     try {
@@ -109,15 +111,16 @@ export const Questionnaire: React.FC = () => {
       </div>
 
       <div className="flex flex-wrap items-center gap-3 bg-slate-900/70 border border-slate-800 p-4 rounded-xl">
-        <button onClick={handleValidate} disabled={busy || !projectId || (!!workingDocument&&hasUnsavedChanges)} aria-busy={isProcessing}
+        <button onClick={handleValidate} title={publication.reason||undefined} disabled={busy || !projectId || publication.unavailable} aria-busy={isProcessing}
           className="requirements-generation-button px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg text-xs font-semibold">
           {isProcessing && <BoltLoader />}
-          {submissionPhase === 'validating' ? 'Validating requirements…' : isProcessing ? 'Publishing design…' : 'Validate & Publish'}
+          {submissionPhase === 'validating' ? 'Validating requirements…' : isProcessing ? 'Generating & publishing…' : publication.unavailable ? publication.label : 'Validate, generate & publish (legacy)'}
         </button>
         {isProcessing && <span role="status" aria-live="polite" className="requirements-generation-status">
           {submissionPhase === 'validating' ? 'Checking your electrical requirements…' : 'Building your electrical panel design…'}
         </span>}
       </div>
+      {publication.reason&&<p role="status" className="text-xs text-slate-400">{publication.reason} Requirement validation remains available from the Validate menu.</p>}
 
       {(errorMessage || validationErrors.length > 0) && (
         <div role="alert" className="bg-red-950/50 border border-red-800 rounded-xl p-4 text-sm text-red-200 space-y-1">
@@ -242,9 +245,9 @@ export const Questionnaire: React.FC = () => {
                 <p className="mt-1 text-slate-400">You can choose any supported option above.</p>
               </div>}
               <div className="flex justify-end pt-1">
-                <button onClick={() => handleApplyChange(q.id, val)} disabled={busy || !cem || invalidChoice}
+                <button title={workingDocument?'Single-field automatic publication is unavailable for working documents. Save inputs, then review a generation proposal through the API. Acceptance does not publish.':undefined} onClick={() => handleApplyChange(q.id, val)} disabled={busy || !!workingDocument || !cem || invalidChoice}
                   className="px-3 py-1.5 bg-blue-600/80 hover:bg-blue-500 disabled:opacity-40 text-white text-[11px] font-semibold rounded-lg">
-                  Review & Apply Change
+                  {workingDocument?'Automatic change unavailable':'Generate & publish change (legacy)'}
                 </button>
               </div>
             </div>

@@ -1,0 +1,16 @@
+{
+  "batch_id": "55555555-5555-4555-8555-555555555555",
+  "document_id": "document-1",
+  "base_sequence": 7,
+  "expected_version": 3,
+  "base_revision_id": null,
+  "operations": [{
+    "operation_id": "44444444-4444-4444-8444-444444444444",
+    "type": "MoveComponent",
+    "origin": {"kind": "MANUAL", "actor_id": "local-user"},
+    "target": {"cem_component_id": "QF001", "pdm_component_id": "PDM-QF001"},
+    "preconditions": {"snapshot_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+    "parameters": {"position_mm": {"x": 140, "y": 200.25, "z": 37.5}},
+    "affected_models": ["pdm"]
+  }]
+}

@@ -10,7 +10,10 @@ import { AlertTriangle, Box, Eye, EyeOff, Layers, MousePointer2, Redo2, Rotate3D
   Sparkles, Undo2, Move3D } from 'lucide-react';
 import * as THREE from 'three';
 import { fitPanelCamera } from './cameraFit';
-import { analyzeEditorGeometry, componentTransform } from './editorGeometry';
+import { analyzeEditorGeometry, componentTransform, transformFromGizmo } from './editorGeometry';
+import {OperationPreview} from '../workspace/OperationPreview';
+import {canEditEngineering} from '../../stores/operationActions';
+import {useCommandStore} from '../../stores/commandStore';
 import {useWorkspaceStore} from '../../stores/workspaceStore';
 import {ViewportCameraControls} from '../workspace/ViewportCameraControls';
 import { PhysicalComponent } from '../../types/pdm';
@@ -81,16 +84,8 @@ const ComponentMesh: React.FC<ComponentMeshProps> = ({ comp, transform, isSelect
   const updateFromGizmo = () => {
     const group = groupRef.current;
     if (!group) return;
-    const step = snapEnabled ? gridMm : 1;
-    const snap = (value: number) => Math.round(value / step) * step;
-    onTransform(comp.cem_component_id, {
-      x: snap(group.position.x / scale - comp.width / 2),
-      y: snap(group.position.y / scale - comp.height / 2),
-      z: snap((group.position.z - explodedZOffset) / scale - comp.depth / 2),
-      rotation_deg: snapEnabled
-        ? Math.round(THREE.MathUtils.radToDeg(group.rotation.z) / 15) * 15
-        : THREE.MathUtils.radToDeg(group.rotation.z),
-    });
+    onTransform(comp.cem_component_id, transformFromGizmo(comp, transform,
+      group.position, explodedZOffset, snapEnabled, gridMm));
   };
 
   return (
@@ -124,13 +119,14 @@ const snapValue = (value: number, enabled: boolean, step: number) =>
   enabled ? Math.round(value / step) * step : value;
 
 export const Panel3DViewer: React.FC<{embedded?:boolean}> = ({embedded=false}) => {
+  const commandBusy=useCommandStore(s=>s.pending||!!s.proposal);
   const viewportRef=useRef<DesignViewportHandle>(null);
   const [drawer,setDrawer]=useState<'tree'|'properties'|null>(null);
   const {
     pdm, selectedObjectId, selectObject, hoveredObjectId, hoverObject, explodedView,
     toggleExplodedView, wireVisibility, toggleWireVisibility,
     editorTransforms, editorHiddenComponentIds, editorMode, editorSnapEnabled, editorGridMm,
-    editorUndoStack, editorRedoStack, setEditorMode, toggleEditorSnap, setEditorGridMm,
+    setEditorMode, toggleEditorSnap, setEditorGridMm, document,
     toggleComponentVisibility, updateEditorTransform, commitEditorTransform,
     undoEditorTransform, redoEditorTransform, resetEditorDraft, artifacts, refreshCadPreview, cadJobStatus, designStale,
     hasUnsavedChanges, currentRevisionId, cadData, viewedRevisionId,
@@ -171,6 +167,7 @@ export const Panel3DViewer: React.FC<{embedded?:boolean}> = ({embedded=false}) =
 
   return (
     <div className={embedded?"workspace-viewer":"flex flex-1 min-h-0 min-w-0 flex-col h-full overflow-y-auto bg-slate-950 p-3 md:p-4 space-y-3"}>
+      <OperationPreview/>
       <div data-viewer-chrome className="flex flex-wrap items-center justify-between gap-3 bg-slate-900 border border-slate-800 p-3 rounded-2xl">
         <div className="flex min-w-0 items-center gap-3">
           <div className="p-2 bg-blue-500/10 text-blue-400 rounded-xl"><Box className="w-5 h-5" /></div>
@@ -184,7 +181,7 @@ export const Panel3DViewer: React.FC<{embedded?:boolean}> = ({embedded=false}) =
             className={`editor-tool ${editorMode === 'select' ? 'editor-tool-active' : ''}`}><MousePointer2 className="h-3.5 w-3.5" />Select</button>
           <button onClick={() => setEditorMode('translate')} aria-pressed={editorMode === 'translate'} title="Move selected component"
             className={`editor-tool ${editorMode === 'translate' ? 'editor-tool-active' : ''}`}><Move3D className="h-3.5 w-3.5" />Move</button>
-          <button onClick={() => setEditorMode('rotate')} aria-pressed={editorMode === 'rotate'} title="Rotate selected component"
+          <button disabled aria-pressed={false} title="Rotation is unsupported by physical routing"
             className={`editor-tool ${editorMode === 'rotate' ? 'editor-tool-active' : ''}`}><Rotate3D className="h-3.5 w-3.5" />Rotate</button>
           <button type="button" aria-label="Open 3D panel fullscreen" onClick={()=>void viewportRef.current?.enterFullscreen()} className="editor-tool">Fullscreen</button>
           <button onClick={toggleEditorSnap} aria-pressed={editorSnapEnabled} className={`editor-tool ${editorSnapEnabled ? 'editor-tool-active' : ''}`}>Snap {editorSnapEnabled ? 'On' : 'Off'}</button>
@@ -192,8 +189,8 @@ export const Panel3DViewer: React.FC<{embedded?:boolean}> = ({embedded=false}) =
             Grid <input aria-label="Snap grid in millimeters" type="number" min="1" max="100" value={editorGridMm}
               onChange={(event) => setEditorGridMm(Number(event.target.value))} className="w-12 bg-slate-950 text-center text-slate-100 outline-none" /> mm
           </label>
-          <button onClick={()=>{undoEditorTransform();void useProjectStore.getState().validateCurrentPlacement();}} disabled={!editorUndoStack.length} title="Undo transform" className="editor-tool disabled:opacity-40"><Undo2 className="h-3.5 w-3.5" />Undo</button>
-          <button onClick={()=>{redoEditorTransform();void useProjectStore.getState().validateCurrentPlacement();}} disabled={!editorRedoStack.length} title="Redo transform" className="editor-tool disabled:opacity-40"><Redo2 className="h-3.5 w-3.5" />Redo</button>
+          <button onClick={undoEditorTransform} disabled={!document||!canEditEngineering()} title="Undo transform" className="editor-tool disabled:opacity-40"><Undo2 className="h-3.5 w-3.5" />Undo</button>
+          <button onClick={redoEditorTransform} disabled={!document||!canEditEngineering()} title="Redo transform" className="editor-tool disabled:opacity-40"><Redo2 className="h-3.5 w-3.5" />Redo</button>
           <button onClick={toggleExplodedView} aria-pressed={explodedView} className="editor-tool"><Sparkles className="h-3.5 w-3.5" />Explode</button>
           <button onClick={toggleWireVisibility} aria-pressed={wireVisibility} className="editor-tool"><Layers className="h-3.5 w-3.5" />Routes</button>
           <button onClick={resetEditorDraft} disabled={!hasDraftEdits} title="Discard local editor changes" className="editor-tool disabled:opacity-40"><RotateCcw className="h-3.5 w-3.5" />Reset</button>
@@ -281,9 +278,9 @@ export const Panel3DViewer: React.FC<{embedded?:boolean}> = ({embedded=false}) =
                 transform={componentTransform(component, editorTransforms[id])}
                 isSelected={selectedId === id} isHovered={hoveredObjectId === id || hoveredObjectId === component.id}
                 exploded={explodedView} hidden={editorHiddenComponentIds.includes(id)}
-                mode={!viewedRevisionId && selectedId === id && editorMode !== 'select' ? editorMode : null}
+                mode={!commandBusy && canEditEngineering() && selectedId === id && editorMode === 'translate' ? 'translate' : null}
                 snapEnabled={editorSnapEnabled} gridMm={editorGridMm}
-                onSelect={selectObject} onHover={hoverObject} onTransform={updateEditorTransform} onCommit={()=>{commitEditorTransform();void useProjectStore.getState().validateCurrentPlacement();}} />;
+                onSelect={selectObject} onHover={hoverObject} onTransform={updateEditorTransform} onCommit={commitEditorTransform} />;
             })}
             {wireVisibility && pdm.routes.map((route) => <WireMesh key={route.id} route={route} draft={hasDraftEdits}
               onSelect={selectObject}
@@ -313,13 +310,12 @@ export const Panel3DViewer: React.FC<{embedded?:boolean}> = ({embedded=false}) =
             <div className="grid grid-cols-2 gap-2">
               {(['x', 'y', 'z'] as const).map((field) => <label key={field} className="text-[10px] text-slate-400">
                 Position {field.toUpperCase()} (mm)
-                <input aria-label={`Position ${field.toUpperCase()} in millimeters`} type="number" value={Number(selectedTransform[field].toFixed(1))}
-                  onChange={(event) => updateNumeric(field, Number(event.target.value))} onBlur={()=>{commitEditorTransform();void useProjectStore.getState().validateCurrentPlacement();}}
+                <input aria-label={`Position ${field.toUpperCase()} in millimeters`} type="number" disabled={!canEditEngineering()} value={Number(selectedTransform[field].toFixed(1))}
+                  onChange={(event) => {if(event.target.value!=='')updateNumeric(field, Number(event.target.value));}} onBlur={commitEditorTransform}
                   className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-100" />
               </label>)}
               <label className="text-[10px] text-slate-400">Rotation Z (°)
-                <input aria-label="Rotation Z in degrees" type="number" value={Number(selectedTransform.rotation_deg.toFixed(1))}
-                  onChange={(event) => updateNumeric('rotation_deg', Number(event.target.value))} onBlur={()=>{commitEditorTransform();void useProjectStore.getState().validateCurrentPlacement();}}
+                <input aria-label="Rotation Z in degrees" type="number" disabled value={Number(selectedTransform.rotation_deg.toFixed(1))}
                   className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-100" />
               </label>
             </div>

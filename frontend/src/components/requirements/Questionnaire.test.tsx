@@ -3,10 +3,11 @@ import {createRoot,Root} from 'react-dom/client';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {Questionnaire} from './Questionnaire';
 import {useProjectStore} from '../../stores/projectStore';
+import fixture from '../../types/fixtures/document-v1.json';
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
 let host:HTMLDivElement,root:Root;
 const initialActions={validateCurrentRequirements:useProjectStore.getState().validateCurrentRequirements,runDesignPipeline:useProjectStore.getState().runDesignPipeline};
-beforeEach(()=>{host=document.createElement('div');document.body.append(host);root=createRoot(host);useProjectStore.setState({...initialActions,pendingRecovery:null,validationErrors:[],validationWarnings:[],projectId:'P1',archetypes:[],isGenerating:false,isSaving:false,isLoadingProject:false,errorMessage:null,requirementValues:{},projectConfiguration:{}});});
+beforeEach(()=>{host=document.createElement('div');document.body.append(host);root=createRoot(host);useProjectStore.setState({...initialActions,document:null,viewedRevisionId:null,pendingRecovery:null,validationErrors:[],validationWarnings:[],projectId:'P1',archetypes:[],isGenerating:false,isSaving:false,isLoadingProject:false,errorMessage:null,requirementValues:{},projectConfiguration:{}});});
 afterEach(()=>{act(()=>root.unmount());host.remove();useProjectStore.setState(initialActions);vi.unstubAllGlobals();});
 
 it('renders server ranges and evaluates conditional questions against server defaults',async()=>{
@@ -53,7 +54,7 @@ it('shows the jagged bolt throughout validation and generation and blocks duplic
   useProjectStore.setState({validateCurrentRequirements:validation,runDesignPipeline:generation});
   vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify([]))));
   await act(async()=>{root.render(<Questionnaire/>);await new Promise(resolve=>setTimeout(resolve,0));});
-  const button=Array.from(host.querySelectorAll('button')).find(b=>b.textContent?.includes('Validate & Publish'))!;
+  const button=Array.from(host.querySelectorAll('button')).find(b=>b.textContent?.includes('Validate, generate & publish'))!;
   act(()=>{button.click();button.click();});
   expect(validation).toHaveBeenCalledOnce();
   expect(button.textContent).toContain('Validating requirements');
@@ -62,10 +63,10 @@ it('shows the jagged bolt throughout validation and generation and blocks duplic
   expect(button.disabled).toBe(true);
   await act(async()=>validate(true));
   expect(generation).toHaveBeenCalledOnce();
-  expect(button.textContent).toContain('Publishing design');
+  expect(button.textContent).toContain('Generating & publishing');
   expect(button.querySelector('.bolt-loader--animated')).not.toBeNull();
   await act(async()=>finish());
-  expect(button.textContent).toContain('Validate & Publish');
+  expect(button.textContent).toContain('Validate, generate & publish');
   expect(button.querySelector('.bolt-loader')).toBeNull();
   expect(button.disabled).toBe(false);
 });
@@ -75,9 +76,27 @@ it('stops the loading icon when requirements are invalid and skips generation',a
   useProjectStore.setState({validateCurrentRequirements:vi.fn(async()=>false),runDesignPipeline:generation});
   vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify([]))));
   await act(async()=>{root.render(<Questionnaire/>);await new Promise(resolve=>setTimeout(resolve,0));});
-  const button=Array.from(host.querySelectorAll('button')).find(b=>b.textContent?.includes('Validate & Publish'))!;
+  const button=Array.from(host.querySelectorAll('button')).find(b=>b.textContent?.includes('Validate, generate & publish'))!;
   await act(async()=>button.click());
   expect(generation).not.toHaveBeenCalled();
   expect(button.disabled).toBe(false);
   expect(button.querySelector('.bolt-loader')).toBeNull();
+});
+
+it('explains unavailable publication and automatic field changes on an edited working document',async()=>{
+  const generation=vi.fn(async()=>{});
+  useProjectStore.setState({document:structuredClone(fixture) as any,cem:fixture.snapshots.cem as any,
+    runDesignPipeline:generation,hasUnsavedChanges:false});
+  vi.stubGlobal('fetch',vi.fn(async(url:string)=>new Response(JSON.stringify(url.includes('/enclosures')?[]:[{
+    id:'incomer_rating',label:'Rating',type:'number',default:250,required:true,validation:{},depends_on:[],
+  }]))));
+  await act(async()=>{root.render(<Questionnaire/>);await new Promise(resolve=>setTimeout(resolve,0));});
+  const publication=Array.from(host.querySelectorAll('button')).find(b=>b.textContent==='Publish unavailable')!;
+  expect(publication.disabled).toBe(true);
+  expect(publication.title).toContain('acceptance changes only the working draft');
+  expect(host.textContent).toContain('separate Recompute and Publish');
+  const field=Array.from(host.querySelectorAll('button')).find(b=>b.textContent==='Automatic change unavailable')!;
+  expect(field.disabled).toBe(true);
+  act(()=>{publication.click();field.click();});
+  expect(generation).not.toHaveBeenCalled();
 });

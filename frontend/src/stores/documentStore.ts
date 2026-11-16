@@ -3,11 +3,21 @@
 import { useProjectStore, type ProjectState } from './projectStore';
 import type { DocumentSave, DocumentView } from '../types/document';
 import type { ProjectConfiguration } from '../types/api';
+import type {PhysicalDesignModel} from '../types/pdm';
+import type {CanonicalEngineeringModel} from '../types/cem';
+import {documentSchematicGraph} from '../components/schematic/schematicGraph';
 
 export function documentFields(view: DocumentView) {
   if (view.document.schema_version !== '1.0.0') throw new Error('Unsupported working-document schema. Local data retained.');
   const values = Object.fromEntries(view.snapshots.requirements.items.map(item => [item.id, item.value]));
-  return { document: view, requirementValues: values, savedRequirementValues: values,
+  // Backend snapshots are validated and retain nullable metadata. These legacy
+  // viewer contracts consume the same geometry/IDs; no snapshot is written back.
+  return { document: view, cem: view.snapshots.cem as unknown as CanonicalEngineeringModel | null,
+    pdm: view.snapshots.pdm as unknown as PhysicalDesignModel | null,
+    pdmBaseline: view.snapshots.pdm as unknown as PhysicalDesignModel | null,
+    schematicData: documentSchematicGraph(view),
+    editorTransforms: {}, pendingEditorEdit: null, editorUndoStack: [], editorRedoStack: [],
+    requirementValues: values, savedRequirementValues: values,
     projectConfiguration: view.document.configuration as ProjectConfiguration,
     savedConfiguration: view.document.configuration as ProjectConfiguration,
     lockVersion: view.document.lock_version,
@@ -32,12 +42,26 @@ export function documentSave(state: ProjectState): DocumentSave {
     configuration: state.projectConfiguration };
 }
 
+/** Match the server's bounded legacy generation guard. This is not the future
+ * Publish action, which must snapshot already recomputed output. */
+export function publicationAvailability(state: ProjectState) {
+  const view = state.document;
+  const needsProposal = !!view && (view.document.document_sequence > 0 ||
+    view.snapshots.cem !== null || !!view.document.generation_intent);
+  const reason = state.viewedRevisionId ? 'Historical revisions are read-only.'
+    : needsProposal ? 'Publication of edited working documents is unavailable until separate Recompute and Publish support is implemented. Generation proposals can be reviewed and accepted through the API; acceptance changes only the working draft. Save preserves your edits.'
+    : view && state.hasUnsavedChanges ? 'Save input drafts first. Changed-input Save requires the proposal workflow; publication of that edited document is unavailable.'
+    : null;
+  return { unavailable: !!reason, reason,
+    label: reason ? 'Publish unavailable' : 'Generate & publish revision (legacy)' };
+}
+
 export function documentStatus(state: ProjectState) {
   const historical = !!state.viewedRevisionId;
   const unsupported = state.publishedDesign?.output_status === 'MISSING_OUTPUTS';
   const source = state.publishedDesign?.output_manifest?.source_document;
   const overlay = Object.keys(state.editorTransforms).length > 0 ||
-    JSON.stringify(state.schematicData) !== JSON.stringify(state.publishedDesign?.schematic ?? null);
+    JSON.stringify(state.schematicData) !== JSON.stringify(state.document ? documentSchematicGraph(state.document) : state.publishedDesign?.schematic ?? null);
   const publishedValues = Object.fromEntries((state.publishedDesign?.cem.requirements || []).map(item=>[item.id,item.value]));
   const inputsDiffer = !!state.document && Object.entries(state.requirementValues)
     .some(([key,value])=>JSON.stringify(value)!==JSON.stringify(publishedValues[key]));
@@ -46,12 +70,12 @@ export function documentStatus(state: ProjectState) {
     saveLabel: historical ? 'Historical read-only' : state.hasUnsavedChanges ? 'Unsaved draft' : 'Saved draft',
     outputLabel: unsupported ? 'Unsupported legacy output · missing saved representations'
       : historical ? `Historical read-only · r${state.currentRevisionNo}`
-      : dirtyOutput ? 'Dirty engineering output · Publish required'
+      : dirtyOutput ? 'Dirty engineering output · Recompute required before Publish'
       : state.currentRevisionNo ? `Active revision r${state.currentRevisionNo}` : 'No published output' };
 }
 
 export function useDocumentStore() {
   const state = useProjectStore();
   return { ...documentStatus(state), document: state.document,
-    save: state.saveCurrentProject, publish: state.runDesignPipeline };
+    publication: publicationAvailability(state), save: state.saveCurrentProject, publish: state.runDesignPipeline };
 }

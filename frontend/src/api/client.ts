@@ -4,7 +4,7 @@ import type { PhysicalDesignModel } from '../types/pdm';
 import type { ProjectRecord, ProjectConfiguration, DesignPackage, RevisionSummary, Question, Archetype, CatalogPage, CatalogComponent, Enclosure, Artifact } from '../types/api';
 
 export class ApiError extends Error {
-  constructor(message: string, public status = 0, public code = 'NETWORK_ERROR') { super(message); }
+  constructor(message: string, public status = 0, public code = 'NETWORK_ERROR', public details: unknown = null) { super(message); }
 }
 
 export async function request<T>(path: string, options: RequestInit = {}, timeoutMs = 30000): Promise<T> {
@@ -22,7 +22,7 @@ export async function request<T>(path: string, options: RequestInit = {}, timeou
       const errors = detail?.errors || detail?.details?.validation_errors;
       const message = Array.isArray(detail) ? detail.map((e: any) => e.msg).join(' ') :
         detail?.message || (typeof detail === 'string' ? detail : data?.message) || 'Request failed (' + response.status + ')';
-      throw new ApiError(message + (errors?.length ? ' ' + errors.join(' ') : ''), response.status, detail?.code || 'API_ERROR');
+      throw new ApiError(message + (errors?.length ? ' ' + errors.join(' ') : ''), response.status, detail?.code || 'API_ERROR', detail);
     }
     return data as T;
   } catch (error) {
@@ -37,6 +37,19 @@ export async function request<T>(path: string, options: RequestInit = {}, timeou
 
 const json = (method: string, body: unknown): RequestInit => ({ method, body: JSON.stringify(body) });
 const id = encodeURIComponent;
+const operationPath = (projectId: string) => '/v1/projects/' + id(projectId) + '/document/operations';
+export const fetchOperationHistory = (projectId: string, signal?: AbortSignal) =>
+  request<import('../types/operations').OperationHistory>(operationPath(projectId) + '/history', {signal});
+export const previewOperations = (projectId: string, data: import('../types/operations').OperationPreviewRequest, signal?: AbortSignal) =>
+  request<import('../types/operations').OperationPreview>(operationPath(projectId) + '/preview', {...json('POST', data), signal});
+export const commitOperations = (projectId: string, data: import('../types/operations').OperationPreviewRequest, key: string, signal?: AbortSignal) =>
+  request<import('../types/operations').OperationCommit>(operationPath(projectId) + '/commit', {...json('POST', data), headers: {'Idempotency-Key': key}, signal}, 90000);
+export const applyOperationHistory = (projectId: string, data: import('../types/operations').HistoryRequest, key: string, signal?: AbortSignal) =>
+  request<import('../types/operations').OperationCommit>(operationPath(projectId) + '/history', {...json('POST', data), headers: {'Idempotency-Key': key}, signal}, 90000);
+export const proposeGeneration = (projectId: string, overrides: Record<string, unknown> = {}, signal?: AbortSignal) =>
+  request<import('../types/operations').GenerationProposal>('/projects/' + id(projectId) + '/design/generation-proposal', {...json('POST', overrides), signal}, 90000);
+export const acceptGenerationProposal = (projectId: string, batch: import('../types/operations').OperationPreviewRequest, key: string, signal?: AbortSignal) =>
+  request<import('../types/operations').OperationCommit>('/projects/' + id(projectId) + '/design/generation-proposal/accept', {...json('POST', batch), headers: {'Idempotency-Key': key}, signal}, 90000);
 export const fetchDocument = (projectId: string, signal?: AbortSignal) =>
   request<DocumentView>('/v1/projects/' + id(projectId) + '/document', { signal });
 export const saveDocument = (projectId: string, data: DocumentSave) =>
@@ -46,7 +59,7 @@ export const fetchRevision = (projectId: string, revisionId: string, signal?: Ab
 export const fetchRequirementSuggestions=(projectId:string,archetype:string,values:Record<string,unknown>,signal?:AbortSignal)=>
   request<import('../types/api').RequirementSuggestions>(projectId?'/projects/'+id(projectId)+'/requirements/suggestions':'/archetypes/'+id(archetype)+'/suggestions',
     {...json('POST',values),signal});
-export const assetUrl = (path: string) => new URL(path, API_BASE).toString();
+export const assetUrl = (path: string) => new URL(path, new URL(API_BASE, window.location.href)).toString();
 export const listProjects = async (signal?: AbortSignal, q = '', recent = false) => {
   const projects: ProjectRecord[] = [];
   for (let page=1;;page++) {

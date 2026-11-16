@@ -7,6 +7,7 @@ from app.models.api import ProjectUpdate
 from app.models.document import ResolvedDocument
 from app.models.identity import ContractModel, StableID, unique_ids
 from app.models.requirements import RequirementSet
+from app.models.electrical_topology import ElectricalTopologyEvidence
 
 
 class DocumentSave(ContractModel):
@@ -26,7 +27,10 @@ class DocumentSave(ContractModel):
     @field_validator('configuration')
     @classmethod
     def configuration_shape(cls, value):
-        return ProjectUpdate.configuration_shape(value)
+        ProjectUpdate.configuration_shape({k: v for k, v in value.items() if k != 'electrical_topology'})
+        if 'electrical_topology' in value:
+            ElectricalTopologyEvidence.model_validate(value['electrical_topology'])
+        return value
 
 
 class DocumentView(ResolvedDocument):

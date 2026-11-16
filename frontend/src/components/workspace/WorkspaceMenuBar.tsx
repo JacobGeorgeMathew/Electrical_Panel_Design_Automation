@@ -34,7 +34,7 @@ export function WorkspaceMenuBar({commands}:{commands:WorkspaceCommands}){
             event.preventDefault();const buttons=Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'));
             buttons[(buttons.indexOf(document.activeElement as HTMLButtonElement)+(event.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length]?.focus();
           }
-        }}>{items.map(id=>{const command=commands[id];return <button role="menuitem" disabled={command.disabled} key={id} onClick={()=>{setActive(null);command.run();}}><span>{command.label}</span><kbd>{'shortcut' in command?command.shortcut:''}</kbd></button>;})}</div>}
+        }}>{items.map(id=>{const command=commands[id];return <button role="menuitem" title={('explanation' in command?command.explanation:null)||undefined} disabled={command.disabled} key={id} onClick={()=>{setActive(null);command.run();}}><span>{command.label}</span><kbd>{'shortcut' in command?command.shortcut:''}</kbd></button>;})}</div>}
       </div>)}
     </div>
     <div className="workspace-document" title={projectName}>{hasUnsavedChanges&&<span className="unsaved-dot"/>}{projectName}<span>{currentRevisionNo?`r${currentRevisionNo}`:'New project'}</span></div>

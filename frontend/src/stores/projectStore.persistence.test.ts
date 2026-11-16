@@ -24,7 +24,7 @@ const workingDocument=()=>({...fixture,content_sha256:'a'.repeat(64),
   }]}}});
 
 describe('versioned document adapter',()=>{
-  it('recovers, checkpoints and saves placement overlays without routing or publishing',async()=>{
+  it('retains recovery previews locally but Save excludes transient geometry without routing or publishing',async()=>{
     const view=workingDocument();
     const workspace={editorTransforms:{C1:{x:10,y:20,z:30,rotation_deg:0}},schematicData:design.schematic};
     const checkpoint={schema_version:2,recovery_sequence:1,base_version:2,saved_at:'2026-11-16T00:00:00Z',
@@ -46,7 +46,7 @@ describe('versioned document adapter',()=>{
       snapshots:{...view.snapshots,requirements:request.requirements}});
     api.updateProject.mockResolvedValue({...project,lock_version:4,recovery_version:3,workspace});
     await useProjectStore.getState().saveCurrentProject();
-    expect(api.updateProject).toHaveBeenCalledWith('P1',3,expect.objectContaining({workspace,expected_recovery_version:2}));
+    expect(api.updateProject).toHaveBeenCalledWith('P1',3,{expected_recovery_version:2});
     expect(useProjectStore.getState()).toMatchObject({hasUnsavedChanges:false,currentRevisionId:'R1',
       requirementValues:{incomer_rating:400},editorTransforms:workspace.editorTransforms});
     for(const method of [api.validatePlacement,api.generateDesign,api.restoreRevision,api.startCadJob])
@@ -127,7 +127,7 @@ describe('versioned document adapter',()=>{
     expect(useProjectStore.getState().errorMessage).toContain('Unavailable');
   });
 
-  it('keeps Publish explicit, uses saved inputs and reloads the working draft after publication',async()=>{
+  it('keeps Save pure and blocks legacy publication after changed-input Save',async()=>{
     const view=workingDocument();api.fetchDocument.mockResolvedValue(view);
     await useProjectStore.getState().openProject('P1');
     useProjectStore.getState().setRequirementValue('incomer_rating',400);
@@ -139,15 +139,38 @@ describe('versioned document adapter',()=>{
     await useProjectStore.getState().saveCurrentProject();
     expect(api.generateDesign).not.toHaveBeenCalled();
     const saved=useProjectStore.getState().document!;
-    api.fetchDocument.mockResolvedValue({...saved,document:{...saved.document,lock_version:5}});
-    api.generateDesign.mockResolvedValue({...design,revision_id:'R2',revision_no:2,lock_version:5,
-      output_status:'COMPLETE',output_manifest:{source_document:{sha256:saved.content_sha256}},
-      cem:{...design.cem,requirements:[{id:'incomer_rating',value:400}]}});
-    api.fetchProject.mockResolvedValue({...project,lock_version:5,requirements:{legacy:'must not replace draft'}});
+    expect(saved.document.provenance.last_operation_id).toBeFalsy();
     await useProjectStore.getState().runDesignPipeline();
-    expect(api.generateDesign).toHaveBeenCalledWith('P1',{incomer_rating:400},4,{});
+    expect(api.generateDesign).not.toHaveBeenCalled();
+    expect(useProjectStore.getState().document).toEqual(saved);
     expect(useProjectStore.getState().requirementValues).toEqual({incomer_rating:400});
-    expect(documentStatus(useProjectStore.getState())).toMatchObject({saveLabel:'Saved draft',dirtyOutput:false});
+    expect(useProjectStore.getState().errorMessage).toContain('Recompute and Publish');
+    expect(documentStatus(useProjectStore.getState())).toMatchObject({saveLabel:'Saved draft',dirtyOutput:true});
+  });
+
+  it.each(['cem','intent','sequence'] as const)('blocks legacy generation for protected %s documents',async(kind)=>{
+    const view=workingDocument();
+    if(kind==='sequence')view.document.document_sequence=1;
+    if(kind==='intent')Object.assign(view.document,{generation_intent:{manual_models:['pdm'],locked_placements:[]}});
+    if(kind!=='cem')view.snapshots.cem=null as any;
+    api.fetchDocument.mockResolvedValue(view);
+    await useProjectStore.getState().openProject('P1');
+    await useProjectStore.getState().runDesignPipeline();
+    expect(api.generateDesign).not.toHaveBeenCalled();
+    expect(useProjectStore.getState().errorMessage).toContain('acceptance changes only the working draft');
+  });
+
+  it('allows only untouched input-only generation and rejects unsaved overrides',async()=>{
+    const view=workingDocument();view.snapshots.cem=null as any;
+    api.fetchDocument.mockResolvedValue(view);
+    await useProjectStore.getState().openProject('P1');
+    await useProjectStore.getState().runDesignPipeline({incomer_rating:400});
+    expect(api.generateDesign).not.toHaveBeenCalled();
+    api.generateDesign.mockResolvedValue({...design,lock_version:3});
+    api.fetchProject.mockResolvedValue({...project,lock_version:3});
+    await useProjectStore.getState().runDesignPipeline();
+    expect(api.generateDesign).toHaveBeenCalledOnce();
+    expect(api.generateDesign).toHaveBeenCalledWith('P1',{incomer_rating:250},2,{});
   });
 });
 

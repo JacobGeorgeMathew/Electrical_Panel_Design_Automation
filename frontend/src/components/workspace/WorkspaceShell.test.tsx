@@ -3,6 +3,9 @@ import {createRoot,Root} from 'react-dom/client';
 import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
 import {useProjectStore} from '../../stores/projectStore';
 import {useWorkspaceStore,panelSize} from '../../stores/workspaceStore';
+import {useCommandStore} from '../../stores/commandStore';
+import {ApiError} from '../../api/client';
+import fixture from '../../types/fixtures/document-v1.json';
 const lifecycle=vi.hoisted(()=>({mounted:vi.fn(),unmounted:vi.fn()}));
 vi.mock('../threeD/Panel3DViewer',()=>({Panel3DViewer:({embedded}:any)=>{React.useEffect(()=>{lifecycle.mounted();return()=>lifecycle.unmounted();},[]);return <div data-testid="assembly" data-embedded={embedded}><button onClick={()=>useProjectStore.getState().selectObject('PDM-Q1')}>Pick assembly component</button></div>;}}));
 vi.mock('../layout/Layout2DViewer',()=>({Layout2DViewer:({embedded}:any)=><div data-testid="layout" data-embedded={embedded}><button onClick={()=>useProjectStore.getState().selectObject('Q1')}>Pick layout component</button></div>}));
@@ -14,6 +17,7 @@ import {ProjectPage} from '../../pages/ProjectPage';
 let host:HTMLDivElement,root:Root;
 const component={id:'Q1',catalog_id:'MCB',name:'Feeder breaker',category:'MCB',width:20,height:45,depth:35,current_rating:16,heat_loss:1};
 beforeEach(()=>{
+  useCommandStore.getState().clear();
   Object.defineProperty(window,'innerWidth',{value:1440,writable:true,configurable:true});
   vi.clearAllMocks();host=document.createElement('div');document.body.append(host);root=createRoot(host);
   useWorkspaceStore.setState({browserOpen:true,inspectorOpen:true,bottomOpen:true,browserWidth:180,inspectorWidth:224,bottomHeight:128,tool:'select',measurement:[],cameraCommand:null});
@@ -26,6 +30,19 @@ beforeEach(()=>{
 afterEach(()=>{act(()=>root.unmount());host.remove();vi.restoreAllMocks();});
 const click=(selector:string)=>act(()=>(host.querySelector(selector) as HTMLButtonElement).click());
 describe('engineering workspace',()=>{
+  it('renders structured command rejection in the console and retains the proposal',()=>{
+    const proposal={kind:'operations' as const,projectId:'P',key:'retained-key',request:{batch_id:'batch',
+      document_id:'document',base_sequence:0,expected_version:1,base_revision_id:null,operations:[]}};
+    useCommandStore.getState().propose(proposal);
+    useCommandStore.setState({error:new ApiError('Duct obstructed by Q1.',422,'PHYSICAL_CONSTRAINT')});
+    useWorkspaceStore.getState().setBottomTab('output');
+    act(()=>root.render(<ProjectPage/>));
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('PHYSICAL_CONSTRAINT');
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('Duct obstructed by Q1.');
+    expect(host.textContent).toContain('Engineering proposal retained');
+    expect(useCommandStore.getState().proposal).toEqual(proposal);
+    act(()=>useCommandStore.getState().clear());
+  });
   it('labels historical legacy output and disables editing, Save and Publish shortcuts',()=>{
     const save=vi.spyOn(useProjectStore.getState(),'saveCurrentProject').mockResolvedValue();
     useProjectStore.setState({viewedRevisionId:'OLD',publishedDesign:{output_status:'MISSING_OUTPUTS',cem:{requirements:[]}} as any,selectedObjectId:'Q1'});
@@ -33,7 +50,7 @@ describe('engineering workspace',()=>{
     expect(host.querySelector('.workspace-notice')?.textContent).toContain('Historical read-only');
     expect(host.querySelector('.workspace-notice')?.textContent).toContain('Unsupported legacy output');
     expect((host.querySelector('[aria-label="Inspector x"]') as HTMLInputElement).disabled).toBe(true);
-    const publish=host.querySelector('[aria-label="Publish engineering revision (compute & publish)"]') as HTMLButtonElement;
+    const publish=host.querySelector('[aria-label="Publish unavailable"]') as HTMLButtonElement;
     expect(publish.disabled).toBe(true);
     act(()=>host.dispatchEvent(new KeyboardEvent('keydown',{key:'s',ctrlKey:true,bubbles:true,cancelable:true})));
     expect(save).not.toHaveBeenCalled();
@@ -47,6 +64,23 @@ describe('engineering workspace',()=>{
     expect(host.querySelector('[aria-label="Properties inspector"]')).not.toBeNull();
     expect(host.querySelector('.workspace-statusbar')?.textContent).toContain('Active revision r2');
     expect(host.querySelector('[data-testid="assembly"]')?.getAttribute('data-embedded')).toBe('true');
+  });
+  it.each(['sequence','cem','intent'] as const)('disables workspace and history publication for protected %s state',kind=>{
+    const view=structuredClone(fixture) as any;
+    view.document.document_sequence=kind==='sequence'?1:0;
+    view.snapshots.cem=kind==='cem'?fixture.snapshots.cem:null;
+    view.document.generation_intent=kind==='intent'?{manual_models:['pdm'],locked_placements:[]}:null;
+    useProjectStore.setState({document:view,hasUnsavedChanges:false});
+    act(()=>root.render(<ProjectPage/>));
+    const publish=host.querySelector('[aria-label="Publish unavailable"]') as HTMLButtonElement;
+    expect(publish.disabled).toBe(true);
+    expect(publish.title).toContain('separate Recompute and Publish');
+    act(()=>Array.from(host.querySelectorAll<HTMLButtonElement>('[aria-label="Application menu"] button')).find(b=>b.textContent==='File')!.click());
+    act(()=>Array.from(host.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')).find(b=>b.textContent==='Project & revision history…')!.click());
+    const buttons=Array.from(host.querySelectorAll('button')).filter(b=>b.textContent==='Publish unavailable');
+    expect(buttons.length).toBeGreaterThanOrEqual(2);
+    expect(buttons.every(b=>b.disabled)).toBe(true);
+    expect(host.textContent).toContain('acceptance changes only the working draft');
   });
   it('shares one component selection between browser, inspector and multiple views',()=>{
     act(()=>root.render(<ProjectPage/>));
@@ -100,15 +134,16 @@ describe('engineering workspace',()=>{
     expect(host.querySelector('.measurement')?.textContent).toContain('5.00 mm');
     expect(useProjectStore.getState().editorTransforms).toEqual({});
   });
-  it('edits schematic presentation without rewriting CEM connectivity',()=>{
+  it('keeps electrical class read-only outside the explicit connection preview',()=>{
     const cem=useProjectStore.getState().cem;
     useProjectStore.setState({schematicData:{width:800,height:600,symbols:[],wires:[{id:'CONN-1',net_id:'NET-1',net_name:'Feed',wire_class:'POWER',from:'Q1',to:'Q2',from_terminal:'L1',to_terminal:'L1',color:'#EF4444'}]},selectedObjectId:'CONN-1'});
     act(()=>root.render(<ProjectPage/>));
     const field=host.querySelector('[aria-label="Inspector wire class"]') as HTMLSelectElement;
+    expect(field.disabled).toBe(true);
     act(()=>{field.value='NEUTRAL';field.dispatchEvent(new Event('change',{bubbles:true}));});
-    expect(useProjectStore.getState().schematicData.wires[0]).toMatchObject({wire_class:'NEUTRAL',color:'#3B82F6'});
+    expect(useProjectStore.getState().schematicData.wires[0]).toMatchObject({wire_class:'POWER',color:'#EF4444'});
     expect(useProjectStore.getState().cem).toBe(cem);
-    expect(useProjectStore.getState().hasUnsavedChanges).toBe(true);
+    expect(useProjectStore.getState().hasUnsavedChanges).toBe(false);
   });
   it('hides docks when the window becomes narrow and permits reopening them',()=>{
     act(()=>root.render(<ProjectPage/>));

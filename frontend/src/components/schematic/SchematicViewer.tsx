@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  addEdge, Background, BaseEdge, EdgeLabelRenderer, getSmoothStepPath,
+  Background, BaseEdge, ConnectionMode, EdgeLabelRenderer, getSmoothStepPath,
   Handle, MiniMap, Position, ReactFlow, ReactFlowProvider, useEdgesState, useNodesState, useReactFlow,
   type Connection, type EdgeProps, type NodeProps, type NodeTypes, type EdgeTypes,
 } from '@xyflow/react';
@@ -9,6 +9,11 @@ import { DesignViewport, type DesignViewportHandle } from '../common/DesignViewp
 import {useWorkspaceStore} from '../../stores/workspaceStore';
 import { GitBranch, Plus, TriangleAlert, X } from 'lucide-react';
 import { useProjectStore } from '../../stores/projectStore';
+import {engineeringId} from '../../stores/selectionStore';
+import {useCommandStore} from '../../stores/commandStore';
+import {canEditEngineering, proposeOperation} from '../../stores/operationActions';
+import {OperationPreview} from '../workspace/OperationPreview';
+import {ConnectionPreview, type ConnectionDraft} from './ConnectionPreview';
 import { buildSchematicGraph, validateSchematicGraph, type SchematicEdge, type SchematicGraphData,
   type SchematicNode, type SchematicEdgeData, type WireClass } from './schematicGraph';
 
@@ -62,8 +67,9 @@ const wireClasses: WireClass[] = ['POWER', 'CONTROL', 'SIGNAL', 'NEUTRAL', 'PE']
 const colors: Record<WireClass, string> = { POWER: '#EF4444', CONTROL: '#A78BFA', SIGNAL: '#F59E0B', NEUTRAL: '#3B82F6', PE: '#22C55E' };
 
 const SchematicCanvas: React.FC<{ data: SchematicGraphData;embedded?:boolean }> = ({ data,embedded=false }) => {
-  const { selectObject, selectedObjectId, viewedRevisionId } = useProjectStore();
-  const readOnly=!!viewedRevisionId;
+  const { selectObject, selectedObjectId, projectId } = useProjectStore();
+  const command=useCommandStore();
+  const readOnly=!canEditEngineering();
   const viewportRef=useRef<DesignViewportHandle>(null);
   const canvasHost=useRef<HTMLDivElement>(null);
   const flow=useReactFlow<SchematicNode,SchematicEdge>();
@@ -88,27 +94,9 @@ const SchematicCanvas: React.FC<{ data: SchematicGraphData;embedded?:boolean }> 
   const [edges, setEdges, onEdgesChange] = useEdgesState<SchematicEdge>(initial.edges);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [wireFilter, setWireFilter] = useState<'ALL' | WireClass>('ALL');
-  const draftSequence = useRef(0);
-  const edited = useRef(false);
-  const emitted = useRef<SchematicGraphData|null>(null);
-  useEffect(()=>{
-    if(!edited.current)return;
-    edited.current=false;
-    const document: SchematicGraphData={...data,
-      symbols:nodes.map(node=>({id:node.id,name:node.data.name,type:node.data.symbolType,category:node.data.category,
-        x:node.position.x,y:node.position.y,width:node.data.width,height:node.data.height,label:node.data.label,
-        terminals:node.data.terminals.map(t=>({...t,x:t.x+node.position.x,y:t.y+node.position.y}))})),
-      wires:edges.map(edge=>({id:edge.id,net_id:edge.data?.net_id||'',net_name:edge.data?.net_name||'',
-        from:edge.source,to:edge.target,from_terminal:edge.sourceHandle?.replace(/^source:/,'')||'',
-        to_terminal:edge.targetHandle?.replace(/^target:/,'')||'',wire_class:edge.data?.wire_class||'POWER',
-        color:edge.data?.color,svg_path:edge.data?.svg_path,waypoints:edge.data?.waypoints,crossings:edge.data?.crossings,junctions:edge.data?.junctions}))};
-    emitted.current=document;
-    useProjectStore.getState().setSchematicDraft(document);
-  },[nodes,edges]);
+  const [connectionDraft,setConnectionDraft]=useState<ConnectionDraft|null>(null);
 
   useEffect(() => {
-    if(emitted.current===data)return;
-    edited.current=false;
     const graph = buildSchematicGraph(data);
     setNodes(graph.nodes);
     setEdges(graph.edges);
@@ -116,69 +104,73 @@ const SchematicCanvas: React.FC<{ data: SchematicGraphData;embedded?:boolean }> 
   }, [data, setNodes, setEdges]);
 
   const violations = useMemo(() => validateSchematicGraph(nodes, edges), [nodes, edges]);
-  const selectedNode = nodes.find((node) => node.selected) || null;
+  const matchesSelection = (id: string) => engineeringId(id, useProjectStore.getState()) === selectedObjectId;
+  const selectedNode = nodes.find((node) => matchesSelection(node.id)) || null;
   const selectedEdge = edges.find((edge) => edge.id === selectedEdgeId) || null;
   const selectedNet=edges.find(e=>e.id===selectedObjectId||e.data?.net_id===selectedObjectId)?.data?.net_id;
-  const visibleEdges = edges.filter((edge) => wireFilter === 'ALL' || edge.data?.wire_class === wireFilter).map(edge=>({...edge,selected:edge.selected||edge.id===selectedObjectId||!!selectedNet&&edge.data?.net_id===selectedNet}));
+  const visibleEdges = edges.filter((edge) => wireFilter === 'ALL' || edge.data?.wire_class === wireFilter).map(edge=>({...edge,selected:matchesSelection(edge.id)||!!selectedNet&&edge.data?.net_id===selectedNet}));
 
   const onConnect = useCallback((connection: Connection) => {
-    if(readOnly)return;
+    if(!canEditEngineering())return;
     if (!connection.source || !connection.target || !connection.sourceHandle || !connection.targetHandle) return;
-    edited.current=true;
-    draftSequence.current += 1;
-    const suffix = crypto.randomUUID();
-    const wireClass: WireClass = wireFilter === 'ALL' ? 'POWER' : wireFilter;
-    setEdges((current) => addEdge({ ...connection, id: `DRAFT-CONN-${suffix}`, type: 'wire',
-      data: { net_id: `NET-DRAFT-${suffix}`, net_name: `Draft net ${suffix}`, wire_class: wireClass,
-        color: colors[wireClass], draft: true } }, current) as SchematicEdge[]);
-  }, [setEdges, wireFilter, readOnly]);
+    setConnectionDraft({action:'CREATE',connectionId:null,sourcePin:connection.sourceHandle.replace(/^(source|target):/,''),
+      targetPin:connection.targetHandle.replace(/^(source|target):/,'')});
+  }, []);
 
   const addJunction = () => {
-    if(readOnly)return;
-    edited.current=true;
-    draftSequence.current += 1;
-    const suffix = crypto.randomUUID();
-    const id = `DRAFT-JUNCTION-${suffix}`;
-    setNodes((current) => [...current, { id, type: 'junction', position: { x: data.width / 2, y: data.height / 2 },
-      data: { symbolId: id, label: `Draft junction ${suffix}`, name: 'Draft junction', symbolType: 'JUNCTION',
-        category: 'JUNCTION', width: 12, height: 12, terminals: [], properties: { draft: true }, junction: true, netId: `NET-DRAFT-${suffix}` } }]);
+    if(!canEditEngineering())return;
+    const s=useProjectStore.getState(),page=s.document?.snapshots.schematic;
+    const pin=page?.symbols.find(s=>s.id===selectedNode?.id)?.pins.find(p=>
+      (page.wires.filter(w=>w.source_pin_id===p.id||w.target_pin_id===p.id).length)>=2);
+    if(!pin){s.setError('Select a symbol with a shared CEM pin to show a junction. Crossings do not create connectivity.');return;}
+    if(proposeOperation({type:'UpdateJunctionPresentation',target:{pin_id:pin.id},parameters:{visible:true,label:pin.label}},['schematic']))
+      void useCommandStore.getState().commitProposal();
   };
 
   const updateSelectedEdge = (patch: Partial<SchematicEdgeData>) => {
-    if(readOnly)return;
-    if (!selectedEdgeId) return;
-    edited.current=true;
-    setEdges((current) => current.map((edge) => edge.id === selectedEdgeId ? {
-      ...edge, data: { ...(edge.data || { net_id: '', net_name: '', wire_class: 'POWER', color: colors.POWER }), ...patch,
-        color: patch.wire_class ? colors[patch.wire_class as WireClass] : (edge.data?.color || colors.POWER) },
-    } : edge));
+    if (!selectedEdgeId||patch.net_name===undefined)return;
+    if(proposeOperation({type:'UpdateSchematicLabel',target:{kind:'wire',id:selectedEdgeId},parameters:{label:patch.net_name}},['schematic']))
+      void useCommandStore.getState().commitProposal();
   };
 
   return <div className={embedded?"workspace-viewer":"flex min-h-0 flex-1 flex-col gap-3"}>
+    <OperationPreview/>
+    {connectionDraft&&useProjectStore.getState().document?.snapshots.schematic&&<ConnectionPreview key={JSON.stringify(connectionDraft)} initial={connectionDraft} onClose={()=>setConnectionDraft(null)}/>}
     <div data-viewer-chrome className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-900 p-3">
       <div className="flex items-center gap-3"><div className="rounded-xl bg-blue-500/10 p-2 text-blue-400"><GitBranch className="h-5 w-5" /></div>
         <div><h3 className="text-sm font-bold text-slate-200">Interactive Electrical Schematic</h3>
-          <p className="text-xs text-slate-400">React Flow · CEM IDs · terminal-level nets · schematic edits are drafts</p></div></div>
+          <p className="text-xs text-slate-400">Shared operations · page presentation separate from CEM connectivity</p></div></div>
       <div className="flex flex-wrap items-center gap-2 text-xs"><button type="button" aria-label="Open schematic fullscreen" onClick={()=>void viewportRef.current?.enterFullscreen()} className="editor-tool">Fullscreen</button>
         <button type="button" onClick={()=>setShowProperties(v=>!v)} aria-pressed={showProperties} className="editor-tool lg:hidden">Properties</button>
         <select aria-label="Filter wire class" value={wireFilter} onChange={(event) => setWireFilter(event.target.value as 'ALL' | WireClass)}
           className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-slate-200">
           <option value="ALL">All wires</option>{wireClasses.map((wireClass) => <option key={wireClass} value={wireClass}>{wireClass}</option>)}
         </select>
-        <button type="button" onClick={addJunction} className="flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 text-slate-200 hover:bg-slate-800"><Plus className="h-3.5 w-3.5" /> Junction</button>
+        <button type="button" disabled={readOnly} onClick={()=>setConnectionDraft({action:'CREATE',connectionId:null})} className="editor-tool">Connect terminals</button>
+        <button type="button" disabled={readOnly} onClick={addJunction} className="flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 text-slate-200 hover:bg-slate-800"><Plus className="h-3.5 w-3.5" /> Junction</button>
       </div>
     </div>
 
     <div className="viewer-grid relative grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_260px]">
       <div ref={canvasHost} className="viewer-canvas relative min-h-0 overflow-hidden rounded-2xl border border-slate-800 bg-slate-950">
         <DesignViewport controlRef={viewportRef} name="schematic" onExpandedChange={()=>requestAnimationFrame(fit)}>
-        <div className="absolute left-3 top-3 z-10 rounded-lg border border-amber-500/30 bg-slate-950/90 px-2.5 py-1.5 text-[10px] text-amber-200">Draft graph · CEM connections and exports are unchanged</div>
+        <div className="absolute left-3 top-3 z-10 rounded-lg border border-amber-500/30 bg-slate-950/90 px-2.5 py-1.5 text-[10px] text-amber-200">Symbol moves change page presentation · Pin connections require electrical preview</div>
         {embedded&&<div className="camera-controls" role="toolbar" aria-label="Schematic tools">
           <select aria-label="Filter schematic wire class" value={wireFilter} onChange={e=>setWireFilter(e.target.value as 'ALL'|WireClass)}><option value="ALL">All wires</option>{wireClasses.map(value=><option key={value} value={value}>{value}</option>)}</select>
           <button onClick={addJunction}>Add junction</button>
         </div>}
-        <ReactFlow nodes={nodes.map(n=>({...n,selected:n.selected||n.id===selectedObjectId}))} edges={visibleEdges} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
-          onNodesChange={changes=>{if(changes.some(c=>c.type!=='select'&&c.type!=='dimensions'))edited.current=true;onNodesChange(changes);}} onEdgesChange={changes=>{if(changes.some(c=>c.type!=='select'))edited.current=true;onEdgesChange(changes);}} onConnect={onConnect}
+        <ReactFlow connectionMode={ConnectionMode.Loose} nodes={nodes.map(n=>({...n,draggable:!readOnly,selected:matchesSelection(n.id)}))} edges={visibleEdges} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
+          onNodesChange={changes=>onNodesChange(changes.filter(c=>c.type==='select'||c.type==='dimensions'||(!readOnly&&c.type==='position')))} onEdgesChange={changes=>onEdgesChange(changes.filter(c=>c.type==='select'))} onConnect={onConnect}
+          onNodeDragStart={(_,node)=>setEdges(edges=>edges.map(e=>e.source===node.id||e.target===node.id?{...e,data:{...e.data!,svg_path:undefined}}:e))}
+          onNodeDragStop={(_,node)=>{
+            const before=data.symbols.find(s=>s.id===node.id);
+            if(!before||(before.x===node.position.x&&before.y===node.position.y))return;
+            if(proposeOperation({type:'MoveSymbol',target:{symbol_id:node.id},parameters:{position_mm:node.position}},['schematic']))
+              void useCommandStore.getState().commitProposal().then(()=>{
+                const s=useProjectStore.getState();if(s.projectId!==projectId||!s.schematicData)return;
+                const graph=buildSchematicGraph(s.schematicData);setNodes(graph.nodes);setEdges(graph.edges);
+              });
+          }}
           onNodeClick={(_, node) => { selectObject(node.id); setSelectedEdgeId(null); }}
           onEdgeClick={(_, edge) => {setSelectedEdgeId(edge.id);selectObject(edge.id);}}
           onPaneClick={() => { setSelectedEdgeId(null); selectObject(null); }}
@@ -188,7 +180,7 @@ const SchematicCanvas: React.FC<{ data: SchematicGraphData;embedded?:boolean }> 
           }}
           onMove={(_,viewport)=>setZoomPercent(Math.round(viewport.zoom*100))}
           fitView fitViewOptions={{ padding: 0.15, minZoom:0.02, maxZoom:1 }} minZoom={0.02} maxZoom={8} zoomOnScroll zoomOnPinch zoomOnDoubleClick preventScrolling nodesConnectable={!readOnly} nodesDraggable={!readOnly}
-          selectionOnDrag={false} panOnDrag deleteKeyCode={readOnly?null:['Backspace', 'Delete']}>
+          selectionOnDrag={false} panOnDrag deleteKeyCode={null}>
           <Background color="#334155" gap={24} size={1} /><MiniMap nodeColor={(node) => node.type === 'junction' ? '#FBBF24' : '#334155'} />
 
         </ReactFlow>
@@ -203,14 +195,15 @@ const SchematicCanvas: React.FC<{ data: SchematicGraphData;embedded?:boolean }> 
 
       {!embedded&&<aside className={`${showProperties?'flex':'hidden lg:flex'} absolute right-0 top-0 z-40 h-full w-64 overflow-auto lg:static lg:w-auto min-h-0 flex-col gap-3 rounded-2xl border border-slate-800 bg-slate-900 p-4`}>
         <div className="flex items-center justify-between"><h4 className="text-sm font-semibold text-slate-100">Electrical properties</h4>
-          {selectedEdge && <button aria-label="Delete selected wire" onClick={() => { edited.current=true; setEdges((current) => current.filter((edge) => edge.id !== selectedEdgeId)); setSelectedEdgeId(null); }} className="text-slate-400 hover:text-red-300"><X className="h-4 w-4" /></button>}</div>
+          {selectedEdge && <button disabled={readOnly} aria-label="Delete selected wire" onClick={() => setConnectionDraft({action:'DELETE',connectionId:selectedEdge.data!.conductor_id!})} className="text-slate-400 hover:text-red-300"><X className="h-4 w-4" /></button>}</div>
         {selectedEdge ? <>
           <div className="text-[10px] font-mono text-slate-500">{selectedEdge.id}</div>
-          <label className="text-xs text-slate-400">Net ID<input aria-label="Net ID" value={selectedEdge.data?.net_id || ''} onChange={(event) => updateSelectedEdge({ net_id: event.target.value })}
+          <button disabled={readOnly} onClick={()=>setConnectionDraft({action:'REPLACE',connectionId:selectedEdge.data!.conductor_id!})} className="editor-tool">Edit connection</button>
+          <label className="text-xs text-slate-400">Net ID<input aria-label="Net ID" value={selectedEdge.data?.net_id || ''} readOnly
             className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 font-mono text-sm text-slate-100" /></label>
-          <label className="text-xs text-slate-400">Wire label<input aria-label="Wire label" value={selectedEdge.data?.net_name || ''} onChange={(event) => updateSelectedEdge({ net_name: event.target.value })}
+          <label className="text-xs text-slate-400">Wire label<input key={selectedEdge.id+selectedEdge.data?.net_name} disabled={readOnly} aria-label="Wire label" defaultValue={selectedEdge.data?.net_name || ''} onBlur={(event) => {if(event.target.value!==selectedEdge.data?.net_name)updateSelectedEdge({ net_name: event.target.value });}}
             className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 text-sm text-slate-100" /></label>
-          <label className="text-xs text-slate-400">Electrical class<select aria-label="Electrical class" value={selectedEdge.data?.wire_class || 'POWER'} onChange={(event) => updateSelectedEdge({ wire_class: event.target.value })}
+          <label className="text-xs text-slate-400">Electrical class<select disabled aria-label="Electrical class" value={selectedEdge.data?.wire_class || 'POWER'}
             className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 text-sm text-slate-100">{wireClasses.map((item) => <option key={item}>{item}</option>)}</select></label>
           <p className="break-all text-[10px] text-slate-500">{selectedEdge.source} ({selectedEdge.sourceHandle}) → {selectedEdge.target} ({selectedEdge.targetHandle})</p>
         </> : selectedNode ? <>

@@ -20,6 +20,17 @@ export function componentTransform(
   };
 }
 
+/** Convert a centered Three.js group back to enclosure mm. Snapping an X
+ * gesture must not move an untouched Y/Z coordinate or add plate offsets. */
+export function transformFromGizmo(component: PhysicalComponent, current: EditorTransform,
+  world: {x:number;y:number;z:number}, explodedZ: number, snap: boolean, gridMm: number): EditorTransform {
+  const raw={x:world.x/.01-component.width/2,y:world.y/.01-component.height/2,
+    z:(world.z-explodedZ)/.01-component.depth/2};
+  const coordinate=(axis:'x'|'y'|'z')=>Math.abs(raw[axis]-current[axis])<1e-6 ? current[axis]
+    : snap ? Math.round(raw[axis]/gridMm)*gridMm : raw[axis];
+  return {x:coordinate('x'),y:coordinate('y'),z:coordinate('z'),rotation_deg:current.rotation_deg};
+}
+
 function footprint(component: PhysicalComponent, transform: EditorTransform) {
   const radians = (transform.rotation_deg * Math.PI) / 180;
   const width = Math.abs(component.width * Math.cos(radians)) + Math.abs(component.height * Math.sin(radians));

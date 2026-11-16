@@ -135,12 +135,22 @@ class ProjectService:
         layout.thermal_density_limit_w_per_l=policy.thermal_density_limit_w_per_l
         return project,template,rows,enclosures,component_models,templates,rules,str(rs),layout,hardware
 
-    def generate(self,key,overrides=None,expected_version=None,configuration=None):
+    def generate(self,key,overrides=None,expected_version=None,configuration=None,*,propose=False):
         project,template,rows,enclosures,models,templates,rules,rsv,layout,hardware=self._inputs(key)
+        source_document=project['_source_document']['document']
+        if not propose and (source_document['document_sequence'] > 0
+                or project['_source_document']['snapshots']['cem'] is not None
+                or source_document.get('generation_intent')):
+            raise PersistenceError('GENERATION_PROPOSAL_REQUIRED',
+                'Use a generation proposal and explicit acceptance for this working document.',409)
         if configuration is not None:
             project['configuration']=configuration
         if expected_version is not None and expected_version!=project['lock_version']:
             raise PersistenceError('REVISION_CONFLICT','Project changed. Reopen it before generation.',409)
+        if propose:
+            source=project['_source_document']
+            project['requirements']={r['id']:r['value'] for r in source['snapshots']['requirements']['items'] if r['value'] is not None}
+            project['configuration']=source['document']['configuration']
         values={**project['requirements'],**(overrides or {})}
         reqs=self.validate(template,project['id'],values)
         enclosures,selected=self.configure_enclosures(enclosures,project['configuration'])
@@ -171,6 +181,8 @@ class ProjectService:
             'hardware_component_versions':{h['code']:h['component_version_id'] for h in hardware},
             'validation_policy_version':result['pdm']['validation_policy']['version'],
             'generator':{'name':'panelstudio-primitives','version':'3'},'input_sha256':content_hash({'requirements':values,'configuration':project['configuration']})}
+        if propose:
+            return project['_source_document'],reqs,result,manifest
         files=self.generate_files(result)
         outputs=prepare_outputs(project,reqs,values,result,manifest,files,
             project['_source_document'],self.assets,project['lock_version'])

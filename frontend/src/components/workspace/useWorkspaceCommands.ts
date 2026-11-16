@@ -1,6 +1,7 @@
 import {useProjectStore} from '../../stores/projectStore';
 import {useWorkspaceStore,type WorkspaceTool} from '../../stores/workspaceStore';
 import {useDocumentStore} from '../../stores/documentStore';
+import {useCommandStore} from '../../stores/commandStore';
 import {assetUrl,exportProject,fetchFreeCADScript} from '../../api/client';
 
 export function downloadFile(data:Blob,name:string){
@@ -10,7 +11,8 @@ export function downloadFile(data:Blob,name:string){
 export function useWorkspaceCommands(openDialog:(dialog:'project'|'help')=>void){
   const state=useProjectStore(),ui=useWorkspaceStore();
   const docState=useDocumentStore();
-  const busy=docState.readOnly||state.isGenerating||state.isSaving||state.isLoadingProject||!!state.pendingRecovery;
+  const command=useCommandStore();
+  const busy=command.pending||docState.readOnly||state.isGenerating||state.isSaving||state.isLoadingProject||!!state.pendingRecovery;
   const tool=(value:WorkspaceTool)=>{
     ui.setTool(value);state.setEditorMode(value==='measure'?'select':value);
     if(value==='measure')useWorkspaceStore.setState({inspectorOpen:true});
@@ -19,14 +21,17 @@ export function useWorkspaceCommands(openDialog:(dialog:'project'|'help')=>void)
   const run=async(action:()=>Promise<unknown>)=>{try{await action();}catch(error){reportError(error);}};
   const preview=state.artifacts.find(a=>a.file_format==='GLB'&&a.status==='READY');
   const commands={
+    previewCommand:{label:'Preview proposal',run:()=>void command.previewProposal(),disabled:busy||command.proposal?.kind!=='operations'},
+    commitCommand:{label:'Apply proposal',run:()=>void command.commitProposal(),disabled:busy||!command.proposal},
+    cancelCommand:{label:'Cancel command request',run:command.cancel,disabled:!command.pending},
     projects:{label:'Project dashboard…',shortcut:'',run:()=>{if(state.hasUnsavedChanges)openDialog('project');else state.closeProject();},disabled:busy},
     newProject:{label:'New project…',run:()=>{if(state.hasUnsavedChanges)openDialog('project');else state.closeProject();},disabled:busy},
     openProject:{label:'Open project…',run:()=>{if(state.hasUnsavedChanges)openDialog('project');else state.closeProject();},disabled:busy},
-    save:{label:'Save project',shortcut:'Ctrl+S',run:()=>void state.saveCurrentProject(),disabled:busy||!state.hasUnsavedChanges},
+    save:{label:'Save project',shortcut:'Ctrl+S',run:()=>void state.saveCurrentProject(),disabled:busy||!!command.proposal||(!state.hasUnsavedChanges&&!state.document?.document.dirty_stages.length)},
     close:{label:'Save & close',run:()=>void state.saveAndClose(),disabled:busy},
     history:{label:'Project & revision history…',run:()=>openDialog('project'),disabled:false},
-    undo:{label:'Undo placement',shortcut:'Ctrl+Z',run:()=>{state.undoEditorTransform();void state.validateCurrentPlacement();},disabled:busy||!state.editorUndoStack.length},
-    redo:{label:'Redo placement',shortcut:'Ctrl+Shift+Z',run:()=>{state.redoEditorTransform();void state.validateCurrentPlacement();},disabled:busy||!state.editorRedoStack.length},
+    undo:{label:'Undo operation',shortcut:'Ctrl+Z',run:state.undoEditorTransform,disabled:busy||!!command.proposal||!state.document},
+    redo:{label:'Redo operation',shortcut:'Ctrl+Shift+Z',run:state.redoEditorTransform,disabled:busy||!!command.proposal||!state.document},
     deselect:{label:'Clear selection',shortcut:'Esc',run:()=>state.selectObject(null),disabled:!state.selectedObjectId},
     reset:{label:'Reset placement draft',run:state.resetEditorDraft,disabled:busy||!Object.keys(state.editorTransforms).length},
     browser:{label:ui.browserOpen?'Hide project browser':'Show project browser',run:()=>ui.togglePanel('browser'),disabled:false},
@@ -35,12 +40,12 @@ export function useWorkspaceCommands(openDialog:(dialog:'project'|'help')=>void)
     layout:{label:'Reset workspace layout',run:ui.resetLayout,disabled:false},
     fit:{label:'Fit design',shortcut:'F',run:()=>ui.camera('fit'),disabled:!['threeD','layout2d','schematic'].includes(state.activeTab)||(!state.pdm&&!state.schematicData)},
     fullscreen:{label:'Full-screen viewport',shortcut:'Shift+F',run:()=>ui.camera('fullscreen'),disabled:!['threeD','layout2d','schematic'].includes(state.activeTab)},
-    generate:{label:'Publish engineering revision (compute & publish)',run:()=>{ui.setBottomTab('output');void state.runDesignPipeline().then(()=>{const current=useProjectStore.getState();if(current.projectId===state.projectId&&!current.errorMessage&&current.pdm)current.setActiveTab('threeD');});},disabled:busy||(!!state.document&&state.hasUnsavedChanges)},
+    generate:{label:docState.publication.label,explanation:docState.publication.reason,run:()=>{ui.setBottomTab('output');void state.runDesignPipeline().then(()=>{const current=useProjectStore.getState();if(current.projectId===state.projectId&&!current.errorMessage&&current.pdm)current.setActiveTab('threeD');});},disabled:busy||!!command.proposal||docState.publication.unavailable},
     requirements:{label:'Requirements',run:()=>state.setActiveTab('requirements'),disabled:false},
     catalog:{label:'Component library…',run:()=>state.setActiveTab('catalog'),disabled:false},
     select:{label:'Select',shortcut:'V',run:()=>tool('select'),disabled:busy},
     move:{label:'Move',shortcut:'M',run:()=>{if(!['threeD','layout2d'].includes(state.activeTab))state.setActiveTab('threeD');tool('translate');},disabled:busy||!state.pdm},
-    rotate:{label:'Rotate',run:()=>{state.setActiveTab('threeD');tool('rotate');},disabled:busy||!state.pdm},
+    rotate:{label:'Rotate (unsupported)',run:()=>{},disabled:true},
     measure:{label:'Measure',run:()=>tool(ui.tool==='measure'?'select':'measure'),disabled:!state.pdm},
     snap:{label:state.editorSnapEnabled?'Disable snapping':'Enable snapping',run:state.toggleEditorSnap,disabled:false},
     wires:{label:state.wireVisibility?'Hide wires':'Show wires',run:state.toggleWireVisibility,disabled:!state.pdm},

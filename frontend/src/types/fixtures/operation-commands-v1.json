@@ -1,0 +1,224 @@
+{
+  "preview": {
+    "batch_id": "55555555-5555-4555-8555-555555555555",
+    "document_id": "document-1",
+    "base_sequence": 7,
+    "expected_version": 3,
+    "base_revision_id": null,
+    "operations": [
+      {
+        "operation_id": "44444444-4444-4444-8444-000000000001",
+        "type": "AddComponent",
+        "origin": {
+          "kind": "MANUAL",
+          "actor_id": "local-user"
+        },
+        "preconditions": {
+          "snapshot_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "model_sha256": {
+            "cem": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "pdm": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        },
+        "target": {
+          "panel_id": "panel-1"
+        },
+        "parameters": {
+          "catalog_id": "MCB-01",
+          "component_version_id": "version-1",
+          "product_version_id": null,
+          "terminal_intent": "UNCONNECTED",
+          "terminal_ids": [
+            "OUT"
+          ],
+          "placement": {
+            "position_mm": {
+              "x": 220,
+              "y": 200.25,
+              "z": 37.5
+            },
+            "zone_name": "DIN",
+            "rail_id": "rail-1"
+          }
+        },
+        "affected_models": [
+          "cem",
+          "pdm"
+        ]
+      },
+      {
+        "operation_id": "44444444-4444-4444-8444-000000000002",
+        "type": "RemoveComponent",
+        "origin": {
+          "kind": "MANUAL",
+          "actor_id": "local-user"
+        },
+        "preconditions": {
+          "snapshot_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "model_sha256": {
+            "cem": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "pdm": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "schematic": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        },
+        "target": {
+          "cem_component_id": "QF001"
+        },
+        "parameters": {
+          "confirmed_cascade": null
+        },
+        "affected_models": [
+          "cem",
+          "pdm",
+          "schematic"
+        ]
+      },
+      {
+        "operation_id": "44444444-4444-4444-8444-000000000003",
+        "type": "MoveSymbol",
+        "origin": {
+          "kind": "MANUAL",
+          "actor_id": "local-user"
+        },
+        "preconditions": {
+          "snapshot_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "target": {
+          "symbol_id": "symbol-1"
+        },
+        "parameters": {
+          "position_mm": {
+            "x": 200,
+            "y": 160
+          }
+        },
+        "affected_models": [
+          "schematic"
+        ]
+      },
+      {
+        "operation_id": "44444444-4444-4444-8444-000000000004",
+        "type": "UpdateSchematicLabel",
+        "origin": {
+          "kind": "MANUAL",
+          "actor_id": "local-user"
+        },
+        "preconditions": {
+          "snapshot_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "target": {
+          "kind": "wire",
+          "id": "wire-1"
+        },
+        "parameters": {
+          "label": "PE conductor"
+        },
+        "affected_models": [
+          "schematic"
+        ]
+      },
+      {
+        "operation_id": "44444444-4444-4444-8444-000000000005",
+        "type": "UpdateJunctionPresentation",
+        "origin": {
+          "kind": "MANUAL",
+          "actor_id": "local-user"
+        },
+        "preconditions": {
+          "snapshot_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "target": {
+          "pin_id": "pin-1"
+        },
+        "parameters": {
+          "visible": true,
+          "label": "PE branch"
+        },
+        "affected_models": [
+          "schematic"
+        ]
+      },
+      {
+        "operation_id": "44444444-4444-4444-8444-000000000006",
+        "type": "ModifyElectricalConnection",
+        "origin": {
+          "kind": "MANUAL",
+          "actor_id": "local-user"
+        },
+        "preconditions": {
+          "snapshot_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "model_sha256": {
+            "cem": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "pdm": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "schematic": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        },
+        "target": {
+          "connection_id": "N-PE-C01"
+        },
+        "parameters": {
+          "action": "REPLACE",
+          "conductor": {
+            "from_component": "QF001",
+            "from_terminal": "OUT",
+            "to_component": "PE001",
+            "to_terminal": "MAIN_PE",
+            "net_id": "N-PE",
+            "wire_class": "PE",
+            "conductor_material": "COPPER",
+            "cross_section_mm2": 2.5,
+            "insulation_diameter_mm": 4,
+            "insulation_type": "PVC",
+            "minimum_bend_radius_mm": 12
+          },
+          "invalidated_route_ids": [
+            "route-1"
+          ],
+          "removed_net_ids": []
+        },
+        "affected_models": [
+          "cem",
+          "pdm",
+          "schematic"
+        ]
+      },
+      {
+        "operation_id": "44444444-4444-4444-8444-000000000007",
+        "type": "RegenerateSchematic",
+        "origin": {
+          "kind": "MANUAL",
+          "actor_id": "local-user",
+          "proposal_id": "proposal-1"
+        },
+        "preconditions": {
+          "snapshot_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "target": {
+          "schematic_id": "schematic-1"
+        },
+        "parameters": {
+          "replace_manual_positions": false
+        },
+        "affected_models": [
+          "schematic"
+        ],
+        "proposal_status": "PROPOSED"
+      }
+    ]
+  },
+  "history": {
+    "batch_id": "66666666-6666-4666-8666-666666666666",
+    "operation_id": "77777777-7777-4777-8777-777777777777",
+    "document_id": "document-1",
+    "base_sequence": 7,
+    "expected_version": 3,
+    "base_revision_id": null,
+    "before_content_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "action": "UNDO",
+    "target_batch_id": "55555555-5555-4555-8555-555555555555",
+    "origin": {
+      "kind": "MANUAL",
+      "actor_id": "local-user"
+    }
+  }
+}

@@ -17,7 +17,7 @@ export function ProjectPersistenceBar() {
         {state.projects.map(p=><option key={p.id} value={p.id} disabled={p.archetype!=='DB'}>{p.name}{p.archetype!=='DB'?' (reference fixture)':''}</option>)}
       </select></label>
       <button onClick={state.saveCurrentProject} disabled={writeBlocked || !state.projectId || !state.hasUnsavedChanges || !!state.pendingRecovery} className="editor-tool disabled:opacity-40">{state.isSaving?'Saving…':'Save draft'}</button>
-      <button onClick={()=>void document.publish()} disabled={writeBlocked || !state.projectId || state.hasUnsavedChanges || !!state.pendingRecovery} className="editor-tool disabled:opacity-40">Publish engineering revision</button>
+      <button title={document.publication.reason||undefined} onClick={()=>void document.publish()} disabled={writeBlocked || document.publication.unavailable || !state.projectId || state.hasUnsavedChanges || !!state.pendingRecovery} className="editor-tool disabled:opacity-40">{document.publication.label}</button>
       <button onClick={()=>void state.discardLocalEdits()} disabled={busy || !state.projectId || !state.hasUnsavedChanges} className="editor-tool disabled:opacity-40">Discard local edits</button>
       <button onClick={()=>void state.saveAndClose()} disabled={busy || !state.projectId || !!state.pendingRecovery} className="editor-tool disabled:opacity-40">Save & close</button>
       <button onClick={state.closeProject} disabled={busy || !state.projectId} className="editor-tool disabled:opacity-40">Close</button>
@@ -33,6 +33,7 @@ export function ProjectPersistenceBar() {
         {state.isLoadingProject?'Opening project…':`${document.saveLabel} · ${document.outputLabel}`}
       </span>
     </div>
+    {document.publication.reason&&<p className="mt-2 text-slate-400">{document.publication.reason}</p>}
     {state.autosaveStatus&&<p role="status" className="mt-2 text-slate-400">{state.autosaveStatus}</p>}
     {state.pendingRecovery&&<div className="mt-2 rounded border border-amber-700 bg-amber-950 p-3" role="alert">
       Recover unsaved changes from {new Date(state.pendingRecovery.saved_at).toLocaleString()}?

@@ -1,5 +1,6 @@
 import React from 'react';
 import { useProjectStore, ViewTab } from '../../stores/projectStore';
+import {useDocumentStore} from '../../stores/documentStore';
 import {
   Zap,
   Sliders,
@@ -13,6 +14,7 @@ import {
 } from 'lucide-react';
 
 export const Header: React.FC = () => {
+  const {publication}=useDocumentStore();
   const {
     projectName,
     archetype,
@@ -87,7 +89,8 @@ export const Header: React.FC = () => {
           )}
           <button
             onClick={() => runDesignPipeline()}
-            disabled={isGenerating || !projectId || isSaving || isLoadingProject || !!pendingRecovery}
+            title={publication.reason||undefined}
+            disabled={publication.unavailable || isGenerating || !projectId || isSaving || isLoadingProject || !!pendingRecovery}
             className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-blue-600/30 transition-all disabled:opacity-50"
           >
             {isGenerating ? (
@@ -95,7 +98,7 @@ export const Header: React.FC = () => {
             ) : (
               <Play className="w-4 h-4 fill-current" />
             )}
-            <span>{isGenerating ? 'Orchestrating...' : 'Generate Design'}</span>
+            <span>{isGenerating ? 'Generating & publishing…' : publication.label}</span>
           </button>
         </div>
       </div>

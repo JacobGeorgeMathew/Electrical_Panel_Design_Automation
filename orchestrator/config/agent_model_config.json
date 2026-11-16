@@ -17,7 +17,7 @@
     },
     "frontend_cad_engineer": {
       "model": "gpt-6.1-sol",
-      "reasoning_effort": "medium",
+      "reasoning_effort": "high",
       "confirmed_in_cli": true
     },
     "electrical_engineering_agent": {

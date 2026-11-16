@@ -78,3 +78,27 @@ exception is reviewed. Raw GLB and script bytes receive no normalization.
 These failures use real solver/router inputs, not injected success/failure
 returns. No final PDM, published revision or artifact is expected from them.
 Existing PostgreSQL rollback tests independently cover publication atomicity.
+
+## P2-T14 source-pin review (2026-11-16)
+
+The previous pin update was `b18341f` (P2-T06). Review of subsequent source
+history found four changed pinned files and one new file. Only these justified
+source entries were updated; no observed output, artifact hash, catalog, runtime,
+solver, engine/generator label or independent semantic expectation was changed.
+
+| Source | Reviewed change and compatibility evidence |
+| --- | --- |
+| `app/models/document.py` | `07aec1e` adds optional `GenerationIntent` with unique manual-model/placement-lock identities. Omission when absent preserves old canonical hashes; generated CEM/PDM contracts are unchanged. |
+| `app/models/operations.py` | `07aec1e` adds `ApplyGeneration`, its server-candidate digest and proposal/conflict responses. Nullable change hashes describe creation/absence; existing engineering coordinates and constraints are unchanged. |
+| `app/services/document_service.py` | `7c89ade` adds delegation to the existing operation writer; `07aec1e` obtains server-retained generation choices after catalog reads close. Save/read and deterministic engine code are unchanged. |
+| `app/services/generation_proposals.py` | New in `07aec1e`, so the prior pin was absent. It binds ownership and matching PDM/schematic identities around the existing pipeline, retains unchanged requirement provenance and protects manual intent/locks. Exact retained candidates enter shared operations; neither preview nor acceptance calls artifact publication. |
+| `app/services/project_service.py` | `07aec1e` adds the detached `propose=True` branch and guards legacy publication after working edits. Proposal generation reads saved working inputs and returns before artifact/revision preparation; the existing solver/routing/validation/output algorithms are unchanged. |
+
+The changed-input Save/legacy-publication assertion in phase-1 acceptance is now
+an explicit `GENERATION_PROPOSAL_REQUIRED` rejection with unchanged document and
+frozen outputs. A separate untouched input-only fixture retains the original
+two different-input, different-engine-pin publications and all frozen historical
+snapshot, artifact-byte, restoration, import/duplication and tombstone checks.
+This separates approved P2 working acceptance from legacy publication without
+implementing a later Recompute/Publish workflow. Required profile results are
+recorded in the P2-T14 attempt report; human acceptance remains separate.

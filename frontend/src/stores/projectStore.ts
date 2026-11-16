@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import {engineeringId, useSelectionStore} from './selectionStore';
 import { CanonicalEngineeringModel } from '../types/cem';
 import { PhysicalDesignModel } from '../types/pdm';
 import { createProject, generateDesign, propagateChange, validatePlacement, validateRequirements,
@@ -8,8 +9,11 @@ import type { Artifact, Archetype, DesignPackage, ProjectConfiguration, ProjectR
 import { readRecovery, writeRecovery, clearRecovery, parseRecovery, compatibleRecovery, type Checkpoint, type RecoveryDocument } from './projectRecovery';
 import type { RecoveryBaseDocument } from '../types/recovery';
 import { ApiError, fetchDocument, saveDocument, fetchRevision } from '../api/client';
-import { documentFields, documentSave } from './documentStore';
+import { documentFields, documentSave, publicationAvailability } from './documentStore';
 import type { DocumentView } from '../types/document';
+import {applyHistory, canEditEngineering, commitPlacement} from './operationActions';
+import {useCommandStore} from './commandStore';
+import {documentSchematicGraph} from '../components/schematic/schematicGraph';
 
 let projectRequest = 0;
 let routingRequest = 0;
@@ -195,9 +199,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   
   setProjectId: (id) => set({ projectId: id }),
   setActiveTab: (tab) => set({ activeTab: tab }),
-  selectObject: (id) => set(state=>({ selectedObjectId: id===null?null:
-    state.pdm?.components.find(c=>c.id===id)?.cem_component_id ||
-    state.pdm?.routes.find(r=>r.id===id)?.conductor_id || id })),
+  selectObject: (id) => useSelectionStore.getState().select(engineeringId(id, get())),
   hoverObject: (id) => set({ hoveredObjectId: id }),
   
   setRequirementValue: (field, val) =>
@@ -211,7 +213,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   closeDiffModal: () => set({ isDiffModalOpen: false }),
   clearError: () => set({ errorMessage: null, validationErrors: [], validationWarnings: [] }),
   setError: (message) => set({ errorMessage: message }),
-  setEditorMode: (mode) => {if(!get().viewedRevisionId)set({ editorMode: mode });},
+  setEditorMode: (mode) => {if(!get().viewedRevisionId && mode !== 'rotate')set({ editorMode: mode });},
   toggleEditorSnap: () => set((state) => ({ editorSnapEnabled: !state.editorSnapEnabled })),
   setEditorGridMm: (gridMm) => set({ editorGridMm: Number.isFinite(gridMm) && gridMm > 0 ? gridMm : 5 }),
   toggleComponentVisibility: (componentId) => set((state) => ({
@@ -221,6 +223,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   })),
   updateEditorTransform: (componentId, transform) => set((state) => {
     if (state.viewedRevisionId || state.isLoadingProject) return {};
+    if (state.document && (!canEditEngineering() || Object.values(transform).some(v=>!Number.isFinite(v)))) return {};
     const component = state.pdm?.components.find((item) => item.cem_component_id === componentId);
     if (!component) return state;
     const base: EditorTransform = {
@@ -228,6 +231,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       rotation_deg: component.rotation_deg || 0,
     };
     const current = state.editorTransforms[componentId] || base;
+    if (state.document) {
+      if (transform.rotation_deg !== undefined && transform.rotation_deg !== base.rotation_deg) return {};
+      return {pendingEditorEdit: state.pendingEditorEdit || {},
+        editorTransforms: {[componentId]: {...current, ...transform}}};
+    }
     return {
       hasUnsavedChanges:true, designStale:true, editSequence:state.editSequence+1,
       pdm: state.pdm ? {...state.pdm,routes:[]} : null,
@@ -235,7 +243,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       editorTransforms: { ...state.editorTransforms, [componentId]: { ...current, ...transform } },
     };
   }),
-  commitEditorTransform: () => set((state) => {
+  commitEditorTransform: () => {
+    if(get().document){void commitPlacement();return;}
+    set((state) => {
     if (!state.pendingEditorEdit || JSON.stringify(state.pendingEditorEdit) === JSON.stringify(state.editorTransforms)) {
       return { pendingEditorEdit: null };
     }
@@ -244,8 +254,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       editorRedoStack: [],
       pendingEditorEdit: null,
     };
-  }),
-  undoEditorTransform: () => set((state) => {
+  });},
+  undoEditorTransform: () => {
+    if(get().document){void applyHistory('UNDO');return;}
+    set((state) => {
     if (state.viewedRevisionId) return {};
     if (!state.editorUndoStack.length) return state;
     return {
@@ -255,8 +267,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       editorRedoStack: [...state.editorRedoStack, state.editorTransforms],
       pendingEditorEdit: null,
     };
-  }),
-  redoEditorTransform: () => set((state) => {
+  });},
+  redoEditorTransform: () => {
+    if(get().document){void applyHistory('REDO');return;}
+    set((state) => {
     if (state.viewedRevisionId) return {};
     if (!state.editorRedoStack.length) return state;
     return {
@@ -266,8 +280,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       editorUndoStack: [...state.editorUndoStack, state.editorTransforms],
       pendingEditorEdit: null,
     };
-  }),
-  resetEditorDraft: () => { if(get().viewedRevisionId)return; routingRequest++;set((state) => ({ isValidatingPlacement:false, hasUnsavedChanges:true,editSequence:state.editSequence+1, pdm: state.pdmBaseline || state.pdm,
+  });},
+  resetEditorDraft: () => { if(get().viewedRevisionId)return;
+    if(get().document){set({editorTransforms:{},pendingEditorEdit:null});return;}
+    routingRequest++;set((state) => ({ isValidatingPlacement:false, hasUnsavedChanges:true,editSequence:state.editSequence+1, pdm: state.pdmBaseline || state.pdm,
     editorTransforms: {}, editorHiddenComponentIds: [], editorUndoStack: [], editorRedoStack: [], pendingEditorEdit: null, editorMode: 'select' })); },
   validateCurrentRequirements: async () => {
     if(get().viewedRevisionId)return false;
@@ -283,6 +299,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
   validateCurrentPlacement: async () => {
     if(get().viewedRevisionId)return;
+    if(get().document){set({errorMessage:'Working placement uses shared operations. Routing and physical validation require explicit Recompute.'});return;}
     const token=++routingRequest;
     const revision=get().currentRevisionId;
     const { pdmBaseline, pdm, editorTransforms, projectId } = get();
@@ -334,9 +351,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       if (token !== projectRequest) return;
       set({ ...emptyDesign, ...projectFields(p), ...(design ? designFields(design) : {}),
         ...(document ? documentFields(document) : {}),
-        revisions, isLoadingProject: false, designStale: design?.is_stale || false,
+        revisions, isLoadingProject: false, designStale: design?.is_stale || !!document?.document.dirty_stages.length,
         validationErrors: [], validationWarnings: [], activeTab: 'requirements',
-        editorTransforms:p.workspace?.editorTransforms || {}, schematicData:p.workspace?.schematicData || design?.schematic || null,
+        editorTransforms:document ? {} : p.workspace?.editorTransforms || {},
+        ...(document ? {} : {schematicData:p.workspace?.schematicData || design?.schematic || null}),
         pendingRecovery: [readRecovery(p.id),parseRecovery(p.recovery)].filter((c):c is Checkpoint=>!!c).sort((a,b)=>b.saved_at.localeCompare(a.saved_at))[0] || null, autosaveStatus:'', editSequence:0 });
       if(Object.keys(get().editorTransforms).length)void get().validateCurrentPlacement();
     } catch (error) {
@@ -446,7 +464,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       }
       const p=await updateProject(state.projectId,version,{
         ...(document ? {} : {requirements:state.requirementValues,configuration:state.projectConfiguration}),expected_recovery_version:state.recoveryVersion,
-        workspace:{editorTransforms:state.editorTransforms,schematicData:state.schematicData},
+        ...(document ? {} : {workspace:{editorTransforms:state.editorTransforms,schematicData:state.schematicData}}),
       });
       if(token!==projectRequest)return;
       const unchanged=get().editSequence===state.editSequence;
@@ -493,8 +511,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const state = get();
     if (!state.projectId) { set({ errorMessage: 'Create or open a project before generating a design.' }); return; }
     if(state.isSaving||state.isGenerating||state.isLoadingProject||state.pendingRecovery)return;
+    const publication = publicationAvailability(state);
+    if(publication.unavailable){set({errorMessage:publication.reason});return;}
     if(state.document && (state.hasUnsavedChanges || Object.keys(state.editorTransforms).length ||
-      JSON.stringify(state.schematicData)!==JSON.stringify(state.publishedDesign?.schematic ?? null) ||
+      JSON.stringify(state.schematicData)!==JSON.stringify(documentSchematicGraph(state.document)) ||
       Object.entries(overrides||{}).some(([key,value])=>JSON.stringify(value)!==JSON.stringify(state.requirementValues[key])))){
       set({errorMessage:'Save input drafts before Publish. Placement and schematic overlays cannot be published by the current automatic pipeline; reset those drafts before publishing.'});return;
     }
@@ -513,7 +533,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
   applyChangePropagation: async (field, newValue) => {
     if(get().viewedRevisionId)return;
-    if(get().document){set({errorMessage:'Save the complete draft, then use Publish to recompute and publish its inputs.'});return;}
+    if(get().document){set({errorMessage:'Single-field automatic publication is unavailable for working documents. Save preserves the draft; generation proposals require explicit review and acceptance through the API and do not publish.'});return;}
     const state = get();
     if(state.isSaving||state.isGenerating||state.pendingRecovery)return;
     const token=projectRequest;
@@ -558,6 +578,26 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
   },
 }));
+
+// Compatibility facade for existing viewers; engineering entities remain in the
+// document/project stores and selection contains only their persistent ID.
+useSelectionStore.subscribe(selection => {
+  const state = useProjectStore.getState();
+  const id = engineeringId(selection.selectedId, state);
+  if (selection.selectedId !== id) { useSelectionStore.getState().select(id); return; }
+  if (state.selectedObjectId !== id) useProjectStore.setState({selectedObjectId: id});
+});
+useProjectStore.subscribe((state, previous) => {
+  if (state.projectId !== previous.projectId || state.document !== previous.document ||
+      state.editSequence !== previous.editSequence || state.viewedRevisionId !== previous.viewedRevisionId ||
+      state.lockVersion !== previous.lockVersion || state.isLoadingProject !== previous.isLoadingProject ||
+      state.isSaving !== previous.isSaving || state.isGenerating !== previous.isGenerating ||
+      state.pendingRecovery !== previous.pendingRecovery)
+    useCommandStore.getState().cancel();
+  if (state.projectId !== previous.projectId) useSelectionStore.getState().select(null);
+  else if (state.selectedObjectId !== previous.selectedObjectId)
+    useSelectionStore.getState().select(engineeringId(state.selectedObjectId, state));
+});
 
 export function recoveryDocument(state: ProjectState): RecoveryDocument {
   return {schema_version:2,baseDocument:state.recoveryBaseDocument,

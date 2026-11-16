@@ -83,6 +83,18 @@ class EnclosureInterface(ContractModel):
         return self
 
 
+class GenerationIntent(ContractModel):
+    """Retained user intent; ordinary Save cannot clear operation-owned locks."""
+    manual_models: list[Literal['cem', 'pdm', 'schematic']] = Field(default_factory=list)
+    locked_placements: list[StableID] = Field(default_factory=list)
+
+    @model_validator(mode='after')
+    def unique_intents(self):
+        unique_ids(self.manual_models, 'generation_intent.manual_models')
+        unique_ids(self.locked_placements, 'generation_intent.locked_placements')
+        return self
+
+
 class WorkingDocument(ContractModel):
     schema_version: Literal['1.0.0'] = '1.0.0'
     document_id: StableID
@@ -98,6 +110,7 @@ class WorkingDocument(ContractModel):
     provenance: DocumentProvenance
     dirty_stages: list[DirtyStage] = Field(default_factory=list)
     enclosure_interfaces: list[EnclosureInterface] = Field(default_factory=list)
+    generation_intent: GenerationIntent | None = Field(default=None, exclude_if=lambda value: value is None)
 
     @model_validator(mode='after')
     def namespaces_unique(self):
@@ -207,6 +220,11 @@ def validate_engineering_references(doc: WorkingDocument, snapshots: DocumentSna
                 (connection.from_component, connection.from_terminal), (connection.to_component, connection.to_terminal)
             ):
                 raise PydanticCustomError('reference_mismatch', 'Schematic wire endpoints differ: {reference}', {'reference': wire.id})
+        for junction in schematic.junctions:
+            members = [connections[w.conductor_id] for w in schematic.wires
+                       if junction.pin_id in (w.source_pin_id, w.target_pin_id)]
+            if len(members) < 2 or len({c.net_id for c in members}) != 1:
+                raise PydanticCustomError('reference_mismatch', 'Junction must present an existing shared CEM terminal in one net')
 
 
 def validate_physical_references(cem, pdm, components, connections) -> None:
