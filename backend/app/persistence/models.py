@@ -432,6 +432,36 @@ design_rules = Table('design_rules', metadata,
     UniqueConstraint(*['code'], name='design_rules_code_key'),
 )
 
+document_operations = Table('document_operations', metadata,
+    Column('project_id', UUID(), primary_key=True, nullable=False),
+    Column('sequence', BIGINT(), primary_key=True, nullable=False),
+    Column('operation_id', UUID(), nullable=False),
+    Column('batch_id', UUID(), nullable=False),
+    Column('batch_index', INTEGER(), nullable=False),
+    Column('document_id', TEXT(), nullable=False),
+    Column('operation_type', TEXT(), nullable=False),
+    Column('origin', JSONB(astext_type=Text()), nullable=False),
+    Column('payload', JSONB(astext_type=Text()), nullable=False),
+    Column('payload_sha256', CHAR(length=64), nullable=False),
+    Column('model_kind', TEXT(), nullable=False),
+    Column('schema_version', INTEGER(), nullable=False),
+    Column('before_sha256', CHAR(length=64), nullable=False),
+    Column('after_sha256', CHAR(length=64), nullable=False),
+    Column('created_at', TIMESTAMP(timezone=True), nullable=False, server_default=text('now()')),
+    ForeignKeyConstraint(['document_id', 'model_kind', 'schema_version', 'after_sha256'], ['design_document_snapshots.document_id', 'design_document_snapshots.model_kind', 'design_document_snapshots.schema_version', 'design_document_snapshots.sha256'], name='fk_document_operations_after', **{'ondelete': 'RESTRICT'}),
+    ForeignKeyConstraint(['project_id', 'batch_id', 'document_id'], ['operation_batches.project_id', 'operation_batches.id', 'operation_batches.document_id'], name='fk_document_operations_batch', **{'ondelete': 'RESTRICT'}),
+    ForeignKeyConstraint(['document_id', 'model_kind', 'schema_version', 'before_sha256'], ['design_document_snapshots.document_id', 'design_document_snapshots.model_kind', 'design_document_snapshots.schema_version', 'design_document_snapshots.sha256'], name='fk_document_operations_before', **{'ondelete': 'RESTRICT'}),
+    UniqueConstraint(*['project_id', 'batch_id', 'batch_index'], name='uq_document_operations_batch_index'),
+    UniqueConstraint(*['project_id', 'operation_id'], name='uq_document_operations_id'),
+    CheckConstraint('batch_index >= 0 AND batch_index <= 99', name='document_operations_batch_index_check'),
+    CheckConstraint('length(operation_type) > 0', name='document_operations_operation_type_check'),
+    CheckConstraint("jsonb_typeof(origin) = 'object'::text", name='document_operations_origin_check'),
+    CheckConstraint("jsonb_typeof(payload) = 'object'::text", name='document_operations_payload_check'),
+    CheckConstraint("payload_sha256 ~ '^[0-9a-f]{64}$'::text", name='document_operations_payload_sha256_check'),
+    CheckConstraint('schema_version > 0', name='document_operations_schema_version_check'),
+    CheckConstraint('sequence > 0', name='document_operations_sequence_check'),
+)
+
 electrical_template_versions = Table('electrical_template_versions', metadata,
     Column('id', UUID(), primary_key=True, nullable=False, server_default=text('gen_random_uuid()')),
     Column('template_id', UUID(), nullable=False),
@@ -517,6 +547,46 @@ module_role_requirements = Table('module_role_requirements', metadata,
     UniqueConstraint(*['module_version_id', 'role_code'], name='module_role_requirements_module_version_id_role_code_key'),
     CheckConstraint('quantity_max IS NULL OR quantity_max >= quantity_min', name='module_role_requirements_check'),
     CheckConstraint('quantity_min >= 0', name='module_role_requirements_quantity_min_check'),
+)
+
+operation_batches = Table('operation_batches', metadata,
+    Column('project_id', UUID(), primary_key=True, nullable=False),
+    Column('id', UUID(), primary_key=True, nullable=False),
+    Column('document_id', TEXT(), nullable=False),
+    Column('schema_version', TEXT(), nullable=False),
+    Column('idempotency_key', TEXT(), nullable=False),
+    Column('payload', JSONB(astext_type=Text()), nullable=False),
+    Column('payload_sha256', CHAR(length=64), nullable=False),
+    Column('base_sequence', BIGINT(), nullable=False),
+    Column('document_sequence', BIGINT(), nullable=False),
+    Column('base_lock_version', BIGINT(), nullable=False),
+    Column('lock_version', BIGINT(), nullable=False),
+    Column('before_state', JSONB(astext_type=Text()), nullable=False),
+    Column('after_state', JSONB(astext_type=Text()), nullable=False),
+    Column('before_content_sha256', CHAR(length=64), nullable=False),
+    Column('after_content_sha256', CHAR(length=64), nullable=False),
+    Column('operation_count', INTEGER(), nullable=False),
+    Column('result', JSONB(astext_type=Text()), nullable=False),
+    Column('result_sha256', CHAR(length=64), nullable=False),
+    Column('created_at', TIMESTAMP(timezone=True), nullable=False, server_default=text('now()')),
+    ForeignKeyConstraint(['project_id', 'document_id'], ['design_documents.project_id', 'design_documents.id'], name='fk_operation_batches_document', **{'ondelete': 'RESTRICT'}),
+    ForeignKeyConstraint(['project_id'], ['projects.id'], name='operation_batches_project_id_fkey', **{'ondelete': 'RESTRICT'}),
+    UniqueConstraint(*['project_id', 'id', 'document_id'], name='uq_operation_batches_document'),
+    UniqueConstraint(*['project_id', 'idempotency_key'], name='uq_operation_batches_key'),
+    CheckConstraint('document_sequence = base_sequence AND lock_version = base_lock_version OR document_sequence = (base_sequence + 1) AND lock_version = (base_lock_version + 1)', name='ck_operation_batches_versions'),
+    CheckConstraint("after_content_sha256 ~ '^[0-9a-f]{64}$'::text", name='operation_batches_after_content_sha256_check'),
+    CheckConstraint("jsonb_typeof(after_state) = 'object'::text", name='operation_batches_after_state_check'),
+    CheckConstraint('base_lock_version >= 1', name='operation_batches_base_lock_version_check'),
+    CheckConstraint('base_sequence >= 0', name='operation_batches_base_sequence_check'),
+    CheckConstraint("before_content_sha256 ~ '^[0-9a-f]{64}$'::text", name='operation_batches_before_content_sha256_check'),
+    CheckConstraint("jsonb_typeof(before_state) = 'object'::text", name='operation_batches_before_state_check'),
+    CheckConstraint("length(idempotency_key) >= 1 AND length(idempotency_key) <= 200 AND idempotency_key = btrim(idempotency_key) AND idempotency_key !~ '[[:cntrl:]]'::text", name='operation_batches_idempotency_key_check'),
+    CheckConstraint('operation_count >= 1 AND operation_count <= 100', name='operation_batches_operation_count_check'),
+    CheckConstraint("jsonb_typeof(payload) = 'object'::text", name='operation_batches_payload_check'),
+    CheckConstraint("payload_sha256 ~ '^[0-9a-f]{64}$'::text", name='operation_batches_payload_sha256_check'),
+    CheckConstraint("jsonb_typeof(result) = 'object'::text", name='operation_batches_result_check'),
+    CheckConstraint("result_sha256 ~ '^[0-9a-f]{64}$'::text", name='operation_batches_result_sha256_check'),
+    CheckConstraint("schema_version = '1.0.0'::text", name='operation_batches_schema_version_check'),
 )
 
 panel_archetype_versions = Table('panel_archetype_versions', metadata,
@@ -1226,6 +1296,9 @@ class DesignRuleVersions(Base):
 class DesignRules(Base):
     __table__ = design_rules
 
+class DocumentOperations(Base):
+    __table__ = document_operations
+
 class ElectricalTemplateVersions(Base):
     __table__ = electrical_template_versions
 
@@ -1246,6 +1319,9 @@ class Manufacturers(Base):
 
 class ModuleRoleRequirements(Base):
     __table__ = module_role_requirements
+
+class OperationBatches(Base):
+    __table__ = operation_batches
 
 class PanelArchetypeVersions(Base):
     __table__ = panel_archetype_versions
