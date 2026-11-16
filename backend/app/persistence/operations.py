@@ -14,7 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from app.models.document import DocumentProvenance, ResolvedDocument
 from app.models.document_api import DocumentView
 from app.models.identity import StableID
-from app.models.operations import OperationPreviewRequest
+from app.models.operations import OperationPreviewRequest, HistoryRequest
 from app.persistence import models as m
 from app.persistence.assets import content_hash
 from app.persistence.documents import DocumentRepository, document_hash
@@ -22,6 +22,7 @@ from app.persistence.repositories import PersistenceError, ProjectRepository
 from app.services.operations.registry import REGISTRY, preview_operations
 from app.services.operations.engineering import load_choices
 from app.persistence.assets import AssetStore
+from app.services.operations.history import load_history_context, restore_history
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,9 @@ def _prepare(base, request, choices=None):
         if operation.proposal_status == 'PROPOSED':
             raise PersistenceError('OPERATION_PROPOSAL_REQUIRES_ACCEPTANCE',
                 'Proposed operations require a separate explicit acceptance workflow.', 409)
+        if operation.type == 'RemoveComponent' and operation.parameters.confirmed_cascade is None:
+            raise PersistenceError('OPERATION_CASCADE_REQUIRES_CONFIRMATION',
+                'Review and explicitly confirm the exact removal consequences.', 409)
         model = REGISTRY[operation.type].model
         before_ref = getattr(candidate.document.models, model)
         single = request.model_copy(update={'operations': [operation]})
@@ -59,9 +63,11 @@ def _prepare(base, request, choices=None):
             payload_sha256=content_hash(payload), model_kind=model.upper(),
             schema_version=after_ref.schema_version,
             before_sha256=before_ref.sha256, after_sha256=after_ref.sha256))
-        snapshots.append(dict(document_id=candidate.document.document_id, model_kind=model.upper(),
-            schema_version=after_ref.schema_version, sha256=after_ref.sha256,
-            snapshot=getattr(candidate.snapshots, model).model_dump(mode='json')))
+        for kind in REGISTRY[operation.type].models:
+            ref, value = getattr(candidate.document.models, kind), getattr(candidate.snapshots, kind)
+            if ref is not None:
+                snapshots.append(dict(document_id=candidate.document.document_id, model_kind=kind.upper(),
+                    schema_version=ref.schema_version, sha256=ref.sha256, snapshot=value.model_dump(mode='json')))
         for check in preview.required_checks:
             value = check.model_dump(mode='json')
             if value not in checks:
@@ -79,6 +85,30 @@ def _prepare(base, request, choices=None):
     after = DocumentView(**candidate.model_dump(mode='json'),
                          content_sha256=document_hash(candidate.document))
     return _PreparedBatch(before, after, tuple(members), tuple(snapshots), tuple(checks), changed)
+
+
+def _prepare_history(base, request, context):
+    candidate = restore_history(base, request, context)
+    after = DocumentView(**candidate.model_dump(mode='json'), content_sha256=document_hash(candidate.document))
+    payload = request.model_dump(mode='json')
+    # One append-only member anchors the batch in the always-present requirement
+    # snapshot namespace. Full before/after aggregates reference every model.
+    before_ref, after_ref = base.document.models.requirements, after.document.models.requirements
+    member = dict(operation_id=request.operation_id, batch_index=0,
+        operation_type='UndoBatch' if request.action == 'UNDO' else 'RedoBatch', origin=payload['origin'],
+        payload=payload, payload_sha256=content_hash(payload), model_kind='REQUIREMENTS',
+        schema_version=after_ref.schema_version, before_sha256=before_ref.sha256, after_sha256=after_ref.sha256)
+    snapshots = []
+    for kind in ('requirements', 'cem', 'pdm', 'schematic'):
+        ref, value = getattr(candidate.document.models, kind), getattr(candidate.snapshots, kind)
+        if ref is not None:
+            snapshots.append(dict(document_id=candidate.document.document_id, model_kind=kind.upper(),
+                schema_version=ref.schema_version, sha256=ref.sha256, snapshot=value.model_dump(mode='json')))
+    checks = tuple(dict(code=code, status='UNRESOLVED') for stage, code in (
+        ('requirements', 'requirement_rules'), ('placement', 'physical_constraints'),
+        ('routes', 'routing'), ('physical_validation', 'physical_validation'))
+        if stage in candidate.document.dirty_stages)
+    return _PreparedBatch(base.document.model_dump(mode='json'), after, (member,), tuple(snapshots), checks, True)
 
 
 class OperationBatchRepository:
@@ -109,6 +139,13 @@ class OperationBatchRepository:
 
     def commit(self, key, request: OperationPreviewRequest, idempotency_key: str):
         request = OperationPreviewRequest.model_validate(request.model_dump(mode='json'))
+        return self._commit(key, request, idempotency_key)
+
+    def apply_history(self, key, request: HistoryRequest, idempotency_key: str):
+        request = HistoryRequest.model_validate(request.model_dump(mode='json'))
+        return self._commit(key, request, idempotency_key)
+
+    def _commit(self, key, request, idempotency_key):
         idempotency_key = TypeAdapter(StableID).validate_python(idempotency_key)
         if len(idempotency_key) > 200:
             raise PersistenceError('IDEMPOTENCY_KEY', 'Idempotency keys must have at most 200 characters.')
@@ -125,11 +162,15 @@ class OperationBatchRepository:
             replay = self._replay(session, project['id'], idempotency_key, payload_hash)
             if replay is not None:
                 return replay
-            choices = load_choices(session, AssetStore(self.db.settings.asset_root), base, request,
-                                   project['archetype_version_id'])
+            if isinstance(request, HistoryRequest):
+                context = load_history_context(session, project['id'], base, request)
+            else:
+                choices = load_choices(session, AssetStore(self.db.settings.asset_root), base, request,
+                                       project['archetype_version_id'])
         # All operation validation and canonical serialization occur after the
         # read session closes. Nothing expensive runs under the project lock.
-        prepared = _prepare(base, request, choices)
+        prepared = (_prepare_history(base, request, context) if isinstance(request, HistoryRequest)
+                    else _prepare(base, request, choices))
         try:
             with self.db.sessions.begin() as session:
                 projects = ProjectRepository(session)

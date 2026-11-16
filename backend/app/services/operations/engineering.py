@@ -28,6 +28,7 @@ class EngineeringChoices:
     questions: tuple[QuestionSchema, ...] = ()
     # Keyed by exact published version, not latest catalog identity.
     components: dict[str, dict] = field(default_factory=dict)
+    products: frozenset[tuple[str, str]] = frozenset()
 
 
 def load_choices(session, assets, base, request, archetype_version_id=None):
@@ -40,9 +41,9 @@ def load_choices(session, assets, base, request, archetype_version_id=None):
             raise DesignError('OPERATION_CATALOG', 'A pinned questionnaire is required.', {})
         template = catalog.template(base.document.archetype, version_id=version)
         questions = tuple(QuestionSchema.model_validate(q) for q in template['questions'])
-    choices = {}
+    choices, products = {}, set()
     for op in request.operations:
-        if op.type not in ('ChangeComponentRating', 'ResizeEnclosure'):
+        if op.type not in ('ChangeComponentRating', 'ResizeEnclosure', 'AddComponent'):
             continue
         version = op.parameters.component_version_id
         c, v = m.components, m.component_versions
@@ -51,7 +52,14 @@ def load_choices(session, assets, base, request, archetype_version_id=None):
             .where(v.c.id == identifier(version), v.c.status == 'PUBLISHED')).mappings().first()
         if row is not None:
             choices[version] = catalog._component(row)
-    return EngineeringChoices(questions, choices)
+        if op.type == 'AddComponent' and op.parameters.product_version_id is not None:
+            product = session.scalar(select(m.product_versions.c.id).where(
+                m.product_versions.c.id == identifier(op.parameters.product_version_id),
+                m.product_versions.c.component_version_id == identifier(version),
+                m.product_versions.c.status == 'PUBLISHED'))
+            if product is not None:
+                products.add((version, str(product)))
+    return EngineeringChoices(questions, choices, frozenset(products))
 
 
 def update_requirement(candidate, op, choices):

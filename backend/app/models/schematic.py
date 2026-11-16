@@ -43,6 +43,14 @@ class SchematicWire(ContractModel):
     label: str = ''
 
 
+class SchematicJunction(ContractModel):
+    """Presentation of an existing shared pin, never a connectivity union."""
+    id: StableID
+    pin_id: StableID
+    visible: bool = True
+    label: str = ''
+
+
 class SchematicPresentation(ContractModel):
     schema_version: Literal['1.0.0'] = '1.0.0'
     id: StableID
@@ -54,12 +62,18 @@ class SchematicPresentation(ContractModel):
     height_mm: float = Field(gt=0)
     symbols: list[SchematicSymbol] = Field(default_factory=list)
     wires: list[SchematicWire] = Field(default_factory=list)
+    # Omit empty extension to preserve canonical bytes/hashes of old snapshots.
+    junctions: list[SchematicJunction] = Field(default_factory=list, exclude_if=lambda value: not value)
 
     @model_validator(mode='after')
     def presentation_references(self):
         unique_ids((symbol.id for symbol in self.symbols), 'schematic.symbols')
         pins = unique_ids((pin.id for symbol in self.symbols for pin in symbol.pins), 'schematic.pins')
         unique_ids((wire.id for wire in self.wires), 'schematic.wires')
+        unique_ids((junction.id for junction in self.junctions), 'schematic.junctions')
+        unique_ids((junction.pin_id for junction in self.junctions), 'schematic.junction_pins')
+        for junction in self.junctions:
+            require_reference(junction.pin_id, pins, f'junctions.{junction.id}.pin_id')
         for wire in self.wires:
             require_reference(wire.source_pin_id, pins, f'wires.{wire.id}.source_pin_id')
             require_reference(wire.target_pin_id, pins, f'wires.{wire.id}.target_pin_id')

@@ -207,6 +207,11 @@ def validate_engineering_references(doc: WorkingDocument, snapshots: DocumentSna
                 (connection.from_component, connection.from_terminal), (connection.to_component, connection.to_terminal)
             ):
                 raise PydanticCustomError('reference_mismatch', 'Schematic wire endpoints differ: {reference}', {'reference': wire.id})
+        for junction in schematic.junctions:
+            members = [connections[w.conductor_id] for w in schematic.wires
+                       if junction.pin_id in (w.source_pin_id, w.target_pin_id)]
+            if len(members) < 2 or len({c.net_id for c in members}) != 1:
+                raise PydanticCustomError('reference_mismatch', 'Junction must present an existing shared CEM terminal in one net')
 
 
 def validate_physical_references(cem, pdm, components, connections) -> None:
