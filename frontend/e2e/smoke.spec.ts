@@ -1,26 +1,35 @@
 import {test, expect, openHarness, readDocument, moveRequest, propose, pickComponent,
   drag, saveAndReopen, stalePeer} from './fixtures';
 
-test('viewport renders WebGL, picks a component, drags a draft gizmo and resizes fullscreen', async ({page, projectId}) => {
+test('viewport renders WebGL, picks a component, commits a gizmo drag and resizes fullscreen', async ({page, projectId}) => {
   await openHarness(page, projectId);
   const before = await readDocument(page);
-  const point = await pickComponent(page, 'QF001');
+  await pickComponent(page, 'QF001');
   const canvas = page.getByRole('region', {name: '3D panel canvas'}).locator('canvas');
   expect(await canvas.evaluate(element => !!((element as HTMLCanvasElement).getContext('webgl2') ||
     (element as HTMLCanvasElement).getContext('webgl')))).toBe(true);
   await page.getByTitle('Move selected component', {exact: true}).click();
   await expect(page.getByTitle('Move selected component', {exact: true})).toHaveAttribute('aria-pressed', 'true');
-  // Existing TransformControls X axis; this remains a display draft until the
-  // later gesture binding task. No operation or publication is inferred here.
-  await drag(page, {x: point.x + 35, y: point.y}, {x: point.x + 85, y: point.y});
-  await expect.poll(() => page.evaluate(() => window.panelE2E.state().transforms.QF001?.x)).not.toBeUndefined();
+  // Real TransformControls X axis: gesture release commits one MoveComponent.
+  await expect.poll(()=>page.evaluate(()=>window.panelE2E.gizmoPoint()?.axis)).toBe('X');
+  const point=await page.evaluate(()=>window.panelE2E.gizmoPoint()!);
+  await drag(page, point, {x: point.x + 50, y: point.y});
+  await expect.poll(() => page.evaluate(() => window.panelE2E.state().document?.document.document_sequence)).toBe(1);
   const state = await page.evaluate(() => window.panelE2E.state());
-  expect(state.transforms.QF001.x).not.toBe(before.snapshots.pdm!.components[0].position.x);
-  expect(state.undoCount).toBe(1);
+  expect(state.document!.snapshots.pdm!.components[0].position.x).not.toBe(before.snapshots.pdm!.components[0].position.x);
+  expect(state.document!.snapshots.pdm!.components[0].position.y).toBe(before.snapshots.pdm!.components[0].position.y);
+  expect(state.document!.snapshots.pdm!.components[0].position.z).toBe(before.snapshots.pdm!.components[0].position.z);
+  expect(state.transforms).toEqual({});
   expect(state.proposal).toBeNull();
-  expect(await readDocument(page)).toEqual(before);
+  expect(state.document!.snapshots.pdm!.routes).toEqual(before.snapshots.pdm!.routes);
   const saved = await page.request.get(`/api/v1/projects/${projectId}/document`);
-  expect(await saved.json()).toEqual(before);
+  expect(await saved.json()).toEqual(state.document);
+  const history=await page.request.get(`/api/v1/projects/${projectId}/document/operations/history`);
+  expect((await history.json()).undo_batch_ids).toHaveLength(1);
+  await page.getByTitle('Undo transform',{exact:true}).click();
+  await expect.poll(async()=> (await readDocument(page)).snapshots.pdm!.components[0].position).toEqual(before.snapshots.pdm!.components[0].position);
+  await page.getByTitle('Redo transform',{exact:true}).click();
+  await expect.poll(async()=> (await readDocument(page)).snapshots.pdm!.components[0].position).toEqual(state.document!.snapshots.pdm!.components[0].position);
 
   const originalCanvas = await canvas.elementHandle();
   const region = page.getByRole('region', {name: '3D panel canvas'});

@@ -7,7 +7,7 @@ vi.mock('@xyflow/react',()=>({
  ReactFlowProvider:({children}:any)=><>{children}</>,ReactFlow:({children}:any)=><div>{children}</div>,
  useReactFlow:()=>flow,useNodesState:(initial:any)=>[initial,vi.fn(),vi.fn()],useEdgesState:(initial:any)=>[initial,vi.fn(),vi.fn()],
  Background:()=>null,MiniMap:()=>null,BaseEdge:()=>null,EdgeLabelRenderer:({children}:any)=><>{children}</>,Handle:()=>null,
- Position:{Top:'top',Bottom:'bottom'},getSmoothStepPath:()=>['M 0 0 L 10 10',0,0],addEdge:vi.fn(),
+ Position:{Top:'top',Bottom:'bottom'},ConnectionMode:{Loose:'loose'},getSmoothStepPath:()=>['M 0 0 L 10 10',0,0],
 }));
 import {SchematicViewer} from './SchematicViewer';
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;

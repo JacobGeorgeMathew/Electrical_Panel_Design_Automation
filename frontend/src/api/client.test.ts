@@ -1,8 +1,13 @@
 import {afterEach,describe,expect,it,vi} from 'vitest';
 import {request,ApiError,fetchDocument,saveDocument,fetchRevision} from './client';
-afterEach(()=>{vi.unstubAllGlobals();});
+afterEach(()=>{vi.unstubAllGlobals();vi.unstubAllEnvs();vi.resetModules();});
 
 describe('API failures and cancellation',()=>{
+  it('resolves managed catalog assets with a relative API base',async()=>{
+    vi.stubEnv('VITE_API_BASE','/api');vi.resetModules();
+    const {assetUrl}=await import('./client');
+    expect(assetUrl('/api/assets/catalog.glb')).toBe(window.location.origin+'/api/assets/catalog.glb');
+  });
   it('uses the versioned document Save route and explicit historical revision route',async()=>{
     const fetch=vi.fn(async(_url:string,_options?:RequestInit)=>new Response('{}',{status:200}));vi.stubGlobal('fetch',fetch);
     await fetchDocument('P/1');

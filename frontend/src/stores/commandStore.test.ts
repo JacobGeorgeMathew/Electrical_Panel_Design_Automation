@@ -93,4 +93,17 @@ describe('shared command client',()=>{
     expect(useCommandStore.getState().proposal?.kind).toBe('history');
     expect(useCommandStore.getState().error?.code).toBe('DOCUMENT_CONFLICT');
   });
+  it('blocks electrical commits without preview and removals without explicit dependency confirmation',async()=>{
+    const fetch=vi.fn();vi.stubGlobal('fetch',fetch);
+    for(const type of ['AddComponent','ModifyElectricalConnection','RemoveComponent']){
+      const p=proposal();
+      if(p.kind!=='operations')throw new Error('fixture');
+      p.request.operations=[{...p.request.operations[0],type,parameters:{}} as any];
+      useCommandStore.getState().propose(p);
+      await useCommandStore.getState().commitProposal();
+      expect(useCommandStore.getState().error?.code).toBe(type==='RemoveComponent'?'CASCADE_CONFIRMATION_REQUIRED':'PREVIEW_REQUIRED');
+      expect(useCommandStore.getState().proposal).toEqual(p);
+    }
+    expect(fetch).not.toHaveBeenCalled();
+  });
 });

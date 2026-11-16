@@ -24,7 +24,7 @@ const workingDocument=()=>({...fixture,content_sha256:'a'.repeat(64),
   }]}}});
 
 describe('versioned document adapter',()=>{
-  it('recovers, checkpoints and saves placement overlays without routing or publishing',async()=>{
+  it('retains recovery previews locally but Save excludes transient geometry without routing or publishing',async()=>{
     const view=workingDocument();
     const workspace={editorTransforms:{C1:{x:10,y:20,z:30,rotation_deg:0}},schematicData:design.schematic};
     const checkpoint={schema_version:2,recovery_sequence:1,base_version:2,saved_at:'2026-11-16T00:00:00Z',
@@ -46,7 +46,7 @@ describe('versioned document adapter',()=>{
       snapshots:{...view.snapshots,requirements:request.requirements}});
     api.updateProject.mockResolvedValue({...project,lock_version:4,recovery_version:3,workspace});
     await useProjectStore.getState().saveCurrentProject();
-    expect(api.updateProject).toHaveBeenCalledWith('P1',3,expect.objectContaining({workspace,expected_recovery_version:2}));
+    expect(api.updateProject).toHaveBeenCalledWith('P1',3,{expected_recovery_version:2});
     expect(useProjectStore.getState()).toMatchObject({hasUnsavedChanges:false,currentRevisionId:'R1',
       requirementValues:{incomer_rating:400},editorTransforms:workspace.editorTransforms});
     for(const method of [api.validatePlacement,api.generateDesign,api.restoreRevision,api.startCadJob])

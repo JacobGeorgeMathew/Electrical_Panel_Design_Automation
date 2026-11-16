@@ -57,6 +57,16 @@ export const useCommandStore = create<CommandState>((set, get) => {
       fail(new ApiError('Command base changed or is read-only. Proposal retained; reload for comparison.', 409, 'DOCUMENT_CONFLICT'));
       return;
     }
+    if (mode === 'commit' && proposal.kind === 'operations' && proposal.request.operations.some(op =>
+      (op.type === 'ModifyElectricalConnection' || op.type === 'AddComponent') && !get().preview)) {
+      fail(new ApiError('Preview the electrical and physical effects before applying this proposal.', 0, 'PREVIEW_REQUIRED'));
+      return;
+    }
+    if (mode === 'commit' && proposal.kind === 'operations' && proposal.request.operations.some(op =>
+      op.type === 'RemoveComponent' && !op.parameters.confirmed_cascade)) {
+      fail(new ApiError('Review and explicitly confirm the removal dependencies first.', 0, 'CASCADE_CONFIRMATION_REQUIRED'));
+      return;
+    }
     controller = new AbortController();
     set({pending: true, error: null});
     try {
@@ -83,13 +93,4 @@ export const useCommandStore = create<CommandState>((set, get) => {
     previewProposal: () => run('preview'), commitProposal: () => run('commit'), cancel,
     clear: () => {cancel(); set({proposal: null, preview: null, receipt: null, error: null});},
   };
-});
-
-useProjectStore.subscribe((state, previous) => {
-  if (state.projectId !== previous.projectId || state.document !== previous.document ||
-      state.editSequence !== previous.editSequence || state.viewedRevisionId !== previous.viewedRevisionId ||
-      state.lockVersion !== previous.lockVersion || state.isLoadingProject !== previous.isLoadingProject ||
-      state.isSaving !== previous.isSaving || state.isGenerating !== previous.isGenerating ||
-      state.pendingRecovery !== previous.pendingRecovery)
-    useCommandStore.getState().cancel();
 });

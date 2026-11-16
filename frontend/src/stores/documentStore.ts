@@ -3,11 +3,21 @@
 import { useProjectStore, type ProjectState } from './projectStore';
 import type { DocumentSave, DocumentView } from '../types/document';
 import type { ProjectConfiguration } from '../types/api';
+import type {PhysicalDesignModel} from '../types/pdm';
+import type {CanonicalEngineeringModel} from '../types/cem';
+import {documentSchematicGraph} from '../components/schematic/schematicGraph';
 
 export function documentFields(view: DocumentView) {
   if (view.document.schema_version !== '1.0.0') throw new Error('Unsupported working-document schema. Local data retained.');
   const values = Object.fromEntries(view.snapshots.requirements.items.map(item => [item.id, item.value]));
-  return { document: view, requirementValues: values, savedRequirementValues: values,
+  // Backend snapshots are validated and retain nullable metadata. These legacy
+  // viewer contracts consume the same geometry/IDs; no snapshot is written back.
+  return { document: view, cem: view.snapshots.cem as unknown as CanonicalEngineeringModel | null,
+    pdm: view.snapshots.pdm as unknown as PhysicalDesignModel | null,
+    pdmBaseline: view.snapshots.pdm as unknown as PhysicalDesignModel | null,
+    schematicData: documentSchematicGraph(view),
+    editorTransforms: {}, pendingEditorEdit: null, editorUndoStack: [], editorRedoStack: [],
+    requirementValues: values, savedRequirementValues: values,
     projectConfiguration: view.document.configuration as ProjectConfiguration,
     savedConfiguration: view.document.configuration as ProjectConfiguration,
     lockVersion: view.document.lock_version,
@@ -37,7 +47,7 @@ export function documentStatus(state: ProjectState) {
   const unsupported = state.publishedDesign?.output_status === 'MISSING_OUTPUTS';
   const source = state.publishedDesign?.output_manifest?.source_document;
   const overlay = Object.keys(state.editorTransforms).length > 0 ||
-    JSON.stringify(state.schematicData) !== JSON.stringify(state.publishedDesign?.schematic ?? null);
+    JSON.stringify(state.schematicData) !== JSON.stringify(state.document ? documentSchematicGraph(state.document) : state.publishedDesign?.schematic ?? null);
   const publishedValues = Object.fromEntries((state.publishedDesign?.cem.requirements || []).map(item=>[item.id,item.value]));
   const inputsDiffer = !!state.document && Object.entries(state.requirementValues)
     .some(([key,value])=>JSON.stringify(value)!==JSON.stringify(publishedValues[key]));
@@ -46,7 +56,7 @@ export function documentStatus(state: ProjectState) {
     saveLabel: historical ? 'Historical read-only' : state.hasUnsavedChanges ? 'Unsaved draft' : 'Saved draft',
     outputLabel: unsupported ? 'Unsupported legacy output · missing saved representations'
       : historical ? `Historical read-only · r${state.currentRevisionNo}`
-      : dirtyOutput ? 'Dirty engineering output · Publish required'
+      : dirtyOutput ? 'Dirty engineering output · Recompute required before Publish'
       : state.currentRevisionNo ? `Active revision r${state.currentRevisionNo}` : 'No published output' };
 }
 

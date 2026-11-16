@@ -58,7 +58,8 @@ by prefix. Generated traces, HTML reports and screenshots are ignored by Git.
 | --- | --- |
 | `test`, `projectId`, `openHarness` | Owned URL, fresh seeded project, actual `Panel3DViewer` inside `DesignViewport`. |
 | `pickComponent` | Front-camera projection guides real mouse clicks; Three.js raycasting and shared selection must identify the component. |
-| `drag` | Actual pointer down/move/up; existing TransformControls exercises a local draft gesture. |
+| `panelE2E.gizmoPoint` | Reads the installed Fiber canvas camera/picker to project a hittable X handle after resizing; real pointer events still drive TransformControls. |
+| `drag` | Actual pointer down/move/up for SVG, Three.js TransformControls, React Flow symbols and pins. |
 | `moveRequest`, `propose` | Fresh operation/batch IDs, current hashes/clocks and a retained idempotency key through the P2-T09 store. |
 | `stalePeer` | Independent browser/store holding a stale document; caller closes it in `finally`. |
 | `readDocument`, `saveAndReopen` | Read aggregate and use central input Save, then reload and compare persisted content. |
@@ -66,20 +67,23 @@ by prefix. Generated traces, HTML reports and screenshots are ignored by Git.
 `harness.html` is a separate Vite development entry, absent from production build
 inputs. `window.panelE2E` exists only there. It loads server snapshots into the
 existing viewer and invokes real stores/clients; it supplies no authoritative
-durable CEM/PDM, mocks no API and adds no production gesture binding. A locally
+durable CEM/PDM and mocks no API. All gesture bindings come from production components. A locally
 served installed Three.js font keeps viewport text offline. Software WebGL in
 headless Chromium is real rendering/raycasting, but does not qualify GPU drivers.
 
-The runnable smoke specs prove picking, one grouped draft gizmo drag, fullscreen
+The runnable smoke specs prove picking, one committed gizmo drag with durable undo/redo, fullscreen
 canvas identity/resizing/focus, non-writing preview, command commit, exact-key
 retry, saved aggregate reopen and a real stale-context HTTP 409 with proposal
-retention. They explicitly check that the current draft drag does **not** change
-the persisted PDM. Command commits remain dirty and routing checks unresolved.
-Save/reopen here uses the central document input API; it does not certify workspace
-Save/Publish buttons or synchronize the post-command viewer.
+retention. Command commits remain dirty and routing checks unresolved.
+`physical.spec.ts` checks 2D release, inspector and 3D coordinates, operation counts,
+undo, rotation disabling and the actual workspace Save command followed by reopen.
+`schematic.spec.ts` checks real symbol and pin gestures, net hashes, layout undo/redo,
+Save/reopen, compatible conductor creation and rejected duplicate endpoints.
+Its optional electrical seed adds explicit synthetic PE endpoint roles using the
+existing qualified schematic fixture; production code does not infer those roles.
+`catalog.spec.ts` checks exact catalog-version insertion, unconnected terminals,
+reopen, dependency review, blocked unconfirmed removal, cancellation and durable undo.
 
-P2-T10/P2-T11 own feature bindings and their browser specs (durable gesture moves,
-catalog insertion/removal, history tools and schematic edits). P2-T14 owns final
-integrated cross-view acceptance. Those cases are pending work, have no placeholder
-passing/skipped tests here, and must assert saved engineering state as well as
-pixels. Tauri, native CAD, other browsers and hardware WebGL remain separate checks.
+P2-T10/P2-T11 supply those bounded feature bindings and specs. P2-T14 retains final
+integrated cross-view acceptance; this harness does not implement that subsequent
+task. Tauri, native CAD, other browsers and hardware WebGL remain separate checks.

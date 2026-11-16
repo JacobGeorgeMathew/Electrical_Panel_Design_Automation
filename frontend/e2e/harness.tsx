@@ -1,15 +1,21 @@
 import React from 'react';
 import {createRoot} from 'react-dom/client';
-import {PerspectiveCamera, Vector3} from 'three';
+import {Box3, Group, Object3D, PerspectiveCamera, Raycaster, Vector2, Vector3} from 'three';
+import {_roots} from '@react-three/fiber';
 // @ts-expect-error Transitive viewer dependency has no TypeScript declarations.
 import {configureTextBuilder} from 'troika-three-text';
 import {Panel3DViewer} from '../src/components/threeD/Panel3DViewer';
+import {Layout2DViewer} from '../src/components/layout/Layout2DViewer';
+import {PropertiesInspector} from '../src/components/workspace/PropertiesInspector';
+import {useWorkspaceCommands} from '../src/components/workspace/useWorkspaceCommands';
+import {SchematicViewer} from '../src/components/schematic/SchematicViewer';
+import {CatalogBrowser} from '../src/components/catalog/CatalogBrowser';
 import {fitPanelCamera} from '../src/components/threeD/cameraFit';
 import {useProjectStore} from '../src/stores/projectStore';
 import {useCommandStore, type CommandProposal} from '../src/stores/commandStore';
 import {useWorkspaceStore} from '../src/stores/workspaceStore';
 import {documentFields, documentSave} from '../src/stores/documentStore';
-import {fetchDocument, saveDocument} from '../src/api/client';
+import {fetchDocument, fetchProject, saveDocument} from '../src/api/client';
 import type {PhysicalDesignModel} from '../src/types/pdm';
 import '../src/index.css';
 import '../src/components/workspace/workspace.css';
@@ -20,11 +26,13 @@ configureTextBuilder({defaultFontURL: '/node_modules/three/examples/fonts/ttf/ke
 
 async function load(projectId: string) {
   useCommandStore.getState().clear();
-  const view = await fetchDocument(projectId);
-  // This seeded contract has positioned terminals and legacy-compatible bounds;
-  // production aggregate-to-viewer synchronization belongs to the binding tasks.
+  const [view, record] = await Promise.all([fetchDocument(projectId),fetchProject(projectId)]);
+  // Production document adapter supplies authoritative view geometry. The harness
+  // adds project metadata needed by the real workspace Save command.
   const pdm = view.snapshots.pdm as unknown as PhysicalDesignModel;
-  useProjectStore.setState({...documentFields(view), projectId,
+  useProjectStore.setState({...documentFields(view), projectId, projectName:record.name,
+    recoveryVersion:record.recovery_version||0,
+    errorMessage:null,
     pdm, pdmBaseline: pdm,
     activeTab: 'threeD', isLoadingProject: false, isSaving: false, isGenerating: false,
     hasUnsavedChanges: false, pendingRecovery: null, viewedRevisionId: null,
@@ -43,11 +51,33 @@ const bridge = {
     return {document: project.document, selectedId: project.selectedObjectId,
       transforms: project.editorTransforms, undoCount: project.editorUndoStack.length,
       proposal: command.proposal, preview: command.preview, receipt: command.receipt,
+      projectError: project.errorMessage,
       error: command.error && {code: command.error.code, status: command.error.status, message: command.error.message}};
   },
   propose: (proposal: CommandProposal) => useCommandStore.getState().propose(proposal),
   preview: () => useCommandStore.getState().previewProposal(),
   commit: () => useCommandStore.getState().commitProposal(),
+  // Read the live test canvas, rather than assuming a pixel offset from a
+  // component center. Pointer events must still hit the real TransformControls.
+  gizmoPoint: () => {
+    const canvas=document.querySelector('canvas')!;
+    const scene=_roots.get(canvas)?.store.getState();
+    if(!scene)return null;
+    let object: Object3D | undefined;
+    scene.scene.traverse(o=>{if((o as Object3D & {isTransformControls?:boolean}).isTransformControls)object=o;});
+    const control=object as unknown as {gizmo:{picker:{translate:Group}}}|undefined;
+    if(!control)return null;
+    scene.scene.updateMatrixWorld(true);
+    const picker=control.gizmo.picker.translate;
+    const axis=picker.children.find(o=>o.name==='X'&&o.visible);
+    if(!axis)return null;
+    const projected=new Box3().setFromObject(axis).getCenter(new Vector3()).project(scene.camera);
+    const ray=new Raycaster();ray.setFromCamera(new Vector2(projected.x,projected.y),scene.camera);
+    const hit=ray.intersectObject(picker,true).find(h=>h.object.visible);
+    if(hit?.object.name!=='X')return null;
+    const rect=canvas.getBoundingClientRect();
+    return {axis:hit.object.name,x:rect.x+(projected.x+1)*rect.width/2,y:rect.y+(1-projected.y)*rect.height/2};
+  },
   save: async () => {
     const project = useProjectStore.getState();
     const view = await saveDocument(project.projectId, documentSave(project));
@@ -77,9 +107,19 @@ window.panelE2E = bridge;
 
 function Harness() {
   const selected = useProjectStore(state => state.selectedObjectId);
+  const tab = useProjectStore(state=>state.activeTab);
+  const commands = useWorkspaceCommands(()=>{});
   return <main style={{height: '100vh', display: 'flex', flexDirection: 'column'}}>
     <output aria-label="Harness selection">{selected || 'none'}</output>
-    <Panel3DViewer/>
+    <nav>{(['threeD','layout2d','schematic','catalog'] as const).map(tab=><button key={tab} onClick={()=>useProjectStore.getState().setActiveTab(tab)}>{tab}</button>)}
+      <button disabled={commands.save.disabled} onClick={commands.save.run}>Save draft</button>
+      <button disabled={commands.undo.disabled} onClick={commands.undo.run}>Undo operation</button>
+      <button disabled={commands.redo.disabled} onClick={commands.redo.run}>Redo operation</button>
+    </nav>
+    <div style={{display:'flex',flex:1,minHeight:0}}>
+      {tab==='layout2d'?<Layout2DViewer/>:tab==='schematic'?<SchematicViewer/>:tab==='catalog'?<CatalogBrowser/>:<Panel3DViewer/>}
+      <div style={{width:224,flexShrink:0,overflowY:'auto'}}><PropertiesInspector/></div>
+    </div>
   </main>;
 }
 

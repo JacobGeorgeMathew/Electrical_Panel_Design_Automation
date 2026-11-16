@@ -4,6 +4,9 @@ import { createRoot, Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Layout2DViewer } from './Layout2DViewer';
 import { useProjectStore } from '../../stores/projectStore';
+import {documentFields} from '../../stores/documentStore';
+import fixture from '../../types/fixtures/document-v1.json';
+import type {DocumentView} from '../../types/document';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -43,10 +46,12 @@ describe('2D layout viewport fit', () => {
     expect(canvas.parentElement?.className).toContain('min-h-0');
   });
 
-  it('writes aligned placement to the PDM and sends it to the existing validator', async () => {
+  it('commits aligned placement as one intent and reads the returned PDM', async () => {
+    const view={...structuredClone(fixture),content_sha256:'a'.repeat(64)} as DocumentView;
+    useProjectStore.setState({...documentFields(view),projectId:view.document.project_id});
+    const returned=structuredClone(view);returned.snapshots.pdm!.components[0].position.x=20;
     const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
-      const sentPdm = JSON.parse(String(init.body));
-      return { ok: true, json: async () => ({ pdm: sentPdm, validation_results: [], is_valid: true }) } as Response;
+      return { ok: true, json: async () => ({result:returned}) } as Response;
     });
     vi.stubGlobal('fetch', fetchMock);
     act(() => root.render(<Layout2DViewer />));
@@ -58,9 +63,10 @@ describe('2D layout viewport fit', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
-    expect(useProjectStore.getState().editorTransforms.QF001.x).toBe(20);
+    expect(useProjectStore.getState().editorTransforms).toEqual({});
     expect(useProjectStore.getState().pdm?.components[0].position.x).toBe(20);
     expect(fetchMock).toHaveBeenCalledOnce();
-    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body)).components[0].position.x).toBe(20);
+    expect(fetchMock.mock.calls[0][0]).toContain('/operations/commit');
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body)).operations[0]).toMatchObject({type:'MoveComponent',parameters:{position_mm:{x:20}}});
   });
 });

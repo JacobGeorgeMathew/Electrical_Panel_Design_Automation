@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { buildSchematicGraph, validateSchematicGraph, type SchematicGraphData } from './schematicGraph';
+import { buildSchematicGraph, documentSchematicGraph, validateSchematicGraph, type SchematicGraphData } from './schematicGraph';
+import fixture from '../../types/fixtures/document-v1.json';
+import type {DocumentView} from '../../types/document';
+
+it('projects typed page IDs and CEM conductors without changing any snapshot',()=>{
+  const view={...structuredClone(fixture),content_sha256:'a'.repeat(64)} as DocumentView;
+  const before=structuredClone(view);
+  const graph=buildSchematicGraph(documentSchematicGraph(view)!);
+  expect(graph.nodes[0]).toMatchObject({id:'symbol-1',position:{x:100,y:100}});
+  expect(graph.nodes[0].data.terminals[0].id).toBe('pin-1');
+  expect(graph.edges[0]).toMatchObject({id:'wire-1',source:'symbol-1',sourceHandle:'source:pin-1',target:'symbol-2',targetHandle:'target:pin-2',data:{conductor_id:'N-PE-C01'}});
+  expect(view).toEqual(before);
+});
 
 const graphFixture: SchematicGraphData = {
   width: 400, height: 300,

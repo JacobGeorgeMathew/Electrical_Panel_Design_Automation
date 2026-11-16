@@ -24,16 +24,35 @@ key. Preview, commit and undo/redo history requests use the central HTTP client.
 Cancellation, changed local inputs and changed document/project context fence late
 responses. Rejection retains the proposal and shows the server code and message in
 the console. Successful commits advance only the returned working document; saved
-published revisions stay immutable. Existing placement gestures and schematic tools
-still use the display/draft adapters below; their operation bindings belong to the
-subsequent lifecycle tasks.
+published revisions stay immutable. Physical gestures keep a transient preview and
+commit one `MoveComponent` on release. Coordinate fields in 2D, 3D and the inspector
+use the same enclosure-mm command path and snap preferences. Both viewers install
+only the returned PDM. Undo/redo uses server operation history, including after reopen.
+Rotation stays disabled until physical/routing support is available. Camera,
+visibility, explode and grid preferences emit no engineering operations.
 
-Properties support the existing physical transform draft and schematic net-label draft.
-Catalog specifications and mechanical hardware are inspected read-only. Components
-opens the existing library; electrical device insertion continues through Requirements
-and the existing automatic generator. This task does not add a backend manual-instance
-insertion API. Measure reports the center-to-center distance and axis deltas of two
+The typed schematic page is a presentation projection with stable symbol/pin IDs.
+Symbol release commits `MoveSymbol`; labels and valid shared-pin junction markers
+use presentation operations. They do not edit CEM connectivity. Pin gestures open
+`ConnectionPreview`, requiring an existing net and explicit conductor dimensions.
+Create/replace/delete must preview electrical effects, invalidated routes and removed
+nets before Apply. The server checks explicit terminal/supply evidence; labels and
+crossings never establish connectivity. Missing evidence remains a rejection.
+
+The catalog supports `AddComponent` with an exact published component version,
+explicit zone/rail/enclosure coordinates and unconnected catalog terminals. Apply
+requires a successful server preview. The inspector's removal tool previews the
+server dependency closure and requires explicit confirmation before `RemoveComponent`.
+Catalog specifications and mechanical hardware remain read-only. Measure reports
+the center-to-center distance and axis deltas of two
 selected physical components, using the current transform draft in millimetres.
+
+`OperationPreview` shows retained errors/proposals and dirty stages. Save preserves
+the working document without rerouting or publishing; transient physical previews
+and legacy schematic overlays cannot override its saved geometry on reopen. Explicit
+recovery still retains unfinished edits. Manual operation drafts require subsequent
+Recompute support before Publish; the automatic input pipeline cannot silently
+replace them. Recompute implementation is outside these workspace tool bindings.
 
 Camera controls include fit, zoom, isometric/front/top/right 3D views, and the existing
 native/full-window fullscreen fallback. Three.js uses live canvas dimensions and
@@ -42,8 +61,8 @@ after panel resizing. The 2D SVG uses a responsive viewBox and zoom controls. Pa
 resizing does not remount the canvas. Camera requests are consumed once rather than
 replayed when changing document views.
 
-Keyboard shortcuts: Ctrl/Command+S saves, Ctrl/Command+Z undoes placement,
-Ctrl/Command+Shift+Z redoes placement, V selects, M moves, F fits, Shift+F maximizes.
+Keyboard shortcuts: Ctrl/Command+S saves, Ctrl/Command+Z undoes the latest operation,
+Ctrl/Command+Shift+Z redoes it, V selects, M moves, F fits, Shift+F maximizes.
 Text fields retain native undo. Menus support arrows and Escape; dialogs trap focus.
 
 The console shows backend validation, errors, current engineering values, and actual

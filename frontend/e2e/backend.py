@@ -25,6 +25,9 @@ from app.persistence.database import Database
 from app.persistence.import_legacy import import_legacy
 from app.persistence.manage import initialize
 from tests.test_operation_persistence import persisted_base
+from tests.test_schematic_operations import with_evidence
+from app.models.document import SnapshotReference, snapshot_sha256
+from app.persistence.documents import DocumentRepository
 
 
 def main():
@@ -65,10 +68,32 @@ def main():
             app = create_app(db)
 
             @app.post('/__e2e__/projects')
-            def seed():
+            def seed(electrical: bool = False):
                 # Reuse the qualified operation storage fixture: stable logical
                 # IDs/nonzero offsets, fresh project/document IDs for each test.
-                project_id, _ = persisted_base(db)
+                project_id, base = persisted_base(db)
+                if electrical:
+                    # Explicit endpoint roles qualify only this synthetic fixture.
+                    # Production UI cannot infer supply/phase evidence from labels.
+                    base = with_evidence(base)
+                    third = base.snapshots.cem.components[-1].model_copy(deep=True)
+                    third.id = 'PE002'
+                    base.snapshots.cem.components.append(third)
+                    symbol = base.snapshots.schematic.symbols[-1].model_copy(deep=True)
+                    symbol.id, symbol.component_id, symbol.pins[0].id = 'symbol-3', 'PE002', 'pin-3'
+                    dx, dy = 500 - symbol.position.x, 300 - symbol.position.y
+                    symbol.position.x += dx
+                    symbol.position.y += dy
+                    for pin in symbol.pins:
+                        pin.position.x += dx
+                        pin.position.y += dy
+                    base.snapshots.schematic.symbols.append(symbol)
+                    base.document.configuration['electrical_topology']['domains'].append(
+                        dict(component_id='PE002', terminal_id='MAIN_PE', supply_id='supply-1', role='PE'))
+                    for kind in ('cem', 'pdm', 'schematic'):
+                        setattr(base.document.models, kind, SnapshotReference(sha256=snapshot_sha256(getattr(base.snapshots, kind))))
+                    with db.sessions.begin() as session:
+                        DocumentRepository(session).store(base)
                 return {'projectId': project_id}
 
             with socket.socket() as sock:

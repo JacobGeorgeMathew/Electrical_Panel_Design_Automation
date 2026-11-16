@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PhysicalComponent } from '../../types/pdm';
-import { analyzeEditorGeometry } from './editorGeometry';
+import { analyzeEditorGeometry, transformFromGizmo } from './editorGeometry';
 
 function component(id: string, x: number, y: number, width = 20, height = 20): PhysicalComponent {
   return {
@@ -11,6 +11,13 @@ function component(id: string, x: number, y: number, width = 20, height = 20): P
 }
 
 describe('3D editor geometry warnings', () => {
+  it('converts centered exploded gizmos to enclosure mm and preserves untouched off-grid axes',()=>{
+    const part={...component('A',125.5,200.25),width:18,height:80,depth:70};
+    const current={x:125.5,y:200.25,z:37.5,rotation_deg:0};
+    const world={x:(141.3+9)*.01,y:(200.25+40)*.01,z:(37.5+35)*.01+.8};
+    expect(transformFromGizmo(part,current,world,.8,true,5)).toEqual({x:140,y:200.25,z:37.5,rotation_deg:0});
+    expect(transformFromGizmo(part,current,world,.8,false,5).x).toBeCloseTo(141.3);
+  });
   const enclosure = { width: 100, height: 100, depth: 60 };
 
   it('flags draft overlaps and out-of-enclosure transforms', () => {

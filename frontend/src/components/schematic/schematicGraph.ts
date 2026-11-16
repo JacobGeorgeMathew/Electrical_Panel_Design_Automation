@@ -1,4 +1,5 @@
 import type { Edge, Node } from '@xyflow/react';
+import type {DocumentView} from '../../types/document';
 
 export type WireClass = 'POWER' | 'CONTROL' | 'SIGNAL' | 'PE' | 'NEUTRAL';
 export type TerminalSpec = { id: string; x: number; y: number };
@@ -7,7 +8,7 @@ export type SchematicSymbol = {
   width: number; height: number; label: string; terminals: TerminalSpec[];
 };
 export type SchematicWire = {
-  id: string; net_id: string; net_name: string; from: string; from_terminal: string;
+  id: string; conductor_id?: string; net_id: string; net_name: string; from: string; from_terminal: string;
   to: string; to_terminal: string; wire_class: string; color?: string; svg_path?: string; waypoints?: {x:number;y:number}[]; crossings?: {x:number;y:number;connected:boolean;axis?:'VERTICAL'|'HORIZONTAL'}[]; junctions?: {x:number;y:number;connected:boolean;axis?:'VERTICAL'|'HORIZONTAL'}[];
 };
 export type SchematicGraphData = {
@@ -19,7 +20,7 @@ export type SchematicNodeData = {
   junction?: boolean; netId?: string;
 };
 export type SchematicEdgeData = {
-  net_id: string; net_name: string; wire_class: string; color: string; draft?: boolean; svg_path?: string; waypoints?: {x:number;y:number}[]; crossings?: {x:number;y:number;connected:boolean;axis?:'VERTICAL'|'HORIZONTAL'}[]; junctions?: {x:number;y:number;connected:boolean;axis?:'VERTICAL'|'HORIZONTAL'}[];
+  net_id: string; net_name: string; wire_class: string; color: string; conductor_id?: string; draft?: boolean; svg_path?: string; waypoints?: {x:number;y:number}[]; crossings?: {x:number;y:number;connected:boolean;axis?:'VERTICAL'|'HORIZONTAL'}[]; junctions?: {x:number;y:number;connected:boolean;axis?:'VERTICAL'|'HORIZONTAL'}[];
 };
 export type SchematicNode = Node<SchematicNodeData, 'symbol' | 'junction'>;
 export type SchematicEdge = Edge<SchematicEdgeData, 'wire'>;
@@ -47,11 +48,33 @@ export function buildSchematicGraph(data: SchematicGraphData): { nodes: Schemati
   const edges: SchematicEdge[] = data.wires.map(wire => ({
     id: wire.id, source: wire.from, sourceHandle: sourceHandle(wire.from_terminal),
     target: wire.to, targetHandle: targetHandle(wire.to_terminal), type: 'wire',
-    data: {net_id: wire.net_id, net_name: wire.net_name, wire_class: wire.wire_class,
+    data: {net_id: wire.net_id, net_name: wire.net_name, wire_class: wire.wire_class, conductor_id: wire.conductor_id,
       color: wire.color || '#94A3B8', svg_path: wire.svg_path, waypoints: wire.waypoints,
       crossings: wire.crossings, junctions: wire.junctions},
   }));
   return { nodes, edges };
+}
+
+/** Read-only page projection. Handles keep pin IDs; electrical endpoints resolve
+ * through the typed page to CEM terminal IDs only at the command boundary. */
+export function documentSchematicGraph(view: DocumentView): SchematicGraphData | null {
+  const page=view.snapshots.schematic, cem=view.snapshots.cem;
+  if (!page || !cem) return null;
+  const pins=new Map(page.symbols.flatMap(s=>s.pins.map(p=>[p.id,{symbol:s,pin:p}] as const)));
+  return {width:page.width_mm,height:page.height_mm,
+    symbols:page.symbols.map(s=>{
+      const c=cem.components.find(c=>c.id===s.component_id);
+      return {id:s.id,name:c?.name||s.component_id,type:c?.category||'INTERFACE',category:c?.category||'INTERFACE',
+        x:s.position.x,y:s.position.y,width:s.width_mm,height:s.height_mm,label:s.label,
+        terminals:s.pins.map(p=>({id:p.id,x:p.position.x,y:p.position.y}))};
+    }),
+    wires:page.wires.map(w=>{
+      const c=cem.connections.find(c=>c.id===w.conductor_id)!;
+      const a=pins.get(w.source_pin_id)!,b=pins.get(w.target_pin_id)!;
+      return {id:w.id,conductor_id:w.conductor_id,net_id:c.net_id,net_name:w.label||cem.nets.find(n=>n.id===c.net_id)?.name||c.net_id,
+        from:a.symbol.id,from_terminal:a.pin.id,to:b.symbol.id,to_terminal:b.pin.id,wire_class:c.wire_class,
+        waypoints:w.waypoints,svg_path:w.waypoints.map((p,i)=>`${i?'L':'M'} ${p.x} ${p.y}`).join(' ')};
+    })};
 }
 
 export function validateSchematicGraph(nodes: SchematicNode[], edges: SchematicEdge[]): SchematicRuleViolation[] {
