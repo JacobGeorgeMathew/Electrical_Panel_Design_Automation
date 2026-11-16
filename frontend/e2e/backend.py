@@ -1,0 +1,112 @@
+"""Disposable browser backend. Run with backend/.venv/bin/python, cwd backend/.
+
+Never connects to the configured application database. Only maintenance metadata
+and a newly allocated database are accessed; assets live in TemporaryDirectory.
+The private seed route exists only in this process, never in app.main.
+"""
+from dataclasses import replace
+import json
+import os
+from pathlib import Path
+import re
+import socket
+import sys
+from tempfile import TemporaryDirectory
+from threading import Thread
+from uuid import uuid4
+
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import URL
+import uvicorn
+
+from app.main import create_app
+from app.persistence.config import Settings
+from app.persistence.database import Database
+from app.persistence.import_legacy import import_legacy
+from app.persistence.manage import initialize
+from tests.test_operation_persistence import persisted_base
+
+
+def main():
+    print('E2E interpreter: ' + sys.executable, flush=True)
+    print('E2E prefix: ' + sys.prefix, flush=True)
+    expected = Path.cwd() / '.venv'
+    if Path(sys.prefix).resolve() != expected.resolve():
+        raise RuntimeError('Use backend/.venv/bin/python with backend/ as cwd.')
+    # Same private configuration as conftest, or libpq PG* authentication as in
+    # tools.run_ci_postgres. The placeholder database is never connected to.
+    if os.environ.get('DATABASE_URL') or os.environ.get('PANEL_DATABASE_URL'):
+        settings = Settings.load()
+    else:
+        settings = Settings(url=URL.create('postgresql+psycopg',
+            username=os.getenv('PGUSER'), host=os.getenv('PGHOST'),
+            port=int(os.environ['PGPORT']) if os.getenv('PGPORT') else None,
+            database='panelflow_e2e_config_only'))
+    name = 'panel_e2e_' + uuid4().hex
+    assert re.fullmatch(r'panel_e2e_[a-f0-9]{32}', name)
+    admin = create_engine(settings.url.set(database='postgres'),
+                          isolation_level='AUTOCOMMIT', hide_parameters=True)
+    created = False
+    db = None
+    try:
+        with admin.connect() as conn:
+            conn.exec_driver_sql(f'CREATE DATABASE "{name}"')
+        created = True
+        print('E2E allocated: ' + name, flush=True)
+        with TemporaryDirectory(prefix='panelflow-e2e-') as storage:
+            db = Database(replace(settings, url=settings.url.set(database=name),
+                                  asset_root=Path(storage) / 'assets'))
+            initialize(db)
+            source = Path(__file__).resolve().parents[2] / 'docs/database/002_sample_data.sql'
+            sql = re.sub(r'(?m)^(BEGIN|COMMIT);\s*$', '', source.read_text(encoding='utf-8'))
+            with db.engine.begin() as conn:
+                conn.exec_driver_sql(sql)
+            import_legacy(db)
+            app = create_app(db)
+
+            @app.post('/__e2e__/projects')
+            def seed():
+                # Reuse the qualified operation storage fixture: stable logical
+                # IDs/nonzero offsets, fresh project/document IDs for each test.
+                project_id, _ = persisted_base(db)
+                return {'projectId': project_id}
+
+            with socket.socket() as sock:
+                sock.bind(('127.0.0.1', 0))
+
+                class HarnessServer(uvicorn.Server):
+                    async def startup(self, sockets=None):
+                        await super().startup(sockets=sockets)
+                        if self.started:
+                            print('E2E_READY ' + json.dumps({'port': sock.getsockname()[1]}), flush=True)
+
+                server = HarnessServer(uvicorn.Config(app, log_level='warning', access_log=False))
+
+                def stop_on_eof():
+                    sys.stdin.buffer.read()
+                    server.should_exit = True
+
+                Thread(target=stop_on_eof, daemon=True).start()
+                server.run(sockets=[sock])
+    finally:
+        try:
+            if db is not None:
+                db.close()
+        finally:
+            try:
+                if created:
+                    with admin.connect() as conn:
+                        conn.exec_driver_sql(f'DROP DATABASE "{name}" WITH (FORCE)')
+                        assert not conn.scalar(text('SELECT 1 FROM pg_database WHERE datname=:name'), {'name': name})
+                    print('E2E database cleanup: PASS ' + name, flush=True)
+            finally:
+                admin.dispose()
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except Exception:
+        # Driver exceptions can contain credentials/SQL. Do not forward them.
+        print('E2E backend failed. Check backend interpreter, PostgreSQL access, CREATEDB and fixture setup/cleanup.', file=sys.stderr)
+        raise SystemExit(1)

@@ -12,7 +12,7 @@
     },
     "backend_application_engineer": {
       "model": "gpt-6.1-sol",
-      "reasoning_effort": "high",
+      "reasoning_effort": "medium",
       "confirmed_in_cli": true
     },
     "frontend_cad_engineer": {
