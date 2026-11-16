@@ -20,6 +20,8 @@ from app.persistence.assets import content_hash
 from app.persistence.documents import DocumentRepository, document_hash
 from app.persistence.repositories import PersistenceError, ProjectRepository
 from app.services.operations.registry import REGISTRY, preview_operations
+from app.services.operations.engineering import load_choices
+from app.persistence.assets import AssetStore
 
 
 @dataclass(frozen=True)
@@ -32,7 +34,7 @@ class _PreparedBatch:
     changed: bool
 
 
-def _prepare(base, request):
+def _prepare(base, request, choices=None):
     """Materialize canonical values without a database transaction or file I/O."""
     candidate = ResolvedDocument.model_validate(base.model_dump(mode='json', include={'document', 'snapshots'}))
     before = candidate.document.model_dump(mode='json')
@@ -48,7 +50,7 @@ def _prepare(base, request):
         model = REGISTRY[operation.type].model
         before_ref = getattr(candidate.document.models, model)
         single = request.model_copy(update={'operations': [operation]})
-        preview = preview_operations(candidate, single)
+        preview = preview_operations(candidate, single, choices)
         candidate = preview.candidate
         after_ref = getattr(candidate.document.models, model)
         payload = operation.model_dump(mode='json')
@@ -123,9 +125,11 @@ class OperationBatchRepository:
             replay = self._replay(session, project['id'], idempotency_key, payload_hash)
             if replay is not None:
                 return replay
+            choices = load_choices(session, AssetStore(self.db.settings.asset_root), base, request,
+                                   project['archetype_version_id'])
         # All operation validation and canonical serialization occur after the
         # read session closes. Nothing expensive runs under the project lock.
-        prepared = _prepare(base, request)
+        prepared = _prepare(base, request, choices)
         try:
             with self.db.sessions.begin() as session:
                 projects = ProjectRepository(session)

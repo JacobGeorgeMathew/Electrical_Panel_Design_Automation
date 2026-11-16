@@ -11,8 +11,11 @@ The repository loads a verified working document and closes the read session.
 It evaluates the allowlisted members in order on detached candidates, validates
 identities, finite values, snapshot hashes and references, and retains intermediate
 model states. These are structurally validated drafts: requirement rules, physical
-constraints, routing and validation remain unresolved as reported by the existing
-registry. The writer adds no engineering PASS claim and invokes no optimization,
+constraints, routing and validation remain unresolved as reported by the registry.
+P2-T03 checks each edited requirement against the pinned questionnaire and permitted
+DB choices, and materializes exact published catalog versions for rating/enclosure
+edits in the read session. Detached evaluation follows after the session closes.
+The writer adds no engineering PASS claim and invokes no optimization,
 routing, CAD generation, revision publication or asset writes.
 
 One short write transaction locks the active project, checks for an existing retry
@@ -35,8 +38,8 @@ reversing edits still record their ordered transitions and advance once.
 The document provenance records the last state-changing member. Existing revision
 head, immutable revisions, assets, display/workspace and independent recovery
 state remain intact. Unaccepted `PROPOSED` operations are rejected: this storage
-boundary cannot supply human acceptance. Authoritative physical and engineering
-operation rules and any explicit acceptance workflow require their own tasks.
+boundary cannot supply human acceptance. Further physical operation validation
+and any explicit acceptance workflow require their own tasks.
 
 ## Retry identity and result
 

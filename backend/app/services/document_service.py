@@ -41,6 +41,17 @@ class DocumentService:
         with self.db.sessions() as session:
             return DocumentRepository(session).load(ProjectRepository(session).row(key))
 
+    def preview_operations(self, key, request):
+        from app.persistence.assets import AssetStore
+        from app.services.operations.engineering import load_choices
+        from app.services.operations.registry import preview_operations
+        with self.db.sessions() as session:
+            project = ProjectRepository(session).row(key)
+            base = DocumentRepository(session).load(project)
+            choices = load_choices(session, AssetStore(self.db.settings.asset_root), base, request,
+                                   project['archetype_version_id'])
+        return preview_operations(base, request, choices)
+
     def save(self, key, data):
         with self.db.sessions.begin() as session:
             projects = ProjectRepository(session)

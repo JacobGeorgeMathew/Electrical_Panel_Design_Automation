@@ -17,6 +17,13 @@ from app.persistence.repositories import PersistenceError
 from app.services.design_errors import DesignError
 from app.services.operations.registry import preview_operations
 from tests.test_document_contract import document_fixture
+from app.models.requirements import QuestionSchema
+from app.services.operations.engineering import EngineeringChoices
+
+
+def fixture_choices(base):
+    return EngineeringChoices(questions=(QuestionSchema(id=base.snapshots.requirements.items[0].id,
+        label='Voltage', type='number', options=[230, 400, 415, 690]),))
 
 
 def request_for(base, kind='MoveComponent'):
@@ -28,7 +35,7 @@ def request_for(base, kind='MoveComponent'):
             origin=dict(kind='MANUAL', actor_id='local-user'), affected_models=[model],
             preconditions=dict(snapshot_sha256=getattr(base.document.models, model).sha256),
             target=(dict(cem_component_id='QF001', pdm_component_id='PDM-QF001') if model == 'pdm'
-                    else dict(requirement_id='voltage')),
+                    else dict(requirement_id=base.snapshots.requirements.items[0].id)),
             parameters=(dict(position_mm=dict(x=140, y=200.25, z=37.5)) if model == 'pdm'
                         else dict(value=230)))])
 
@@ -38,8 +45,8 @@ def test_pure_reproducible_preview(kind):
     base = document_fixture()
     before = base.model_dump(mode='json')
     request = OperationPreviewRequest.model_validate(request_for(base, kind))
-    result = preview_operations(base, request)
-    assert result == preview_operations(base, request)
+    result = preview_operations(base, request, fixture_choices(base))
+    assert result == preview_operations(base, request, fixture_choices(base))
     assert base.model_dump(mode='json') == before
     assert result.status == 'PREVIEW' and result.persisted is False
     assert result.before_content_sha256 != result.after_content_sha256
@@ -124,9 +131,9 @@ def test_http_contract_and_no_write_capability():
     app = create_app()
 
     class ReadOnlyService:
-        def load(self, key):
+        def preview_operations(self, key, request):
             assert key == 'project-1'
-            return base
+            return preview_operations(base, request, fixture_choices(base))
 
     app.dependency_overrides[get_document_service] = ReadOnlyService
     client = TestClient(app)
@@ -156,7 +163,7 @@ def test_preview_database_is_unchanged(api, postgres_database):
     path = f"/api/v1/projects/{project['id']}/document"
     base = api.get(path).json()
     requirements = deepcopy(base['snapshots']['requirements'])
-    requirements['items'] = [dict(id='voltage', label='Voltage', value=415, unit='V', state='PROPOSED', source='USER')]
+    requirements['items'] = [dict(id='supply_voltage', label='Voltage', value=415, unit='V', state='PROPOSED', source='USER')]
     response = api.put(path, json=dict(document_id=base['document']['document_id'],
         expected_version=base['document']['lock_version'], expected_document_sequence=0,
         requirements=requirements, configuration={}))

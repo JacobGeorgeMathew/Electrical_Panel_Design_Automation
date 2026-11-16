@@ -1,7 +1,7 @@
 """Pure, ordered preview over a detached, integrity-checked document copy.
 
-No repositories, engines, catalog lookups, asset writes or operation receipts are
-available to handlers. Derived outputs remain stale and checks unresolved.
+Handlers receive detached server-owned catalog choices, never live repositories
+or write capabilities. Derived outputs remain stale and checks unresolved.
 """
 from dataclasses import dataclass
 from types import MappingProxyType
@@ -9,7 +9,8 @@ from typing import Callable
 
 from app.models.document import ResolvedDocument, SnapshotReference, snapshot_sha256
 from app.models.operations import OperationPreview, OperationPreviewRequest, OperationChange, RequiredCheck
-from app.models.requirements import RequirementState
+from app.services.operations.engineering import (EngineeringChoices, update_requirement,
+    change_component_rating, resize_enclosure)
 from app.persistence.documents import document_hash
 from app.persistence.repositories import PersistenceError
 from app.services.design_errors import DesignError
@@ -40,25 +41,6 @@ def move_component(candidate, op):
     return ['position_mm', 'terminals_mm'] if component.terminals else ['position_mm']
 
 
-def update_requirement(candidate, op):
-    requirements = candidate.snapshots.requirements
-    item = next((r for r in requirements.items if r.id == op.target.requirement_id), None)
-    if item is None:
-        reject(op, 'OPERATION_TARGET', 'Requirement target must already exist.')
-    # Do not preserve a validated/derived claim after changing a user value.
-    desired = dict(value=op.parameters.value, state=RequirementState.PROPOSED, source='USER', message=None)
-    fields = [key for key, value in desired.items() if getattr(item, key) != value
-              or (key == 'value' and type(item.value) is not type(value))]
-    if not fields:
-        return []
-    for key, value in desired.items():
-        setattr(item, key, value)
-    requirements.is_valid = False
-    requirements.validation_errors = []
-    requirements.validation_warnings = []
-    return fields + ['validation']
-
-
 @dataclass(frozen=True)
 class OperationDefinition:
     model: str
@@ -73,10 +55,17 @@ REGISTRY = MappingProxyType({
     'UpdateRequirement': OperationDefinition('requirements', update_requirement,
         ('requirements', 'calculations', 'selection', 'connectivity', 'schematic',
          'placement', 'routes', 'physical_validation', 'bom', 'cad'), ('requirement_rules',)),
+    'ChangeComponentRating': OperationDefinition('cem', change_component_rating,
+        ('calculations', 'selection', 'connectivity', 'schematic', 'placement', 'routes',
+         'physical_validation', 'bom', 'cad'), ('requirement_rules', 'physical_constraints', 'routing', 'physical_validation')),
+    'ResizeEnclosure': OperationDefinition('pdm', resize_enclosure,
+        ('placement', 'routes', 'physical_validation', 'bom', 'cad'),
+        ('physical_constraints', 'routing', 'physical_validation')),
 })
 
 
-def preview_operations(resolved: ResolvedDocument, request: OperationPreviewRequest) -> OperationPreview:
+def preview_operations(resolved: ResolvedDocument, request: OperationPreviewRequest,
+                       choices: EngineeringChoices | None = None) -> OperationPreview:
     # Revalidate at this service boundary, including non-HTTP/internal callers.
     request = OperationPreviewRequest.model_validate(request.model_dump(mode='json'))
     candidate = ResolvedDocument.model_validate(resolved.model_dump(mode='json', include={'document', 'snapshots'}))
@@ -96,13 +85,16 @@ def preview_operations(resolved: ResolvedDocument, request: OperationPreviewRequ
         before = snapshot_sha256(snapshot)
         if before != op.preconditions.snapshot_sha256:
             raise PersistenceError('OPERATION_PRECONDITION', 'Target snapshot changed. Repreview against current inputs.', 409)
-        fields = definition.handler(candidate, op)
+        fields = (definition.handler(candidate, op) if op.type == 'MoveComponent'
+                  else definition.handler(candidate, op, choices or EngineeringChoices()))
         after = snapshot_sha256(snapshot)
         if before == after:
             continue
         setattr(doc.models, definition.model, SnapshotReference(sha256=after))
         changes.append(OperationChange(operation_id=op.operation_id, model=definition.model,
-            target_id=(op.target.pdm_component_id if op.type == 'MoveComponent' else op.target.requirement_id),
+            target_id=getattr(op.target, {'MoveComponent': 'pdm_component_id',
+                           'UpdateRequirement': 'requirement_id', 'ChangeComponentRating': 'cem_component_id',
+                           'ResizeEnclosure': 'enclosure_id'}[op.type]),
             before_sha256=before, after_sha256=after, changed_fields=fields))
         for stage in definition.dirty_stages:
             if stage not in doc.dirty_stages:

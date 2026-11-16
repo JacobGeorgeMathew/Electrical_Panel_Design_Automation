@@ -20,6 +20,11 @@ export type Operation = OperationBase & (
       parameters: { position_mm: { x: number; y: number; z: number } }; affected_models?: ['pdm'] }
   | { type: 'UpdateRequirement'; target: { requirement_id: string };
       parameters: { value: number | string | boolean | null }; affected_models?: ['requirements'] }
+  | { type: 'ChangeComponentRating'; target: { cem_component_id: string };
+      parameters: { catalog_id: string; component_version_id: string; current_rating: number }; affected_models?: ['cem'] }
+  | { type: 'ResizeEnclosure'; target: { enclosure_id: string };
+      parameters: { catalog_id: string; component_version_id: string; width: number; height: number; depth: number };
+      affected_models?: ['pdm'] }
 );
 
 export interface OperationPreviewRequest {
@@ -39,9 +44,10 @@ export interface OperationPreview {
   base_sequence: number;
   before_content_sha256: string;
   after_content_sha256: string;
-  changes: { operation_id: string; model: 'requirements' | 'pdm'; target_id: string;
+  changes: { operation_id: string; model: 'requirements' | 'cem' | 'pdm'; target_id: string;
     before_sha256: string; after_sha256: string;
-    changed_fields: ('position_mm' | 'terminals_mm' | 'value' | 'state' | 'source' | 'message' | 'validation')[] }[];
+    changed_fields: ('position_mm' | 'terminals_mm' | 'value' | 'state' | 'source' | 'message' | 'validation' |
+      'component_catalog' | 'enclosure_catalog')[] }[];
   required_checks: { code: 'requirement_rules' | 'physical_constraints' | 'routing' | 'physical_validation';
     status: 'UNRESOLVED' }[];
   dirty_stages: DirtyStage[];

@@ -20,7 +20,10 @@ from app.persistence.repositories import PersistenceError, ProjectRepository
 from app.services.design_errors import DesignError
 from tests.test_design_document_storage import isolated_database, row_images, stored_document
 from tests.test_document_contract import document_fixture
-from tests.test_operations import request_for
+from tests.test_operations import request_for, fixture_choices
+from app.models.document import SnapshotReference, snapshot_sha256
+from app.persistence.repositories import CatalogRepository
+from app.persistence.assets import AssetStore
 
 
 def batch_for(base, count=1, kind='MoveComponent'):
@@ -37,16 +40,20 @@ def batch_for(base, count=1, kind='MoveComponent'):
             member['parameters']['value'] += index * 10
         body['operations'].append(member)
         from app.services.operations.registry import preview_operations
-        candidate = preview_operations(base, OperationPreviewRequest.model_validate(body)).candidate
+        candidate = preview_operations(base, OperationPreviewRequest.model_validate(body), fixture_choices(base)).candidate
     return OperationPreviewRequest.model_validate(body)
 
 
 def persisted_base(database):
     project_id = uuid4()
     _, base = stored_document(project_id)
+    base.snapshots.requirements.items[0].id = 'supply_voltage'
+    base.document.models.requirements = SnapshotReference(sha256=snapshot_sha256(base.snapshots.requirements))
     with database.sessions.begin() as session:
+        archetypes = CatalogRepository(session, AssetStore(database.settings.asset_root)).archetypes()
+        archetype_version = next((a['version_id'] for a in archetypes if a['code'] == 'DB'), None)
         session.execute(insert(m.projects).values(id=project_id, project_code='ops-' + project_id.hex,
-            name='Operation storage', lock_version=1, workspace={'keep': 'display'},
+            name='Operation storage', archetype_version_id=archetype_version, lock_version=1, workspace={'keep': 'display'},
             recovery={'keep': 'checkpoint'}, recovery_version=4))
         DocumentRepository(session).store(base, create=True)
     return str(project_id), base

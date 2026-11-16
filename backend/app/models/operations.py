@@ -7,7 +7,7 @@ from pydantic import Field, model_validator
 from app.models.document import DirtyStage, SHA256, ResolvedDocument
 from app.models.identity import ContractModel, StableID, unique_ids
 
-ModelKind = Literal['requirements', 'pdm']
+ModelKind = Literal['requirements', 'cem', 'pdm']
 
 
 class OperationOrigin(ContractModel):
@@ -76,7 +76,45 @@ class UpdateRequirement(OperationBase):
     affected_models: tuple[Literal['requirements']] = ('requirements',)
 
 
-Operation = Annotated[MoveComponent | UpdateRequirement, Field(discriminator='type')]
+class ComponentTarget(ContractModel):
+    cem_component_id: StableID
+
+
+class CatalogChoice(ContractModel):
+    catalog_id: StableID
+    component_version_id: StableID
+
+
+class RatingParameters(CatalogChoice):
+    current_rating: float = Field(strict=True, gt=0)
+
+
+class ChangeComponentRating(OperationBase):
+    type: Literal['ChangeComponentRating']
+    target: ComponentTarget
+    parameters: RatingParameters
+    affected_models: tuple[Literal['cem']] = ('cem',)
+
+
+class EnclosureTarget(ContractModel):
+    enclosure_id: StableID
+
+
+class EnclosureParameters(CatalogChoice):
+    width: float = Field(strict=True, gt=0)
+    height: float = Field(strict=True, gt=0)
+    depth: float = Field(strict=True, gt=0)
+
+
+class ResizeEnclosure(OperationBase):
+    type: Literal['ResizeEnclosure']
+    target: EnclosureTarget
+    parameters: EnclosureParameters
+    affected_models: tuple[Literal['pdm']] = ('pdm',)
+
+
+Operation = Annotated[MoveComponent | UpdateRequirement | ChangeComponentRating | ResizeEnclosure,
+                      Field(discriminator='type')]
 
 
 class OperationPreviewRequest(ContractModel):
@@ -101,7 +139,7 @@ class OperationChange(ContractModel):
     before_sha256: SHA256
     after_sha256: SHA256
     changed_fields: list[Literal['position_mm', 'terminals_mm', 'value', 'state', 'source',
-                                 'message', 'validation']]
+                                 'message', 'validation', 'component_catalog', 'enclosure_catalog']]
 
 
 class RequiredCheck(ContractModel):
