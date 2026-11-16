@@ -40,11 +40,13 @@ The discovered authoritative files are:
 - `planning/development_lifecycle.json`
 - `planning/schema.json` — this is the actual schema filename, not `development_lifecycle.schema.json`.
 
-The revised plan contains **9 phases, 32 milestones, 119 tasks and 11 specialist agents**. The original 118-task lifecycle is archived at `planning/lifecycle_history/2026-11-13.before-repair.json`. Counts and assignments are read from the active lifecycle.
+The consolidated plan contains **9 phases, 31 milestones, 94 tasks and 11 specialist agents**. All 19 verified tasks through P1-T09 retain their exact definitions. The 119-task predecessor is archived at `planning/lifecycle_history/2026-11-15.before-consolidation.json`; the earlier 118-task plan is also retained. Counts and assignments are read from the active lifecycle.
 
-**Strict order is intentional.** You selected stop-at-blocker behavior. The revised lifecycle declares `P2-T12` before `P2-T10`/`P2-T11`, and limits that task to browser harness bootstrap. Integrated editor checks follow their implementation. Validation rejects forward dependencies and task launches stop on an invalid order; the orchestrator never silently reorders tasks. A skipped task remains unverified and cannot satisfy a dependent task.
+**Strict order is intentional.** You selected stop-at-blocker behavior. The lifecycle declares P2-T12 before combined P2-T10 (which includes former P2-T11), and limits the harness to bootstrap. Integrated checks follow implementation. Validation rejects forward dependencies; the orchestrator never silently reorders tasks. A skipped task remains unverified and cannot satisfy a dependent task.
 
-P0-T05 now accepts a reviewed investigation, including failed native experiments. It does not approve native geometry: mandatory P5-T00 owns the exporter correction and passing native qualification. Twenty P8 tasks remain deferred until explicit selection/activation. See [the repair and continuation guide](../planning/LIFECYCLE_REPAIR.md).
+P0-T05 accepts a reviewed investigation, including failed native experiments. Mandatory combined P5-T00 owns the exporter correction, native qualification and subsequent CAD worker/assembly/export implementation in constituent order. Sixteen consolidated P8 tasks remain deferred until explicit selection/activation. See [the consolidation guide](../planning/TASK_CONSOLIDATION.md) and the historical [repair guide](../planning/LIFECYCLE_REPAIR.md).
+
+Combined tasks keep their first source ID and a `merged_from` list. All original criteria, steps, outputs, inputs and verification profiles remain required for ordinary acceptance; steps/criteria carry source labels. The prompt instructs Codex to complete constituent prerequisites first and report evidence for each original scope. One combined task may require multiple interactive attempts. The developer may explicitly accept a partial result using option 11 below; this records each outstanding exception instead of changing the reported checks. Human approval and phase acceptance checkpoints remain separate.
 
 ## Prerequisites and Arch Linux setup
 
@@ -178,8 +180,21 @@ After Codex exits, the entire report is displayed, including acceptance results,
 8. **Pause/exit**: preserve current state. A reviewable task remains `NEEDS_REVIEW`.
 9. **Record human gate approval**: supply a named authorized approver and signed-decision evidence.
 10. **Confirm human input**: record required external input without storing secrets.
+11. **Mark partial task completed (human override)**: review the latest partial report and outstanding checks, supply your name, evidence and rationale, then explicitly accept responsibility for completing the task with those exceptions. Unlocks dependent tasks.
 
-For a task to become `VERIFIED`, the latest attempt must have exit code zero, a complete unchanged `COMPLETED` report, PASS evidence for every required criterion/profile, unchanged verified prerequisites, and explicit human acceptance. Human-gate tasks additionally require approval for that attempt from a named approver. Required human inputs must be recorded. Skipped/unrun profiles cannot be silently waived.
+Ordinary acceptance (option 1) requires exit code zero, a complete unchanged `COMPLETED` report, PASS evidence for every required criterion/profile, unchanged verified prerequisites, and explicit human acceptance. Human-gate tasks additionally require approval for that attempt from a named approver. Required human inputs must be recorded.
+
+Option 11 allows you to mark a `PARTIALLY_COMPLETED` task **COMPLETED by human override**, including when criteria/profiles contain FAIL, NOT_RUN or UNVERIFIED. It displays the complete report and lists all non-PASS checks before asking for your name, reviewed evidence, rationale covering remaining work/follow-up, and responsibility acknowledgement. This is available immediately after a session or later through:
+
+```sh
+python -m orchestrator.main review TASK-ID
+```
+
+Replace `TASK-ID` with the actual task ID, then choose **11**. This is a separate decision from ordinary acceptance; an exit code or Codex claim never triggers it automatically. Cancelling the confirmation leaves the task partial.
+
+Python saves `status: VERIFIED` so the existing scheduler treats the task as completed. Its acceptance additionally records `mode: HUMAN_OVERRIDE`, `human_assessment: COMPLETED`, the original `PARTIALLY_COMPLETED` assessment, your rationale, responsibility acknowledgement, and each accepted exception with its original result/evidence. The original attempt/report, test results, report hash and attempt count remain unchanged. A `TASK_COMPLETED_BY_HUMAN_OVERRIDE` event and human decision retain the audit trail; status output lists tasks completed this way. Downstream prompts receive the acceptance record, including exceptions.
+
+The override requires a valid unchanged latest partial report with exit code zero and current lifecycle context. It does not accept missing/malformed reports, failed processes, stale or incomplete prerequisites, missing explicit human-gate approval or missing required human input. Use options 9/10 for the latter approvals/input; retry/recover when execution evidence is invalid. Tasks already skipped/blocked/paused must be retried to produce a current partial attempt before using option 11. The override records your choice to accept outstanding work; it does not convert a failed test into a passing test. Reopening the task preserves the override decision and invalidates dependent acceptances as usual.
 
 The software records your assertion of authority and review; it cannot verify professional qualifications, physical measurements or whether evidence is truthful. Those remain human responsibilities.
 
@@ -234,13 +249,13 @@ To preserve unaffected progress, supply the exact predecessor lifecycle. Its fin
 
 ```sh
 python -m orchestrator.main validate --lifecycle-only --require-models
-python -m orchestrator.main reconcile --previous-lifecycle planning/lifecycle_history/2026-11-13.before-repair.json --preview
-python -m orchestrator.main reconcile --previous-lifecycle planning/lifecycle_history/2026-11-13.before-repair.json
+python -m orchestrator.main reconcile --previous-lifecycle planning/lifecycle_history/2026-11-15.before-consolidation.json --preview
+python -m orchestrator.main reconcile --previous-lifecycle planning/lifecycle_history/2026-11-15.before-consolidation.json
 ```
 
 The last command asks for confirmation and a reason. It preserves unchanged records only when task definitions, phase/milestone context, assigned-agent definitions, verification profiles, relevant human gates and global contracts remain compatible. Changed tasks and their dependents lose current acceptance; their attempts and decisions remain recorded. Removed task records are archived. Reordering alone does not change a task's evidence, but dependency edits do. Planning timestamps, scheduling commentary and effort estimates do not invalidate evidence. Active attempts must be recovered first.
 
-For the November 13 repair, the preview preserves P0-T01 through P0-T04. P0-T05 becomes PAUSED, retains both prior attempts, and needs an explicit retry under its narrower investigation criteria. Neither historical report is edited or retroactively accepted. Use `retry P0-T05` and ask for evidence review, not another native repair experiment. A new accepted review unlocks P0-T06; its human product decision remains mandatory.
+For the November 15 consolidation, the preview preserves all 19 verified tasks through P1-T09 and keeps P1-T10 next. Removed constituent execution records are archived, with no completion inferred. Reconciliation permits reference substitutions only for validated consecutive same-agent merges with no prior attempts; global contract edits still invalidate evidence. If your saved fingerprint predates the archived predecessor, stop and identify the matching predecessor rather than resetting state.
 
 `validate --lifecycle-only` validates the plan without loading or changing saved progress; ordinary `validate` also checks saved state. `reconcile --preview` reads state/history without committing a migration or launching Codex. It uses the normal execution lock to avoid racing an active session.
 

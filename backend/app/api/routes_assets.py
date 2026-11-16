@@ -28,7 +28,7 @@ def content(session,service,key,generated):
     if row['generation_status']!='READY': raise PersistenceError('ASSET_NOT_READY','Asset is not ready for download.',409)
     if row['storage_backend']!='LOCAL': raise PersistenceError('STORAGE_UNAVAILABLE','Storage backend is not configured.',503)
     try: path=service.assets.verified_path(row['storage_key'],row['sha256'],row['byte_size'])
-    except AssetUnavailable as exc: raise PersistenceError('ASSET_UNAVAILABLE',str(exc),404) from None
+    except AssetUnavailable: raise PersistenceError('ASSET_UNAVAILABLE','Asset is unavailable or corrupt.',404) from None
     media={'GLB':'model/gltf-binary','JSON':'application/json','PY':'text/x-python','STEP':'application/step'}.get(row['file_format'],'application/octet-stream')
     return FileResponse(path,media_type=media,filename=f"{key}.{row['file_format'].lower()}",headers={'ETag':row['sha256'],'Cache-Control':'private, max-age=31536000, immutable'})
 

@@ -12,6 +12,8 @@ from app.persistence.parameters import resolve_parameters
 from app.persistence.repositories import (CatalogRepository, ProjectRepository, PersistenceError,
     MemoryComponents, MemoryProjects, MemoryEnclosures, identifier, serial)
 from app.persistence.revisions import write_revision
+from app.persistence.documents import DocumentRepository
+from app.persistence.revision_outputs import prepare_outputs
 from app.services.requirement_engine import RequirementEngine
 from app.services.orchestrator import DesignOrchestrator
 from app.services.cad_engine import CADEngine
@@ -19,6 +21,7 @@ from app.services.schematic_engine import SchematicEngine
 from app.services.change_propagation import ChangePropagationEngine
 from app.services.design_errors import DesignError
 from app.services.panel_assembly import assembly_bom
+from app.services.revision_reader import RevisionReader
 
 ENGINE_VERSION='db-pipeline-4'
 
@@ -50,6 +53,8 @@ class ProjectService:
             s.execute(update(m.projects).where(m.projects.c.id==row['id']).values(description=data.description,location=data.location,last_opened_at=datetime.now(timezone.utc)))
             reqs=self.validate(template,pid,data.requirements)
             repo.save_requirements(row,template,reqs,data.requirements)
+            from app.services.document_service import DocumentService
+            DocumentService.create_empty(s, row, template)
             return repo.get(pid)
 
     def update(self,key,data):
@@ -102,6 +107,7 @@ class ProjectService:
         # All DB reads end here, before optimization or geometry generation begins.
         with self.db.sessions() as s:
             project=ProjectRepository(s).get(key)
+            project['_source_document']=DocumentRepository(s).load(ProjectRepository(s).row(key)).model_dump(mode='json')
             catalog=CatalogRepository(s,self.assets)
             template=catalog.template(project['archetype'],project['archetype_version_id'])
             rows=catalog.engine_catalog()
@@ -159,13 +165,17 @@ class ProjectService:
             'rule_versions':[r['id'] for r in rules],'layout_config':serial({**layout.__dict__,'weights':layout.weights.__dict__,
                 'din_categories':sorted(layout.din_categories),'plate_categories':sorted(layout.plate_categories)}),
             'component_versions':{c['id']:c['component_version_id'] for c in result['cem']['components']},
+            'product_versions':{c['id']:c['product_version_id'] for c in result['cem']['components']},
             'cad_model_versions':{c['id']:c['cad_model_version_id'] for c in result['cem']['components']},
             'enclosure_component_version_id':enclosure['component_version_id'],'enclosure_cad_model_version_id':enc_model['id'] if enc_model else None,
             'hardware_component_versions':{h['code']:h['component_version_id'] for h in hardware},
+            'validation_policy_version':result['pdm']['validation_policy']['version'],
             'generator':{'name':'panelstudio-primitives','version':'3'},'input_sha256':content_hash({'requirements':values,'configuration':project['configuration']})}
         files=self.generate_files(result)
+        outputs=prepare_outputs(project,reqs,values,result,manifest,files,
+            project['_source_document'],self.assets,project['lock_version'])
         with self.db.sessions.begin() as s:
-            saved=write_revision(s,project,template,reqs,values,result,manifest,files,project['lock_version'])
+            saved=write_revision(s,project,template,reqs,values,result,manifest,files,project['lock_version'],outputs=outputs)
         return self.load_revision(project['id'],saved['revision_id'])
 
     def generate_files(self,result):
@@ -175,46 +185,47 @@ class ProjectService:
                 {**script,'artifact_type':'FREECAD_SCRIPT','file_format':'PY','generator_name':'existing-freecad-script','generator_version':ENGINE_VERSION}]
 
     def load_revision(self,key,revision_id=None):
-        with self.db.sessions() as s:
-            repo=ProjectRepository(s);project=repo.get(key)
-            rid=identifier(revision_id or project['current_revision_id'])
-            revision=s.execute(select(m.project_revisions).where(m.project_revisions.c.id==rid,m.project_revisions.c.project_id==identifier(project['database_id']))).mappings().first()
-            if revision is None: raise PersistenceError('DESIGN_NOT_FOUND','No saved design revision was found.',404)
-            cem=s.execute(select(m.cem_snapshots).where(m.cem_snapshots.c.project_revision_id==rid)).mappings().first()
-            pdm=s.execute(select(m.pdm_snapshots).where(m.pdm_snapshots.c.project_revision_id==rid)).mappings().first()
-            if not cem or not pdm: raise PersistenceError('DESIGN_NOT_FOUND','This revision has no complete CEM/PDM snapshots.',404)
-            if content_hash(cem['snapshot'])!=cem['sha256'] or content_hash(pdm['snapshot'])!=pdm['sha256']:
-                raise PersistenceError('SNAPSHOT_INTEGRITY','Saved snapshot integrity verification failed.',409)
-            if content_hash({'cem':cem['sha256'],'pdm':pdm['sha256'],'manifest':revision['model_manifest']})!=revision['content_sha256']:
-                raise PersistenceError('REVISION_INTEGRITY','Saved revision manifest integrity verification failed.',409)
-            catalog=CatalogRepository(s,self.assets)
-            artifacts=[catalog.asset_dto(a,True) for a in s.execute(select(m.generated_artifacts).where(m.generated_artifacts.c.project_revision_id==rid).order_by(m.generated_artifacts.c.created_at.desc())).mappings()]
-            c,p=deepcopy(cem['snapshot']),deepcopy(pdm['snapshot'])
-            manifest=revision['model_manifest']
-        cem_model,pdm_model=CanonicalEngineeringModel(**c),PhysicalDesignModel(**p)
-        return {'cem':c,'pdm':p,'schematic':SchematicEngine().generate_schematic_data(cem_model),'cad':CADEngine().generate_parametric_geometry(pdm_model),
-            'bom':assembly_bom(cem_model,pdm_model),
-            'validation_errors':p['validation_results'],'revision_id':str(rid),'revision_no':revision['revision_no'],'lock_version':project['lock_version'],
-            'snapshot_sha256':revision['content_sha256'],'manifest':manifest,'artifacts':artifacts,
-            'is_stale':manifest.get('engine_version')!=ENGINE_VERSION or project['current_revision_id']!=str(rid) or manifest.get('input_sha256')!=content_hash({
-                'requirements':project['requirements'],'configuration':project['configuration']})}
+        return RevisionReader(self.db,self.assets,ENGINE_VERSION).read(key,revision_id)
 
-    def restore(self,key,revision_id,expected_version):
+    def convert_revision(self,key,revision_id,expected_version):
+        """Explicitly create new outputs from legacy models; never backfill history."""
+        return self.restore(key,revision_id,expected_version,compatibility_conversion=True)
+
+    def restore(self,key,revision_id,expected_version,*,compatibility_conversion=False):
         result=self.load_revision(key,revision_id)
+        if result['missing_outputs'] and not compatibility_conversion:
+            raise PersistenceError('REVISION_OUTPUT_MISSING',
+                'Legacy outputs are missing. Explicit compatibility conversion creates a new revision.',409)
+        if compatibility_conversion:
+            if not result['missing_outputs']:
+                raise PersistenceError('CONVERSION_NOT_REQUIRED','This revision already has complete outputs.',409)
+            cem_model,pdm_model=CanonicalEngineeringModel(**result['cem']),PhysicalDesignModel(**result['pdm'])
+            result.update(schematic=SchematicEngine().generate_schematic_data(cem_model),
+                cad=CADEngine().generate_parametric_geometry(pdm_model),bom=assembly_bom(cem_model,pdm_model))
         with self.db.sessions() as s:
             repo=ProjectRepository(s);project=repo.get(key)
+            source=DocumentRepository(s).load(repo.row(key)).model_dump(mode='json')
             template=CatalogRepository(s,self.assets).template(project['archetype'],result['manifest']['archetype_version_id'])
             stored=s.execute(select(m.generated_artifacts).where(m.generated_artifacts.c.project_revision_id==identifier(revision_id),m.generated_artifacts.c.generation_status=='READY')).mappings().all()
+            if result['output_manifest'] is not None:
+                original_ids={a['id'] for a in result['output_manifest']['artifacts']}
+                stored=[a for a in stored if str(a['id']) in original_ids]
             files=[{k:a[k] for k in ('artifact_type','file_format','storage_backend','storage_key','sha256','byte_size','generator_name','generator_version')} for a in stored]
             requirement_ids=list(s.scalars(select(m.project_requirements.c.id).where(m.project_requirements.c.project_revision_id==identifier(revision_id))))
             historic_answers=repo.answer_values(requirement_ids)
         values={r['id']:r['value'] for r in result['cem']['requirements'] if r['value'] is not None}
         values.update(historic_answers)
-        reqs=self.validate(template,key,values)
+        reqs=self.validate(template,project['id'],values)
         project['configuration']=result['manifest'].get('configuration',{})
         manifest={**result['manifest'],'restored_from_revision_id':revision_id}
+        manifest['input_sha256']=content_hash({'requirements':values,'configuration':project['configuration']})
+        if compatibility_conversion:
+            manifest.update(engine_version=ENGINE_VERSION,generator={'name':'panelstudio-primitives','version':'3'},
+                compatibility_converted_from_revision_id=revision_id)
+            files=self.generate_files(result)
+        outputs=prepare_outputs(project,reqs,values,result,manifest,files,source,self.assets,expected_version)
         with self.db.sessions.begin() as s:
-            saved=write_revision(s,project,template,reqs,values,result,manifest,files,expected_version)
+            saved=write_revision(s,project,template,reqs,values,result,manifest,files,expected_version,outputs=outputs)
         return self.load_revision(key,saved['revision_id'])
 
     def propagate(self,key,field,value,expected_version=None):
@@ -262,5 +273,5 @@ class ProjectService:
                     .values(**file,generation_status='READY',completed_at=datetime.now(timezone.utc)))
         except Exception:
             with self.db.sessions.begin() as s:
-                s.execute(update(m.generated_artifacts).where(m.generated_artifacts.c.id==identifier(job)).values(
+                s.execute(update(m.generated_artifacts).where(m.generated_artifacts.c.id==identifier(job),m.generated_artifacts.c.generation_status=='PENDING').values(
                     generation_status='FAILED',error={'code':'GENERATION_FAILED','message':'Generation failed; regenerate this saved revision.'},completed_at=datetime.now(timezone.utc)))

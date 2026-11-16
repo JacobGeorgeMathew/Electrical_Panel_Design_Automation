@@ -28,7 +28,7 @@ def initialize(database):
 
 def main():
     parser=argparse.ArgumentParser()
-    parser.add_argument('action',choices=['initialize','status','import-legacy','import-panel-hardware','seed-constraints','verify-baseline','audit-assets'])
+    parser.add_argument('action',choices=['initialize','status','import-legacy','import-panel-hardware','seed-constraints','verify-baseline','audit-assets','audit-revisions'])
     args=parser.parse_args()
     database=Database(Settings.load())
     try:
@@ -52,16 +52,16 @@ def main():
             from app.persistence.seed_constraints import seed_constraints
             print(json.dumps(seed_constraints(database)))
         elif args.action=='audit-assets':
-            from sqlalchemy import select
-            from app.persistence import models as m
-            from app.persistence.assets import AssetStore
-            assets=AssetStore(database.settings.asset_root)
-            with database.sessions() as session:
-                rows=[dict(r) for table in (m.cad_assets,m.generated_artifacts) for r in session.execute(select(table).where(table.c.generation_status=='READY')).mappings()]
-            referenced={r['storage_key'] for r in rows if r['storage_key']}
-            stored={p.relative_to(assets.root).as_posix() for p in assets.root.glob('sha256/*/*/*') if p.is_file()}
-            print(json.dumps({'referenced':len(referenced),'missing_or_corrupt':sum(assets.availability(r)!='READY' for r in rows),
-                              'unreferenced_files':len(stored-referenced),'automatic_deletion':False}))
+            from app.persistence.audit import audit_assets
+            report=audit_assets(database)
+            print(json.dumps(report))
+            if report['missing_or_corrupt']: raise SystemExit(1)
+        elif args.action=='audit-revisions':
+            from app.persistence.audit import audit_revisions
+            report=audit_revisions(database)
+            print(json.dumps(report))
+            if any(report[key] for key in ('invalid_revisions','invalid_documents','invalid_document_snapshots')):
+                raise SystemExit(1)
     except Exception as exc:
         # Database exceptions can include SQL parameters. Keep CLI output safe too.
         from app.persistence.repositories import PersistenceError

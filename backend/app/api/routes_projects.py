@@ -7,8 +7,10 @@ from app.persistence import models as m
 from sqlalchemy import select
 from fastapi import Response
 from app.services.project_lifecycle import ProjectLifecycle
+from app.models.api import OverlayCompatibilityInput
+from app.services.project_package import PackageImportRoute
 
-router=APIRouter(prefix='/api/projects',tags=['projects'])
+router=APIRouter(prefix='/api/projects',tags=['projects'],route_class=PackageImportRoute)
 
 @router.get('',response_model=list[ProjectView])
 def list_projects(page:int=Query(1,ge=1),page_size:int=Query(50,ge=1,le=100),q:str=Query('',max_length=200),recent:bool=False,session=Depends(get_session)):
@@ -56,6 +58,10 @@ def get_answers(project_id:str,session=Depends(get_session)):
     project=ProjectRepository(session).get(project_id)
     return {'answers':project['requirements'],'lock_version':project['lock_version'],'archetype_version_id':project['archetype_version_id']}
 
+@router.post('/{project_id}/compatibility-proposal')
+def compatibility_proposal(project_id:str,data:OverlayCompatibilityInput,service=Depends(get_service)):
+    return ProjectLifecycle(service).compatibility_proposal(project_id,data)
+
 @router.get('/{project_id}/requirements')
 def get_requirements(project_id:str,session=Depends(get_session)):
     project=ProjectRepository(session).row(project_id)
@@ -81,3 +87,7 @@ def get_revision(project_id:str,revision_id:str,service=Depends(get_service)):
 @router.post('/{project_id}/revisions/{revision_id}/restore',response_model=DesignPackage,status_code=201)
 def restore_revision(project_id:str,revision_id:str,data:ExpectedVersion,service=Depends(get_service)):
     return service.restore(project_id,revision_id,data.expected_version)
+
+@router.post('/{project_id}/revisions/{revision_id}/compatibility-conversion',response_model=DesignPackage,status_code=201)
+def convert_revision(project_id:str,revision_id:str,data:ExpectedVersion,service=Depends(get_service)):
+    return service.convert_revision(project_id,revision_id,data.expected_version)

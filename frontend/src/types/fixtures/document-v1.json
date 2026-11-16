@@ -1,0 +1,407 @@
+{
+  "document": {
+    "schema_version": "1.0.0",
+    "document_id": "document-1",
+    "project_id": "project-1",
+    "panel_id": "panel-1",
+    "archetype": "DB",
+    "document_sequence": 7,
+    "lock_version": 3,
+    "base_revision_id": null,
+    "models": {
+      "requirements": {
+        "schema_version": 1,
+        "sha256": "0051e6d3116b3130bc3658bd4fad498cd381be37df9621aaa5c89e99b977754f"
+      },
+      "cem": {
+        "schema_version": 1,
+        "sha256": "f72aca116bfb522d8804e2c1745c995e761793e4976df4e9d5a6f03965a1f213"
+      },
+      "pdm": {
+        "schema_version": 1,
+        "sha256": "262a836352ce090fbed7b966f226733cd2e8d5dffdac2928f939dcf0fecf0597"
+      },
+      "schematic": {
+        "schema_version": 1,
+        "sha256": "34ef61464f2a79b10673c37473ef981066de5969f9602bf63a001e12bbec3245"
+      }
+    },
+    "configuration": {},
+    "pins": {
+      "engine_version": "db-pipeline-4",
+      "generator": {
+        "name": "panelstudio-primitives",
+        "version": "3"
+      },
+      "catalog_manifest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "validation_policy_version": "strict-v1",
+      "catalog_versions": {},
+      "model_versions": {}
+    },
+    "provenance": {
+      "origin": "MANUAL",
+      "actor_id": "local-user",
+      "last_operation_id": null,
+      "source_revision_id": null,
+      "proposal_id": null,
+      "job_id": null
+    },
+    "dirty_stages": [
+      "routes",
+      "cad"
+    ],
+    "enclosure_interfaces": [
+      {
+        "component_id": "PANEL_ROOT",
+        "terminal_ids": [
+          "EARTH_STUD"
+        ]
+      }
+    ]
+  },
+  "snapshots": {
+    "requirements": {
+      "project_id": "project-1",
+      "archetype": "DB",
+      "items": [
+        {
+          "id": "voltage",
+          "label": "Supply voltage",
+          "value": 415,
+          "unit": "V",
+          "state": "CONFIRMED",
+          "source": "USER",
+          "message": null
+        }
+      ],
+      "is_valid": false,
+      "validation_errors": [],
+      "validation_warnings": []
+    },
+    "cem": {
+      "project_id": "project-1",
+      "panel_id": "panel-1",
+      "panel_type": "DB",
+      "revision": "1.0.0",
+      "state": "DRAFT",
+      "requirements": [
+        {
+          "id": "voltage",
+          "label": "Supply voltage",
+          "value": 415,
+          "unit": "V",
+          "state": "CONFIRMED",
+          "source": "USER",
+          "message": null
+        }
+      ],
+      "modules": [],
+      "loads": [],
+      "components": [
+        {
+          "id": "QF001",
+          "catalog_id": "MCB-01",
+          "component_version_id": null,
+          "product_version_id": null,
+          "cad_model_version_id": null,
+          "name": "Outgoing",
+          "category": "MCB",
+          "current_rating": 32.0,
+          "breaking_capacity": 6.0,
+          "poles": 1,
+          "width": 18.0,
+          "height": 80.0,
+          "depth": 70.0,
+          "mounting": "DIN",
+          "heat_loss": 2.0,
+          "cad_model": "mcb",
+          "quantity": 1,
+          "terminals": [
+            {
+              "id": "OUT",
+              "x": 9,
+              "y": 80,
+              "z": 35
+            }
+          ]
+        }
+      ],
+      "electrical_graph": null,
+      "connections": [
+        {
+          "id": "N-PE-C01",
+          "from_component": "QF001",
+          "from_terminal": "OUT",
+          "to_component": "PANEL_ROOT",
+          "to_terminal": "EARTH_STUD",
+          "net_id": "N-PE",
+          "wire_class": "PE",
+          "conductor_material": null,
+          "cross_section_mm2": null,
+          "insulation_diameter_mm": null,
+          "insulation_type": null,
+          "minimum_bend_radius_mm": null
+        }
+      ],
+      "nets": [
+        {
+          "id": "N-PE",
+          "name": "PE",
+          "voltage_level": 0.0,
+          "wire_class": "PE",
+          "connections": [
+            {
+              "id": "N-PE-C01",
+              "from_component": "QF001",
+              "from_terminal": "OUT",
+              "to_component": "PANEL_ROOT",
+              "to_terminal": "EARTH_STUD",
+              "net_id": "N-PE",
+              "wire_class": "PE",
+              "conductor_material": null,
+              "cross_section_mm2": null,
+              "insulation_diameter_mm": null,
+              "insulation_type": null,
+              "minimum_bend_radius_mm": null
+            }
+          ]
+        }
+      ],
+      "calculations": [],
+      "constraints": [],
+      "compliance": [],
+      "physical_design_id": "pdm-1",
+      "dirty_nodes": []
+    },
+    "pdm": {
+      "id": "pdm-1",
+      "project_id": "project-1",
+      "panel_id": "panel-1",
+      "enclosure_id": "ENC-1",
+      "enclosure_width": 600.0,
+      "enclosure_height": 800.0,
+      "enclosure_depth": 250.0,
+      "ip_rating": "IP54",
+      "mounting_plate_x": 25.0,
+      "mounting_plate_y": 30.0,
+      "mounting_plate_z": 20.0,
+      "mounting_plate_width": null,
+      "mounting_plate_height": null,
+      "zones": [
+        {
+          "name": "DIN",
+          "x_min": 25.0,
+          "x_max": 575.0,
+          "y_min": 30.0,
+          "y_max": 770.0,
+          "z_min": 0.0,
+          "z_max": 300.0
+        }
+      ],
+      "components": [
+        {
+          "id": "PDM-QF001",
+          "cem_component_id": "QF001",
+          "name": "Outgoing",
+          "category": "MCB",
+          "position": {
+            "x": 125.5,
+            "y": 200.25,
+            "z": 37.5
+          },
+          "width": 18.0,
+          "height": 80.0,
+          "depth": 70.0,
+          "rotation_deg": 0.0,
+          "rail_id": "rail-1",
+          "zone_name": "DIN",
+          "heat_loss_watts": 2.0,
+          "cad_model": "mcb",
+          "cad_model_version_id": null,
+          "preview_asset": null,
+          "color_hex": "#3B82F6",
+          "terminals": [
+            {
+              "id": "OUT",
+              "x": 134.5,
+              "y": 280.25,
+              "z": 72.5
+            }
+          ],
+          "geometry": []
+        }
+      ],
+      "rails": [
+        {
+          "id": "rail-1",
+          "label": "Rail",
+          "x": 50.0,
+          "y": 200.0,
+          "z": 30.0,
+          "length": 500.0,
+          "profile_height": 35.0,
+          "profile_depth": 7.5,
+          "orientation": "HORIZONTAL"
+        }
+      ],
+      "ducts": [
+        {
+          "id": "duct-1",
+          "label": "Duct",
+          "x": 50.0,
+          "y": 300.0,
+          "z": 20.0,
+          "width": 500.0,
+          "height": 40.0,
+          "depth": 40.0,
+          "capacity_pct": 0.0,
+          "catalog_id": "",
+          "component_version_id": null,
+          "orientation": "HORIZONTAL",
+          "wall_mm": 2.0,
+          "usable_area_mm2": 0.0,
+          "max_fill_pct": 40.0,
+          "wire_area_mm2": 0.0,
+          "route_ids": [
+            "route-1"
+          ],
+          "allowed_wire_classes": []
+        }
+      ],
+      "accessories": [],
+      "construction": {},
+      "busbars": [],
+      "routes": [
+        {
+          "id": "route-1",
+          "net_id": "N-PE",
+          "net_name": "PE",
+          "from_component": "QF001",
+          "from_terminal": "OUT",
+          "to_component": "PANEL_ROOT",
+          "to_terminal": "EARTH_STUD",
+          "wire_class": "PE",
+          "waypoints": [
+            {
+              "x": 134.5,
+              "y": 280.25,
+              "z": 72.5
+            },
+            {
+              "x": 134.5,
+              "y": 380.25,
+              "z": 72.5
+            }
+          ],
+          "length_mm": 100.0,
+          "bend_count": 0,
+          "color_hex": "#EF4444",
+          "duct_ids": [
+            "duct-1"
+          ],
+          "duct_entry_index": null,
+          "duct_exit_index": null,
+          "wire_diameter_mm": 3.0,
+          "conductor_id": "N-PE-C01",
+          "dimension_source": "legacy-estimate",
+          "minimum_bend_radius_mm": null,
+          "routing_algorithm": "legacy-jps-theta",
+          "routing_config": {},
+          "status": "UNRESOLVED",
+          "geometry": null,
+          "validation_checks": []
+        }
+      ],
+      "clearances": [],
+      "validation_results": [],
+      "validation_policy": {
+        "version": "strict-v1",
+        "din_clearance_mm": 4.0,
+        "plate_clearance_mm": 20.0,
+        "wire_clearance_mm": 5.0,
+        "thermal_density_limit_w_per_l": 0.45
+      },
+      "total_heat_loss_watts": 0.0,
+      "thermal_density_index": 0.0
+    },
+    "schematic": {
+      "schema_version": "1.0.0",
+      "id": "schematic-1",
+      "project_id": "project-1",
+      "panel_id": "panel-1",
+      "page_id": "page-1",
+      "coordinate_system": "schematic-mm-top-left",
+      "width_mm": 1200.0,
+      "height_mm": 1000.0,
+      "symbols": [
+        {
+          "id": "symbol-1",
+          "component_id": "QF001",
+          "position": {
+            "x": 100.0,
+            "y": 100.0
+          },
+          "width_mm": 100.0,
+          "height_mm": 70.0,
+          "rotation_deg": 0.0,
+          "label": "",
+          "pins": [
+            {
+              "id": "pin-1",
+              "terminal_id": "OUT",
+              "position": {
+                "x": 150.0,
+                "y": 170.0
+              },
+              "direction": "BOTTOM",
+              "label": ""
+            }
+          ]
+        },
+        {
+          "id": "symbol-2",
+          "component_id": "PANEL_ROOT",
+          "position": {
+            "x": 100.0,
+            "y": 300.0
+          },
+          "width_mm": 100.0,
+          "height_mm": 70.0,
+          "rotation_deg": 0.0,
+          "label": "",
+          "pins": [
+            {
+              "id": "pin-2",
+              "terminal_id": "EARTH_STUD",
+              "position": {
+                "x": 150.0,
+                "y": 300.0
+              },
+              "direction": "TOP",
+              "label": ""
+            }
+          ]
+        }
+      ],
+      "wires": [
+        {
+          "id": "wire-1",
+          "conductor_id": "N-PE-C01",
+          "source_pin_id": "pin-1",
+          "target_pin_id": "pin-2",
+          "waypoints": [
+            {
+              "x": 150.0,
+              "y": 170.0
+            },
+            {
+              "x": 150.0,
+              "y": 300.0
+            }
+          ],
+          "label": ""
+        }
+      ]
+    }
+  }
+}

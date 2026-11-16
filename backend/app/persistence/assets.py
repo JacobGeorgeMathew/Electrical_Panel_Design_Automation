@@ -3,6 +3,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import struct
 import tempfile
 from pathlib import Path
@@ -21,7 +22,9 @@ class AssetStore:
             raise ValueError("Unsupported managed asset format.")
         digest = hashlib.sha256(data).hexdigest()
         key = f"sha256/{digest[:2]}/{digest[2:4]}/{digest}.{extension}"
-        target = self.root / key
+        target = (self.root / key).resolve()
+        if not target.is_relative_to(self.root):
+            raise AssetUnavailable("Asset path is outside managed storage.")
         target.parent.mkdir(parents=True, exist_ok=True)
         if not target.exists():
             fd, temporary = tempfile.mkstemp(prefix=".pending-", dir=target.parent)
@@ -30,7 +33,11 @@ class AssetStore:
                     stream.write(data)
                     stream.flush()
                     os.fsync(stream.fileno())
-                os.replace(temporary, target)
+                # Linking is atomic and cannot replace a concurrent publication.
+                try:
+                    os.link(temporary, target)
+                except FileExistsError:
+                    pass
             finally:
                 if os.path.exists(temporary):
                     os.unlink(temporary)
@@ -38,20 +45,29 @@ class AssetStore:
         return {"storage_backend": "LOCAL", "storage_key": key, "sha256": digest, "byte_size": len(data)}
 
     def verified_path(self, key: str, digest: str, size: int | None = None) -> Path:
-        if not key or not digest:
-            raise AssetUnavailable("Asset metadata is incomplete.")
-        path = (self.root / key).resolve()
-        if not path.is_relative_to(self.root) or not path.is_file():
-            raise AssetUnavailable("Asset file is unavailable.")
-        if size is not None and path.stat().st_size != size:
-            raise AssetUnavailable("Asset integrity check failed.")
-        hasher = hashlib.sha256()
-        with path.open("rb") as stream:
-            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-                hasher.update(chunk)
-        if hasher.hexdigest() != digest:
-            raise AssetUnavailable("Asset integrity check failed.")
-        return path
+        try:
+            if (not isinstance(key, str) or not isinstance(digest, str)
+                    or not re.fullmatch(r'[0-9a-f]{64}', digest)
+                    or not re.fullmatch(r'sha256/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{64}\.(glb|json|py|step|fcstd|pdf)', key)
+                    or key != f'sha256/{digest[:2]}/{digest[2:4]}/{digest}.{key.rsplit(".", 1)[-1]}'
+                    or (size is not None and (type(size) is not int or size < 0))):
+                raise AssetUnavailable("Asset metadata is invalid.")
+            path = self.root / key
+            if path.resolve() != path or not path.is_file():
+                raise AssetUnavailable("Asset file is unavailable.")
+            if size is not None and path.stat().st_size != size:
+                raise AssetUnavailable("Asset integrity check failed.")
+            hasher = hashlib.sha256()
+            with path.open("rb") as stream:
+                for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                    hasher.update(chunk)
+            if hasher.hexdigest() != digest:
+                raise AssetUnavailable("Asset integrity check failed.")
+            return path
+        except (OSError, ValueError, TypeError, RuntimeError) as exc:
+            if isinstance(exc, AssetUnavailable):
+                raise
+            raise AssetUnavailable("Asset file is unavailable or corrupt.") from None
 
     def availability(self, row) -> str:
         try:

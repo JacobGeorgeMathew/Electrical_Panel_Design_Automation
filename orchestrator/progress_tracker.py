@@ -17,7 +17,7 @@ TRANSITIONS = {
     "IN_PROGRESS": {"NEEDS_REVIEW", "FAILED", "PARTIALLY_COMPLETED", "PAUSED"},
     "NEEDS_REVIEW": {"VERIFIED", "READY", "BLOCKED", "SKIPPED", "PAUSED"},
     "FAILED": {"READY", "BLOCKED", "SKIPPED", "PAUSED"},
-    "PARTIALLY_COMPLETED": {"READY", "BLOCKED", "SKIPPED", "PAUSED"},
+    "PARTIALLY_COMPLETED": {"READY", "BLOCKED", "SKIPPED", "PAUSED", "VERIFIED"},
     "PAUSED": {"READY", "BLOCKED", "SKIPPED", "NEEDS_REVIEW"},
     "SKIPPED": {"READY", "BLOCKED"},
     "VERIFIED": {"READY", "BLOCKED"},
@@ -122,6 +122,15 @@ class ProgressTracker:
                     assert record["acceptance"]["attempt"] == record["attempt_count"]
                     assert record["acceptance"]["reviewer"].strip() and record["acceptance"]["evidence"].strip()
                     assert record["acceptance"]["report_sha256"] == record["attempts"][-1]["report_sha256"]
+                    if record["acceptance"].get("mode") == "HUMAN_OVERRIDE":
+                        acceptance = record["acceptance"]
+                        assert acceptance["human_assessment"] == "COMPLETED"
+                        assert acceptance["original_assessment"] == "PARTIALLY_COMPLETED"
+                        assert acceptance["rationale"].strip()
+                        assert acceptance["responsibility_acknowledged"] is True
+                        assert isinstance(acceptance["accepted_exceptions"], list)
+                        assert any(d.get("action") == "HUMAN_COMPLETION_OVERRIDE" and d.get("acceptance") == acceptance
+                                   for d in record["human_decisions"])
             active = [tid for tid, r in state["tasks"].items() if r["status"] in {"RESERVED", "IN_PROGRESS"}]
             assert len(active) <= 1
             assert (active[0] if active else None) == state["current_task_id"]

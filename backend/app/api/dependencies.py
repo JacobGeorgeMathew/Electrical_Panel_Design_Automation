@@ -1,6 +1,7 @@
 from fastapi import Depends, Request
 from app.persistence.repositories import PersistenceError
 from app.services.project_service import ProjectService
+from app.services.document_service import DocumentService
 
 def get_database(request: Request):
     db=getattr(request.app.state,'database',None)
@@ -14,3 +15,6 @@ def get_session(database=Depends(get_database)):
 
 def get_service(request: Request,database=Depends(get_database)):
     return ProjectService(database,getattr(request.app.state,'cad_executor',None))
+
+def get_document_service(database=Depends(get_database)):
+    return DocumentService(database)

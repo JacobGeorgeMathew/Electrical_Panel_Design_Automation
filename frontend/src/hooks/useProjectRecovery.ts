@@ -9,10 +9,12 @@ export function useProjectRecovery(){
     const checkpoint=()=>{
       const state=useProjectStore.getState();
       const fingerprint=JSON.stringify([state.projectId,state.editSequence,state.lockVersion]);
+      const localVersion=JSON.stringify([fingerprint,state.recoveryVersion]);
+      clearTimeout(timer);
       if(!state.projectId||!state.hasUnsavedChanges||state.pendingRecovery)return;
-      if(localFingerprint!==fingerprint){
-        try{writeRecovery(state.projectId,{base_version:state.lockVersion,saved_at:new Date().toISOString(),document:recoveryDocument(state)});localFingerprint=fingerprint;}
-        catch{localFingerprint=fingerprint;useProjectStore.setState({autosaveStatus:'Local recovery storage is unavailable. Save your project before leaving.'});return;}
+      if(localFingerprint!==localVersion){
+        try{writeRecovery(state.projectId,{schema_version:2,recovery_sequence:state.recoveryVersion,base_version:state.lockVersion,saved_at:new Date().toISOString(),document:recoveryDocument(state)});localFingerprint=localVersion;}
+        catch{localFingerprint=localVersion;useProjectStore.setState({autosaveStatus:'Local recovery storage is unavailable. Save your project before leaving.'});return;}
       }
       if(!state.isSaving&&!state.isGenerating&&sentFingerprint!==fingerprint){
         clearTimeout(timer);
@@ -20,6 +22,7 @@ export function useProjectRecovery(){
       }
     };
     const unsubscribe=useProjectStore.subscribe(checkpoint);
+    checkpoint();
     const beforeUnload=(event:BeforeUnloadEvent)=>{
       const state=useProjectStore.getState();
       if(state.hasUnsavedChanges){checkpoint();event.preventDefault();event.returnValue='';}

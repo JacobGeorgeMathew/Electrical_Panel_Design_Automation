@@ -64,6 +64,7 @@ export const Layout2DViewer: React.FC<{embedded?:boolean}> = ({embedded=false}) 
   };
 
   const beginDrag = (event: React.PointerEvent<SVGGElement>, id: string) => {
+    if(useProjectStore.getState().viewedRevisionId){selectObject(id);return;}
     if (!svgRef.current) return;
     event.preventDefault();
     event.stopPropagation();

@@ -56,7 +56,7 @@ def decision_menu(task, tracker, reports, decisions):
     """Return retry instructions only after explicit human action; never launch here."""
     tid = task["id"]
     while True:
-        ui.display("\n1 ACCEPT TASK  2 REVIEW REPORT  3 RETRY  4 RETRY WITH INSTRUCTIONS\n5 REOPEN  6 SKIP  7 MARK BLOCKED  8 PAUSE / EXIT\n9 RECORD HUMAN GATE APPROVAL  10 CONFIRM HUMAN INPUT")
+        ui.display("\n1 ACCEPT TASK  2 REVIEW REPORT  3 RETRY  4 RETRY WITH INSTRUCTIONS\n5 REOPEN  6 SKIP  7 MARK BLOCKED  8 PAUSE / EXIT\n9 RECORD HUMAN GATE APPROVAL  10 CONFIRM HUMAN INPUT\n11 MARK PARTIAL TASK COMPLETED (HUMAN OVERRIDE)")
         action = ui.ask("Action: ")
         try:
             if action == "1":
@@ -91,6 +91,23 @@ def decision_menu(task, tracker, reports, decisions):
                     decisions.gate(tid, approver, evidence)
             elif action == "10":
                 decisions.human_input(tid, ui.ask("Human input supplied / evidence: "))
+            elif action == "11":
+                review = decisions.partial_acceptance_review(tid)
+                ui.display(f"Human completion override for {tid}, attempt {review['attempt']}. Original report: {review['report_path']}")
+                ui.display("This accepts the task and unlocks dependencies. The original PARTIALLY_COMPLETED assessment and test results remain recorded.")
+                for item in review["exceptions"]:
+                    ui.display(f"{item['kind']} {item['id']}: {item['result']} — {item['description']}\nEvidence: {item['evidence']}")
+                if not review["exceptions"]:
+                    ui.display("All structured results say PASS; review Remaining work and Problems encountered for the reason Codex reported partial completion.")
+                _, report = report_for(task, tracker, reports)
+                ui.show_report(report, tracker.state["tasks"][tid]["attempts"][-1])
+                reviewer = ui.ask("Developer accepting responsibility (name): ")
+                evidence = ui.ask("Evidence reviewed (references and results): ")
+                rationale = ui.ask("Why accept completion? Address remaining work, accepted exceptions and follow-up: ")
+                if ui.confirm("I have reviewed this attempt and accept responsibility for marking it COMPLETED, including the listed exceptions and downstream consequences. Confirm?"):
+                    decisions.accept_partial(tid, reviewer, evidence, rationale, responsibility_acknowledged=True)
+                    ui.display(f"{tid}: COMPLETED by human override (saved as VERIFIED for dependency scheduling).")
+                    return None
             else:
                 ui.display("Choose a number from the menu.")
         except OrchestratorError as exc:

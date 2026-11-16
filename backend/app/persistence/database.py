@@ -1,6 +1,7 @@
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from app.persistence.config import Settings
+from app.persistence.publication_guards import install_publication_guards
 
 
 class Database:
@@ -10,11 +11,12 @@ class Database:
             max_overflow=settings.max_overflow, pool_timeout=5, echo=False, hide_parameters=True,
             connect_args={"connect_timeout": settings.connect_timeout, "application_name": "panelstudio"})
         self.sessions = sessionmaker(self.engine, expire_on_commit=False)
+        install_publication_guards(self.engine)
 
     def ready(self) -> bool:
         try:
             with self.engine.connect() as conn:
-                return conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0004_projects"
+                return conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0005_design_documents"
         except Exception:
             return False
 

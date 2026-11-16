@@ -17,7 +17,7 @@ beforeEach(()=>{
   Object.defineProperty(window,'innerWidth',{value:1440,writable:true,configurable:true});
   vi.clearAllMocks();host=document.createElement('div');document.body.append(host);root=createRoot(host);
   useWorkspaceStore.setState({browserOpen:true,inspectorOpen:true,bottomOpen:true,browserWidth:180,inspectorWidth:224,bottomHeight:128,tool:'select',measurement:[],cameraCommand:null});
-  useProjectStore.setState({projectId:'P',projectName:'Factory distribution',projectDescription:'Workshop',projectLocation:'Site',activeTab:'threeD',
+  useProjectStore.setState({document:null,viewedRevisionId:null,publishedDesign:null,projectId:'P',projectName:'Factory distribution',projectDescription:'Workshop',projectLocation:'Site',activeTab:'threeD',
     cem:{components:[component],connections:[]} as any,pdm:{id:'PDM-P',components:[{...component,id:'PDM-Q1',cem_component_id:'Q1',position:{x:20,y:30,z:10},heat_loss_watts:1}],routes:[],rails:[],accessories:[],ducts:[],validation_results:[]} as any,
     selectedObjectId:null,editorTransforms:{},editorHiddenComponentIds:[],isSaving:false,isGenerating:false,isLoadingProject:false,pendingRecovery:null,
     hasUnsavedChanges:false,designStale:false,currentRevisionNo:2,currentRevisionId:'R2',validationErrors:[],validationWarnings:[],errorMessage:null,
@@ -26,6 +26,19 @@ beforeEach(()=>{
 afterEach(()=>{act(()=>root.unmount());host.remove();vi.restoreAllMocks();});
 const click=(selector:string)=>act(()=>(host.querySelector(selector) as HTMLButtonElement).click());
 describe('engineering workspace',()=>{
+  it('labels historical legacy output and disables editing, Save and Publish shortcuts',()=>{
+    const save=vi.spyOn(useProjectStore.getState(),'saveCurrentProject').mockResolvedValue();
+    useProjectStore.setState({viewedRevisionId:'OLD',publishedDesign:{output_status:'MISSING_OUTPUTS',cem:{requirements:[]}} as any,selectedObjectId:'Q1'});
+    act(()=>root.render(<ProjectPage/>));
+    expect(host.querySelector('.workspace-notice')?.textContent).toContain('Historical read-only');
+    expect(host.querySelector('.workspace-notice')?.textContent).toContain('Unsupported legacy output');
+    expect((host.querySelector('[aria-label="Inspector x"]') as HTMLInputElement).disabled).toBe(true);
+    const publish=host.querySelector('[aria-label="Publish engineering revision (compute & publish)"]') as HTMLButtonElement;
+    expect(publish.disabled).toBe(true);
+    act(()=>host.dispatchEvent(new KeyboardEvent('keydown',{key:'s',ctrlKey:true,bubbles:true,cancelable:true})));
+    expect(save).not.toHaveBeenCalled();
+    expect(host.textContent).toContain('Return to working draft');
+  });
   it('offers engineering menus, document tabs, revision and save status',()=>{
     act(()=>root.render(<ProjectPage/>));
     expect(Array.from(host.querySelectorAll('[aria-label="Application menu"] [aria-haspopup]')).map(b=>b.textContent)).toEqual(['File','Edit','View','Design','Tools','Validate','Export','Help']);

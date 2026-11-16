@@ -13,7 +13,7 @@ export interface ProjectRecord {
   current_revision_id: string | null; created_at: string;
   updated_at: string; description: string; location: string; last_opened_at: string | null;
   workspace: {editorTransforms?: Record<string, import('../stores/projectStore').EditorTransform>; schematicData?: any};
-  recovery: import('../stores/projectRecovery').Checkpoint | null; recovery_version: number;
+  recovery: import('./recovery').Checkpoint | null; recovery_version: number;
 }
 export interface RevisionSummary { id: string; revision_no: number; parent_revision_id: string | null; created_at: string; status: string; content_sha256: string; }
 export interface Question {
@@ -38,7 +38,11 @@ export interface CatalogComponent {
 export interface CatalogPage { items: CatalogComponent[]; total: number; page: number; page_size: number; }
 export interface Enclosure extends CatalogComponent { parameters: CadModel[]; mounting_plate_width: number; mounting_plate_height: number; }
 export interface DesignPackage {
-  cem: CanonicalEngineeringModel; pdm: PhysicalDesignModel; schematic: any; cad: any; bom: Record<string, any>[];
+  cem: CanonicalEngineeringModel; pdm: PhysicalDesignModel; schematic: any | null; cad: any | null; bom: Record<string, any>[] | null;
   validation_errors: ValidationViolation[]; revision_id: string; revision_no: number; lock_version: number;
   snapshot_sha256: string; manifest: Record<string, any>; artifacts: Artifact[]; is_stale: boolean;
+  is_non_current: boolean; is_input_stale: boolean; is_version_incompatible: boolean;
+  output_status: 'COMPLETE' | 'MISSING_OUTPUTS'; missing_outputs: string[];
+  output_manifest: Record<string, any> | null; output_manifest_sha256: string | null;
+  compatibility_conversion_available: boolean;
 }

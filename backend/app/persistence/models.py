@@ -368,6 +368,44 @@ components = Table('components', metadata,
     CheckConstraint("lifecycle_status = ANY (ARRAY['ACTIVE'::text, 'OBSOLETE'::text, 'DRAFT'::text])", name='components_lifecycle_status_check'),
 )
 
+design_document_snapshots = Table('design_document_snapshots', metadata,
+    Column('document_id', TEXT(), primary_key=True, nullable=False),
+    Column('model_kind', TEXT(), primary_key=True, nullable=False),
+    Column('schema_version', INTEGER(), primary_key=True, nullable=False),
+    Column('sha256', CHAR(length=64), primary_key=True, nullable=False),
+    Column('snapshot', JSONB(astext_type=Text()), nullable=False),
+    Column('created_at', TIMESTAMP(timezone=True), nullable=False, server_default=text('now()')),
+    ForeignKeyConstraint(['document_id'], ['design_documents.id'], name='design_document_snapshots_document_id_fkey', **{'ondelete': 'RESTRICT'}),
+    CheckConstraint("model_kind = ANY (ARRAY['REQUIREMENTS'::text, 'CEM'::text, 'PDM'::text, 'SCHEMATIC'::text])", name='design_document_snapshots_model_kind_check'),
+    CheckConstraint('schema_version > 0', name='design_document_snapshots_schema_version_check'),
+    CheckConstraint("sha256 ~ '^[0-9a-f]{64}$'::text", name='design_document_snapshots_sha256_check'),
+    CheckConstraint("jsonb_typeof(snapshot) = 'object'::text", name='design_document_snapshots_snapshot_check'),
+)
+
+design_documents = Table('design_documents', metadata,
+    Column('id', TEXT(), primary_key=True, nullable=False),
+    Column('project_id', UUID(), nullable=False),
+    Column('panel_id', TEXT(), nullable=False),
+    Column('schema_version', TEXT(), nullable=False, server_default=text("'1.0.0'::text")),
+    Column('document_sequence', BIGINT(), nullable=False, server_default=text('0')),
+    Column('base_revision_id', UUID(), nullable=True),
+    Column('document', JSONB(astext_type=Text()), nullable=False),
+    Column('content_sha256', CHAR(length=64), nullable=False),
+    Column('created_at', TIMESTAMP(timezone=True), nullable=False, server_default=text('now()')),
+    Column('updated_at', TIMESTAMP(timezone=True), nullable=False, server_default=text('now()')),
+    ForeignKeyConstraint(['project_id'], ['projects.id'], name='design_documents_project_id_fkey', **{'ondelete': 'RESTRICT'}),
+    ForeignKeyConstraint(['project_id', 'base_revision_id'], ['project_revisions.project_id', 'project_revisions.id'], name='fk_design_documents_base_revision', **{'ondelete': 'RESTRICT'}),
+    UniqueConstraint(*['project_id'], name='uq_design_documents_project'),
+    UniqueConstraint(*['project_id', 'id'], name='uq_design_documents_project_id'),
+    CheckConstraint("document @> jsonb_build_object('document_id', id, 'project_id', project_id::text, 'panel_id', panel_id, 'schema_version', schema_version, 'document_sequence', document_sequence)", name='ck_design_documents_metadata'),
+    CheckConstraint("content_sha256 ~ '^[0-9a-f]{64}$'::text", name='design_documents_content_sha256_check'),
+    CheckConstraint("jsonb_typeof(document) = 'object'::text", name='design_documents_document_check'),
+    CheckConstraint('document_sequence >= 0', name='design_documents_document_sequence_check'),
+    CheckConstraint('length(id) > 0', name='design_documents_id_check'),
+    CheckConstraint('length(panel_id) > 0', name='design_documents_panel_id_check'),
+    CheckConstraint('length(schema_version) > 0', name='design_documents_schema_version_check'),
+)
+
 design_rule_versions = Table('design_rule_versions', metadata,
     Column('id', UUID(), primary_key=True, nullable=False, server_default=text('gen_random_uuid()')),
     Column('rule_id', UUID(), nullable=False),
@@ -757,6 +795,7 @@ projects = Table('projects', metadata,
     Column('archetype_version_id', UUID(), nullable=True),
     Column('current_revision_id', UUID(), nullable=True),
     Column('configuration', JSONB(astext_type=Text()), nullable=False, server_default=text("'{}'::jsonb")),
+    Column('lock_version', INTEGER(), nullable=False, server_default=text('1')),
     Column('description', TEXT(), nullable=False, server_default=text("''::text")),
     Column('location', TEXT(), nullable=False, server_default=text("''::text")),
     Column('last_opened_at', TIMESTAMP(timezone=True), nullable=True),
@@ -764,7 +803,6 @@ projects = Table('projects', metadata,
     Column('workspace', JSONB(astext_type=Text()), nullable=False, server_default=text("'{}'::jsonb")),
     Column('recovery', JSONB(astext_type=Text()), nullable=True),
     Column('recovery_version', INTEGER(), nullable=False, server_default=text('0')),
-    Column('lock_version', INTEGER(), nullable=False, server_default=text('1')),
     ForeignKeyConstraint(['id', 'current_revision_id'], ['project_revisions.project_id', 'project_revisions.id'], name='fk_project_current_revision', **{'ondelete': 'RESTRICT', 'use_alter': True}),
     ForeignKeyConstraint(['archetype_version_id'], ['panel_archetype_versions.id'], name='projects_archetype_version_id_fkey', **{'ondelete': 'RESTRICT'}),
     UniqueConstraint(*['project_code'], name='projects_project_code_key'),
@@ -944,6 +982,39 @@ revision_dependencies = Table('revision_dependencies', metadata,
     CheckConstraint("status = ANY (ARRAY['CURRENT'::text, 'STALE'::text, 'FAILED'::text])", name='revision_dependencies_status_check'),
 )
 
+revision_output_manifests = Table('revision_output_manifests', metadata,
+    Column('project_revision_id', UUID(), primary_key=True, nullable=False),
+    Column('project_id', UUID(), nullable=False),
+    Column('schema_version', TEXT(), nullable=False, server_default=text("'1.0.0'::text")),
+    Column('source_document_id', TEXT(), nullable=False),
+    Column('source_document_sequence', BIGINT(), nullable=False),
+    Column('source_document_sha256', CHAR(length=64), nullable=False),
+    Column('manifest', JSONB(astext_type=Text()), nullable=False),
+    Column('sha256', CHAR(length=64), nullable=False),
+    Column('created_at', TIMESTAMP(timezone=True), nullable=False, server_default=text('now()')),
+    ForeignKeyConstraint(['project_id', 'source_document_id'], ['design_documents.project_id', 'design_documents.id'], name='fk_revision_output_manifests_document', **{'ondelete': 'RESTRICT'}),
+    ForeignKeyConstraint(['project_id', 'project_revision_id'], ['project_revisions.project_id', 'project_revisions.id'], name='fk_revision_output_manifests_revision', **{'ondelete': 'RESTRICT'}),
+    CheckConstraint("jsonb_typeof(manifest) = 'object'::text", name='revision_output_manifests_manifest_check'),
+    CheckConstraint('length(schema_version) > 0', name='revision_output_manifests_schema_version_check'),
+    CheckConstraint("sha256 ~ '^[0-9a-f]{64}$'::text", name='revision_output_manifests_sha256_check'),
+    CheckConstraint('source_document_sequence >= 0', name='revision_output_manifests_source_document_sequence_check'),
+    CheckConstraint("source_document_sha256 ~ '^[0-9a-f]{64}$'::text", name='revision_output_manifests_source_document_sha256_check'),
+)
+
+revision_output_snapshots = Table('revision_output_snapshots', metadata,
+    Column('project_revision_id', UUID(), primary_key=True, nullable=False),
+    Column('output_kind', TEXT(), primary_key=True, nullable=False),
+    Column('schema_version', INTEGER(), nullable=False),
+    Column('snapshot', JSONB(astext_type=Text()), nullable=False),
+    Column('sha256', CHAR(length=64), nullable=False),
+    Column('created_at', TIMESTAMP(timezone=True), nullable=False, server_default=text('now()')),
+    ForeignKeyConstraint(['project_revision_id'], ['revision_output_manifests.project_revision_id'], name='revision_output_snapshots_project_revision_id_fkey', **{'ondelete': 'RESTRICT'}),
+    CheckConstraint("output_kind = ANY (ARRAY['DOCUMENT'::text, 'REQUIREMENTS'::text, 'CEM'::text, 'PDM'::text, 'SCHEMATIC'::text, 'BOM'::text, 'CAD'::text, 'VALIDATION'::text, 'INPUTS_AND_PINS'::text])", name='revision_output_snapshots_output_kind_check'),
+    CheckConstraint('schema_version > 0', name='revision_output_snapshots_schema_version_check'),
+    CheckConstraint("sha256 ~ '^[0-9a-f]{64}$'::text", name='revision_output_snapshots_sha256_check'),
+    CheckConstraint("jsonb_typeof(snapshot) = ANY (ARRAY['object'::text, 'array'::text])", name='revision_output_snapshots_snapshot_check'),
+)
+
 rule_applicability = Table('rule_applicability', metadata,
     Column('id', UUID(), primary_key=True, nullable=False, server_default=text('gen_random_uuid()')),
     Column('rule_version_id', UUID(), nullable=False),
@@ -1056,6 +1127,7 @@ Index('ix_pdm_component_cem', pdm_component_instances.c['cem_component_instance_
 Index('ix_product_versions_component', product_versions.c['component_version_id'], product_versions.c['status'], unique=False, postgresql_include=[])
 Index('uq_project_current_requirement', project_requirements.c['project_id'], project_requirements.c['code'], unique=True, postgresql_where=text('(project_revision_id IS NULL)'), postgresql_include=[])
 Index('ix_project_revision_latest', project_revisions.c['project_id'], project_revisions.c['revision_no'].desc(), unique=False, postgresql_include=[])
+Index('ix_projects_recent', projects.c['last_opened_at'].desc(), unique=False, postgresql_where=text('(deleted_at IS NULL)'), postgresql_include=[])
 Index('ix_provenance_subject', provenance.c['subject_kind'], provenance.c['subject_key'], unique=False, postgresql_include=[])
 Index('ix_revision_dependency_target', revision_dependencies.c['project_revision_id'], revision_dependencies.c['target_kind'], revision_dependencies.c['target_key'], unique=False, postgresql_include=[])
 Index('ix_validation_results_run_status', validation_results.c['validation_run_id'], validation_results.c['result_status'], unique=False, postgresql_include=[])
@@ -1141,6 +1213,12 @@ class ComponentVersions(Base):
 
 class Components(Base):
     __table__ = components
+
+class DesignDocumentSnapshots(Base):
+    __table__ = design_document_snapshots
+
+class DesignDocuments(Base):
+    __table__ = design_documents
 
 class DesignRuleVersions(Base):
     __table__ = design_rule_versions
@@ -1268,6 +1346,12 @@ class RevisionComponents(Base):
 class RevisionDependencies(Base):
     __table__ = revision_dependencies
 
+class RevisionOutputManifests(Base):
+    __table__ = revision_output_manifests
+
+class RevisionOutputSnapshots(Base):
+    __table__ = revision_output_snapshots
+
 class RuleApplicability(Base):
     __table__ = rule_applicability
 
@@ -1299,5 +1383,3 @@ Projects.revisions = relationship(ProjectRevisions, foreign_keys=[project_revisi
 CemComponentInstances.terminals = relationship(CemTerminalInstances, viewonly=True)
 CadModelVersions.parameters = relationship(CadParameterDefinitions, viewonly=True)
 ValidationRuns.results = relationship(ValidationResults, viewonly=True)
-
-Index('ix_projects_recent', projects.c.last_opened_at.desc(), postgresql_where=projects.c.deleted_at.is_(None))

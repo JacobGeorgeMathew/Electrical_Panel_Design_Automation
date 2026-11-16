@@ -14,12 +14,49 @@ def reconciliation_plan(previous, current, state):
         if digest(task) != state["tasks"][tid]["definition_hash"]:
             raise OrchestratorError(f"Previous task definition does not match saved progress: {tid}")
 
+    # Only reference substitutions proven by an unattempted, same-agent merge
+    # may preserve unrelated historical acceptances. Work itself is never accepted.
+    aliases = {}
+    positions = {t["id"]: index for index, (_, _, t) in enumerate(previous.ordered)}
+    for tid, task in current.tasks.items():
+        sources = task.get("merged_from", [])
+        if not sources or previous.tasks.get(tid, {}).get("merged_from") == sources:
+            continue
+        if any(source not in previous.tasks for source in sources):
+            raise OrchestratorError(f"{tid}: merge source missing from predecessor lifecycle")
+        originals = [previous.tasks[source] for source in sources]
+        if sources[0] != tid or any(t["assigned_agent"] != task["assigned_agent"] or t["type"] in {"human_gate", "phase_acceptance"} for t in originals):
+            raise OrchestratorError(f"{tid}: consolidation crosses an agent or approval boundary")
+        if [positions[source] for source in sources] != list(range(positions[sources[0]], positions[sources[0]] + len(sources))):
+            raise OrchestratorError(f"{tid}: merge sources must be consecutive")
+        if len({previous.context(source)[0]["id"] for source in sources}) != 1:
+            raise OrchestratorError(f"{tid}: consolidation crosses phase boundaries")
+        if any(state["tasks"][source]["attempt_count"] or state["tasks"][source]["status"] == "VERIFIED" for source in sources):
+            raise OrchestratorError(f"{tid}: attempted/verified tasks cannot be consolidated automatically")
+        if any(source != tid and source in current.tasks for source in sources):
+            raise OrchestratorError(f"{tid}: merge source is still an executable task")
+        aliases.update({source: tid for source in sources})
+
     # Changes to executable context also invalidate evidence, even when the task
     # dictionary itself is identical. Unknown top-level fields fail conservatively.
     scoped = {"phases", "agents", "verification_profiles", "human_decisions"}
     descriptive = {"planning_validation", "scheduling_notes", "estimates"}
+    def remap_references(value):
+        if isinstance(value, list):
+            return [remap_references(v) for v in value]
+        if not isinstance(value, dict):
+            return value
+        result = {}
+        for key, child in value.items():
+            if key in {"task_ids", "required_task_ids", "gate_task_ids"}:
+                result[key] = list(dict.fromkeys(aliases.get(tid, tid) for tid in child))
+            elif key in {"gate_task_id", "exit_task_id"}:
+                result[key] = aliases.get(child, child)
+            else:
+                result[key] = remap_references(child)
+        return result
     def shared(lifecycle):
-        return {k: v for k, v in lifecycle.data.items() if k not in scoped | descriptive}
+        return remap_references({k: v for k, v in lifecycle.data.items() if k not in scoped | descriptive})
 
     def context(lifecycle, tid):
         task = lifecycle.tasks[tid]
@@ -46,6 +83,7 @@ def reconciliation_plan(previous, current, state):
     preserved = old_ids & new_ids - affected
     return {
         "global_context_changed": global_change,
+        "consolidated_task_aliases": aliases,
         "changed": sorted(changed), "added": sorted(new_ids - old_ids), "removed": sorted(old_ids - new_ids),
         "invalidated": sorted(affected & old_ids & new_ids),
         "preserved": sorted(preserved),

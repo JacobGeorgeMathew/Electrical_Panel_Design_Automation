@@ -1,5 +1,9 @@
 # Lifecycle repair and continuation — 2026-11-13
 
+This records the November 13 repair. For the subsequent same-agent consolidation
+and current continuation commands, use [TASK_CONSOLIDATION.md](TASK_CONSOLIDATION.md).
+The 119-task/32-milestone counts below describe the historical repair state.
+
 ## Verified diagnosis
 
 P0-T05 attempt 2 successfully provisioned the pinned FreeCAD runtime, exported

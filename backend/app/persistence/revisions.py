@@ -1,35 +1,32 @@
 """Atomic snapshot + projection writer. No geometry calculations or file I/O here."""
-import math
 from datetime import datetime, timezone
 from uuid import uuid4
 from sqlalchemy import func, insert, select
 from app.persistence import models as m
-from app.persistence.assets import content_hash
 from app.persistence.repositories import ProjectRepository, identifier
+from app.persistence.revision_outputs import write_outputs
 
 
-def transform(position,angle=0):
-    half=math.radians(angle)/2
-    return {'translation_mm':[position[k] for k in ('x','y','z')], 'quaternion_xyzw':[0,0,math.sin(half),math.cos(half)]}
-
-
-def write_revision(session,project,template,req_set,answers,result,manifest,files,expected_version):
+def write_revision(session,project,template,req_set,answers,result,manifest,files,expected_version,*,outputs):
     repo=ProjectRepository(session)
     row=repo.check_version(project['id'],expected_version)
+    if outputs.project_id!=str(row['id']) or outputs.expected_version!=row['lock_version']:
+        raise ValueError('Prepared publication differs from the version fence.')
     # All writes below participate in the caller's single session.begin transaction.
     repo.save_requirements(row,template,req_set,answers)
-    rid=uuid4()
+    rid=outputs.revision_id
     number=(session.scalar(select(func.max(m.project_revisions.c.revision_no)).where(m.project_revisions.c.project_id==row['id'])) or 0)+1
-    cem,pdm=result['cem'],result['pdm']
-    cem_hash,pdm_hash=content_hash(cem),content_hash(pdm)
-    manifest={**manifest,'configuration':project.get('configuration',{}),'saved_lock_version':row['lock_version']+1}
-    revision_hash=content_hash({'cem':cem_hash,'pdm':pdm_hash,'manifest':manifest})
+    cem,pdm=outputs.snapshots['CEM'],outputs.snapshots['PDM']
+    cem_hash,pdm_hash=outputs.hashes['CEM'],outputs.hashes['PDM']
+    manifest=outputs.model_manifest
+    revision_hash=outputs.revision_sha256
     session.execute(insert(m.project_revisions).values(id=rid,project_id=row['id'],revision_no=number,parent_revision_id=row['current_revision_id'],
         status='PUBLISHED',archetype_version_id=identifier(template['archetype_version_id']),rule_set_version_id=identifier(manifest.get('rule_set_version_id')),
         questionnaire_version_ids=[identifier(template['questionnaire_version_id'])] if template['questionnaire_version_id'] else [],
         schema_version=1,model_manifest=manifest,content_sha256=revision_hash,created_by='local-user'))
     session.execute(insert(m.cem_snapshots).values(project_revision_id=rid,schema_version=1,snapshot=cem,sha256=cem_hash))
     session.execute(insert(m.pdm_snapshots).values(project_revision_id=rid,schema_version=1,snapshot=pdm,sha256=pdm_hash))
+    write_outputs(session,outputs)
     drafts=session.execute(select(m.project_requirements).where(m.project_requirements.c.project_id==row['id'],m.project_requirements.c.project_revision_id.is_(None))).mappings().all()
     for req in drafts:
         new_id=uuid4()
@@ -98,22 +95,22 @@ def write_revision(session,project,template,req_set,answers,result,manifest,file
     structures={}
     structures['BACKPLATE']=uuid4()
     session.execute(insert(m.pdm_mounting_structures).values(id=structures['BACKPLATE'],project_revision_id=rid,enclosure_id=enc,stable_key='BACKPLATE',structure_kind='BACKPLATE',
-        transform=transform({'x':pdm['mounting_plate_x'],'y':pdm['mounting_plate_y'],'z':pdm['mounting_plate_z']}),
+        transform=outputs.transforms[('BACKPLATE','BACKPLATE')],
         dimensions_mm={'width':pdm['mounting_plate_width'],'height':pdm['mounting_plate_height'],'depth':3}))
     for rail in pdm.get('rails',[]):
         uid=uuid4(); structures[rail['id']]=uid
         session.execute(insert(m.pdm_mounting_structures).values(id=uid,project_revision_id=rid,enclosure_id=enc,stable_key=rail['id'],structure_kind='DIN_RAIL',
-            transform=transform(rail),dimensions_mm={'length':rail['length'],'height':rail['profile_height'],'depth':rail['profile_depth']},parameters={'orientation':rail['orientation']}))
+            transform=outputs.transforms[('rails',rail['id'])],dimensions_mm={'length':rail['length'],'height':rail['profile_height'],'depth':rail['profile_depth']},parameters={'orientation':rail['orientation']}))
     for kind,collection in (('WIRE_DUCT',pdm.get('ducts',[])),('BUSBAR',pdm.get('busbars',[]))):
         for item in collection:
             uid=uuid4();structures[item['id']]=uid
             session.execute(insert(m.pdm_mounting_structures).values(id=uid,project_revision_id=rid,enclosure_id=enc,stable_key=item['id'],structure_kind=kind,
-                transform=transform(item),dimensions_mm={k:item[k] for k in ('width','height','depth')},parameters=item))
+                transform=outputs.transforms[('ducts' if kind=='WIRE_DUCT' else 'busbars',item['id'])],dimensions_mm={k:item[k] for k in ('width','height','depth')},parameters=item))
     # Mechanical hardware has its own identity and never masquerades as an electrical CEM device.
     for item in pdm.get('accessories',[]):
         uid=uuid4(); structures[item['id']]=uid
         session.execute(insert(m.pdm_mounting_structures).values(id=uid,project_revision_id=rid,enclosure_id=enc,
-            stable_key=item['id'],structure_kind='OTHER',transform=transform(item['position']),
+            stable_key=item['id'],structure_kind='OTHER',transform=outputs.transforms[('accessories',item['id'])],
             dimensions_mm={k:item[k] for k in ('width','height','depth')},parameters=item))
     for code,version in manifest.get('hardware_component_versions',{}).items():
         session.execute(insert(m.revision_components).values(project_revision_id=rid,component_version_id=identifier(version),
@@ -125,10 +122,8 @@ def write_revision(session,project,template,req_set,answers,result,manifest,file
         c=c_by_id[p['cem_component_id']]
         session.execute(insert(m.pdm_component_instances).values(id=pi,project_revision_id=rid,stable_key=p['id'],cem_component_instance_id=components[p['cem_component_id']],
             cad_model_version_id=identifier(c.get('cad_model_version_id')),parameters={'width_mm':p['width'],'height_mm':p['height'],'depth_mm':p['depth']}))
-        pos=p['position']
         session.execute(insert(m.pdm_placements).values(pdm_component_instance_id=pi,mounting_structure_id=structures.get(p.get('rail_id'),structures['BACKPLATE']),
-            transform=transform(pos,p.get('rotation_deg',0)),bounding_box_mm={'min':[pos[k] for k in ('x','y','z')],
-                'max':[pos['x']+p['width'],pos['y']+p['height'],pos['z']+p['depth']]},zone_code=p['zone_name'],evaluated_geometry_hash=pdm_hash))
+            transform=outputs.transforms[('components',p['id'])],bounding_box_mm=outputs.bounds[p['id']],zone_code=p['zone_name'],evaluated_geometry_hash=pdm_hash))
         if c.get('cad_model_version_id'):
             session.execute(insert(m.project_cad_instances).values(project_revision_id=rid,cad_model_version_id=identifier(c['cad_model_version_id']),stable_key=p['id'],
                 evaluated_values={'width_mm':p['width'],'height_mm':p['height'],'depth_mm':p['depth']},generation_status='READY'))
@@ -148,31 +143,23 @@ def write_revision(session,project,template,req_set,answers,result,manifest,file
             owner_component_instance_id=physical.get(clearance['component_id']),region_kind='CLEARANCE',geometry_ref=clearance))
     run=uuid4()
     session.execute(insert(m.validation_runs).values(id=run,project_revision_id=rid,rule_set_version_id=identifier(manifest.get('rule_set_version_id')),
-        engine_name='existing-pdm-validator',engine_version=manifest['engine_version'],status='COMPLETED_WITH_WARNINGS' if result['validation_errors'] else 'PASSED',
+        engine_name='existing-pdm-validator',engine_version=manifest['engine_version'],status='COMPLETED_WITH_WARNINGS' if outputs.snapshots['VALIDATION']['validation_errors'] else 'PASSED',
         input_sha256=pdm_hash,completed_at=datetime.now(timezone.utc)))
     rule_versions=manifest.get('validation_rule_versions',{})
     for kind,rv in rule_versions.items():
-        violations=[v for v in result['validation_errors'] if v['type']==kind]
+        violations=[v for v in outputs.snapshots['VALIDATION']['validation_errors'] if v['type']==kind]
         for v in violations or [None]:
             session.execute(insert(m.validation_results).values(validation_run_id=run,rule_version_id=identifier(rv),rule_code='VALIDATION_'+kind,
                 result_status='WARNING' if v else 'PASS',affected_entities=[v[k] for k in ('object_a','object_b') if v.get(k)] if v else [],
                 measured_values={k:v[k] for k in ('required_value','actual_value','unit')} if v else {},
                 message=v['message'] if v else f'{kind}: no violations reported by the existing prototype validator.',
                 evidence={'engine_version':manifest['engine_version'],'snapshot_sha256':pdm_hash}))
-    for file in files:
-        session.execute(insert(m.generated_artifacts).values(id=uuid4(),project_revision_id=rid,**file,source_model_kind='PDM',source_model_sha256=pdm_hash,
+    for file in outputs.files:
+        session.execute(insert(m.generated_artifacts).values(project_revision_id=rid,**file,source_model_kind='PDM',source_model_sha256=pdm_hash,
             generation_status='READY',completed_at=datetime.now(timezone.utc)))
-    for source_kind,source_key,target_kind,target_key,input_hash,output_hash in [
-        ('REQUIREMENTS','project','CEM','design',content_hash(answers),cem_hash),('CEM','design','PDM','layout',cem_hash,pdm_hash),
-        ('PDM','layout','ROUTING','routes',pdm_hash,content_hash(pdm['routes'])),('ROUTING','routes','CAD','assembly',content_hash(pdm['routes']),pdm_hash)]:
+    for source_kind,source_key,target_kind,target_key,dependency_kind,input_hash,output_hash in outputs.dependencies:
         session.execute(insert(m.revision_dependencies).values(project_revision_id=rid,source_kind=source_kind,source_key=source_key,
-            target_kind=target_kind,target_key=target_key,dependency_kind='DERIVES',input_sha256=input_hash,output_sha256=output_hash))
-    for parameter,value in project.get('configuration',{}).get('enclosure_parameters',{}).items():
-        session.execute(insert(m.revision_dependencies).values(project_revision_id=rid,source_kind='PARAMETER',source_key='ENCLOSURE.'+parameter,
-            target_kind='PDM',target_key='layout',dependency_kind='GEOMETRY_INPUT',input_sha256=content_hash(value),output_sha256=pdm_hash))
-    for c in cem['components']:
-        session.execute(insert(m.revision_dependencies).values(project_revision_id=rid,source_kind='COMPONENT_VERSION',source_key=c['component_version_id'],
-            target_kind='CEM',target_key=c['id'],dependency_kind='SELECTED_SPECIFICATION',input_sha256=content_hash(c['component_version_id']),output_sha256=cem_hash))
+            target_kind=target_kind,target_key=target_key,dependency_kind=dependency_kind,input_sha256=input_hash,output_sha256=output_hash))
     session.execute(insert(m.provenance).values(project_id=row['id'],project_revision_id=rid,subject_kind='DESIGN',subject_key=str(rid),
         source_kind='OPTIMIZER',source_ref=manifest['engine_version'],details={'manifest':manifest,'cem_sha256':cem_hash,'pdm_sha256':pdm_hash}))
     repo.touch(row,current_revision_id=rid,configuration=project.get('configuration',{}),workspace={},recovery=None,recovery_version=row['recovery_version']+1)

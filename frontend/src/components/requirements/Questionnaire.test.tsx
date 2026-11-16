@@ -53,7 +53,7 @@ it('shows the jagged bolt throughout validation and generation and blocks duplic
   useProjectStore.setState({validateCurrentRequirements:validation,runDesignPipeline:generation});
   vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify([]))));
   await act(async()=>{root.render(<Questionnaire/>);await new Promise(resolve=>setTimeout(resolve,0));});
-  const button=Array.from(host.querySelectorAll('button')).find(b=>b.textContent?.includes('Validate & Generate'))!;
+  const button=Array.from(host.querySelectorAll('button')).find(b=>b.textContent?.includes('Validate & Publish'))!;
   act(()=>{button.click();button.click();});
   expect(validation).toHaveBeenCalledOnce();
   expect(button.textContent).toContain('Validating requirements');
@@ -62,10 +62,10 @@ it('shows the jagged bolt throughout validation and generation and blocks duplic
   expect(button.disabled).toBe(true);
   await act(async()=>validate(true));
   expect(generation).toHaveBeenCalledOnce();
-  expect(button.textContent).toContain('Generating design');
+  expect(button.textContent).toContain('Publishing design');
   expect(button.querySelector('.bolt-loader--animated')).not.toBeNull();
   await act(async()=>finish());
-  expect(button.textContent).toContain('Validate & Generate');
+  expect(button.textContent).toContain('Validate & Publish');
   expect(button.querySelector('.bolt-loader')).toBeNull();
   expect(button.disabled).toBe(false);
 });
@@ -75,7 +75,7 @@ it('stops the loading icon when requirements are invalid and skips generation',a
   useProjectStore.setState({validateCurrentRequirements:vi.fn(async()=>false),runDesignPipeline:generation});
   vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify([]))));
   await act(async()=>{root.render(<Questionnaire/>);await new Promise(resolve=>setTimeout(resolve,0));});
-  const button=Array.from(host.querySelectorAll('button')).find(b=>b.textContent?.includes('Validate & Generate'))!;
+  const button=Array.from(host.querySelectorAll('button')).find(b=>b.textContent?.includes('Validate & Publish'))!;
   await act(async()=>button.click());
   expect(generation).not.toHaveBeenCalled();
   expect(button.disabled).toBe(false);

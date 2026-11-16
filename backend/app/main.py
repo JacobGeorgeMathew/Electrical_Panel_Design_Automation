@@ -11,6 +11,7 @@ from app.persistence.config import Settings,ConfigurationError
 from app.persistence.database import Database
 from app.persistence.repositories import PersistenceError
 from app.services.design_errors import DesignError
+from app.api import routes_documents
 
 def create_app(database=None):
     @asynccontextmanager
@@ -32,6 +33,7 @@ def create_app(database=None):
         if db is not None: db.close()
 
     app=FastAPI(title='Automated Electrical Panel Design Platform API',version='1.1.0',lifespan=lifespan)
+    app.include_router(routes_documents.router)
     @app.exception_handler(DesignError)
     async def design_error_handler(request,exc):
         return JSONResponse(status_code=422,content=exc.as_dict())

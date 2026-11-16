@@ -31,6 +31,10 @@ def show_status(scheduler):
         display(f"{key.replace('_', ' ').title()}: {progress[key]}")
     display("States: " + ", ".join(f"{s}: {progress['counts'].get(s, 0)}" for s in
             ("VERIFIED", "FAILED", "BLOCKED", "READY", "NEEDS_REVIEW", "PARTIALLY_COMPLETED", "PAUSED", "SKIPPED")))
+    overrides = [tid for tid, record in scheduler.tracker.state["tasks"].items()
+                 if record["status"] == "VERIFIED" and (record.get("acceptance") or {}).get("mode") == "HUMAN_OVERRIDE"]
+    if overrides:
+        display("Completed by human override (original evidence retained): " + ", ".join(overrides))
     next_task = scheduler.get_next_task()
     pending = scheduler.first_pending()
     display("Next eligible task: " + (next_task["id"] if next_task else "None"))

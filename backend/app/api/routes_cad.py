@@ -3,22 +3,23 @@ from app.api.dependencies import get_service,get_session
 from app.api.routes_assets import asset_row
 from app.models.api import CadJobInput,ArtifactView
 from app.persistence.repositories import CatalogRepository,ProjectRepository,PersistenceError,identifier
-from app.services.cad_engine import CADEngine
-from app.models.pdm import PhysicalDesignModel
+from app.services.revision_reader import RevisionReader
+from app.services.project_service import ENGINE_VERSION
 from app.persistence import models as m
 from sqlalchemy import select
 
 router=APIRouter(prefix='/api/projects/{project_id}',tags=['cad'])
 
 @router.get('/cad')
-def get_cad_geometry(project_id:str,service=Depends(get_service)):
-    return service.load_revision(project_id)['cad']
+def get_cad_geometry(project_id:str,revision_id:str|None=None,service=Depends(get_service)):
+    design=service.load_revision(project_id,revision_id)
+    if design['cad'] is None:
+        raise PersistenceError('REVISION_OUTPUT_MISSING','This legacy revision has no saved CAD output. Explicitly convert it to a new revision.',409)
+    return design['cad']
 
 @router.get('/cad/freecad-script')
-def get_freecad_script(project_id:str,service=Depends(get_service)):
-    design=service.load_revision(project_id)
-    if design['is_stale']: raise PersistenceError('STALE_DESIGN','Generate the current requirements before exporting.',409)
-    return {'script':CADEngine().export_freecad_script(PhysicalDesignModel(**design['pdm'])),'revision_id':design['revision_id']}
+def get_freecad_script(project_id:str,revision_id:str|None=None,service=Depends(get_service)):
+    return RevisionReader(service.db,service.assets,ENGINE_VERSION).freecad_script(project_id,revision_id)
 
 @router.get('/artifacts',response_model=list[ArtifactView])
 def artifacts(project_id:str,service=Depends(get_service)):

@@ -55,6 +55,12 @@ def generate_prompt(lifecycle, task, selection, state, report_path, attempt, roo
               "Preserve unrelated user edits. Do not automatically commit, push, merge, reset, deploy or create worktrees.",
               "Do not change the lifecycle, schema, orchestrator configuration, execution state, journal or history. Python owns progress and human decisions.",
               "Complete only this task. Do not execute subsequent lifecycle tasks. Preserve all prior attempt reports."]
+    if task.get("merged_from"):
+        lines += ["\n# Combined task execution", f"Original task scopes, in order: {', '.join(task['merged_from'])}.",
+                  "These scopes form ONE selected lifecycle task. Complete their labelled steps in original order; verify prerequisite constituent work before proceeding to dependent work.",
+                  "Every labelled acceptance criterion and every required verification profile remains mandatory. Record evidence by original source ID in the single attempt report.",
+                  "If a constituent fails, report remaining work honestly and do not treat the combined task as complete. No partial result satisfies downstream dependencies.",
+                  "Original source IDs are provenance, not additional tasks to launch. Use the selected combined task ID in the orchestrator-result block."]
     if prior:
         lines += ["\n# Prior attempts (read before retrying)"]
         for item in prior:

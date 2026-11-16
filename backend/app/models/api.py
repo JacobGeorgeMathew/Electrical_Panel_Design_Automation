@@ -22,6 +22,17 @@ class RecoveryDocument(InputModel):
     workspace: WorkspaceDocument
     baseRevisionId: str | None
 
+class RecoveryBaseDocument(InputModel):
+    document_id: str = Field(min_length=1)
+    document_sequence: int = Field(ge=0, strict=True)
+    schema_version: Literal['1.0.0']
+
+class RecoveryDocumentV2(RecoveryDocument):
+    schema_version: Literal[2]
+    # Null explicitly identifies the legacy editor, which does not edit the
+    # versioned working aggregate. Never infer its base from the current head.
+    baseDocument: RecoveryBaseDocument | None
+
 class ProjectCreate(InputModel):
     name: str = Field(min_length=1,max_length=200)
     id: str | None = Field(default=None,min_length=1,max_length=100)
@@ -85,6 +96,13 @@ class ProjectView(BaseModel):
 class ExpectedVersion(InputModel):
     expected_version: int = Field(ge=1)
 
+class OverlayCompatibilityInput(ExpectedVersion):
+    revision_id: str
+    source: Literal['workspace', 'recovery', 'supplied'] = 'workspace'
+    # Raw legacy values must remain recoverable, including unsupported fields.
+    overlay: dict[str,Any] = Field(default_factory=dict)
+    base: dict[str,Any] = Field(default_factory=dict)
+
 class RevisionCreate(ExpectedVersion):
     requirements: dict[str,Any] = Field(default_factory=dict)
     configuration: dict[str,Any] | None = None
@@ -119,11 +137,12 @@ class ArtifactView(BaseModel):
     error: dict[str,Any] | None = None
 
 class DesignPackage(BaseModel):
-    cem: CanonicalEngineeringModel
-    pdm: PhysicalDesignModel
-    schematic: dict[str,Any]
-    cad: dict[str,Any]
-    bom: list[dict[str,Any]]
+    # Frozen representations must not acquire defaults from installed model code.
+    cem: dict[str,Any]
+    pdm: dict[str,Any]
+    schematic: dict[str,Any] | None
+    cad: dict[str,Any] | None
+    bom: list[dict[str,Any]] | None
     validation_errors: list[dict[str,Any]]
     revision_id: str
     revision_no: int
@@ -132,6 +151,14 @@ class DesignPackage(BaseModel):
     manifest: dict[str,Any]
     artifacts: list[ArtifactView]
     is_stale: bool
+    is_non_current: bool
+    is_input_stale: bool
+    is_version_incompatible: bool
+    output_status: Literal['COMPLETE','MISSING_OUTPUTS']
+    missing_outputs: list[str]
+    output_manifest: dict[str,Any] | None
+    output_manifest_sha256: str | None
+    compatibility_conversion_available: bool
 
 class CatalogComponentView(BaseModel):
     model_config=ConfigDict(extra='allow')
@@ -178,7 +205,10 @@ class RecoverySave(ExpectedVersion):
     @field_validator('document')
     @classmethod
     def document_shape(cls,value):
-        return RecoveryDocument(**value).model_dump() if value is not None else None
+        if value is None:
+            return None
+        model = RecoveryDocumentV2 if 'schema_version' in value else RecoveryDocument
+        return model(**value).model_dump()
 
 class ProjectDuplicate(ExpectedVersion):
     name: str = Field(min_length=1,max_length=200)
@@ -190,12 +220,16 @@ class ProjectDuplicate(ExpectedVersion):
 
 class ProjectImport(InputModel):
     format: Literal['panelstudio-project']
-    version: Literal[1]
+    version: int = Field(strict=True)
     project: ProjectCreate
     configuration: dict[str,Any] = Field(default_factory=dict)
     workspace: dict[str,Any] = Field(default_factory=dict)
     revisions: list[dict[str,Any]] = Field(default_factory=list,max_length=200)
     source_project_id: str = Field(min_length=1,max_length=100)
+    source_database_id: str | None = None
+    assets: list[dict[str,Any]] = Field(default_factory=list,max_length=2048)
+    working_document: dict[str,Any] | None = None
+    sha256: str | None = None
     @field_validator('workspace')
     @classmethod
     def workspace_shape(cls,value):
