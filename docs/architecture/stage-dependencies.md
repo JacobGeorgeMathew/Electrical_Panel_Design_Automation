@@ -7,12 +7,13 @@ plan containing direct consumers, the ordered downstream closure, validation
 obligations and any conservative fallback roots. It performs no engineering,
 database, file, revision or job mutation.
 
-This is the contract boundary for subsequent adapters and execution work. The
+This is the contract boundary for adapters and execution work. Detached electrical
+adapters are described below. The
 [full generator](../../backend/app/services/orchestrator.py) still runs its existing
-pipeline, including its enclosure candidate/retry loop. This task does not extract
-algorithms, implement a cache/scheduler, replace propagation's current full
-generation/publication behavior, or claim incremental/full semantic equivalence.
-Those are separate P3 tasks. The planning lifecycle remains read only.
+pipeline, including its enclosure candidate/retry loop. The registry and adapters
+do not implement a cache/scheduler or replace propagation's current full
+generation/publication behavior. Incremental scheduling/full semantic equivalence
+remain separate P3 work. The planning lifecycle remains read only.
 
 ## Registry invariants
 
@@ -199,3 +200,52 @@ verification are outside this task's evidence. Calculations, thermal/fill limits
 and catalog geometry remain prototype assumptions, without standards or
 manufacturing certification. Task acceptance remains a human decision; the
 registry and this document grant no approval.
+
+## Detached electrical execution adapters (P3-T02)
+
+[electrical.py](../../backend/app/services/stages/electrical.py) wraps the existing
+requirements, calculations, selection, connectivity (graph plus netlist), and
+schematic algorithms. Each function accepts a frozen Pydantic input and returns a
+serializable frozen output. `Snapshot[T]` validates the legacy payload as `T`,
+rejects nonfinite values and stores canonical JSON as an immutable string.
+`read()` returns a fresh mutable model/value for the existing algorithms; changing
+it cannot mutate an input, prior result or another execution.
+
+The caller supplies project/panel identity, engine version, registered algorithm
+version, exact archetype/rule versions and template content, and exact component
+catalog version and ordered rows. Catalog publication/version resolution belongs
+to the caller before execution, outside the stage. No adapter loads a template
+file, opens a repository/session or resolves a latest catalog version. Supplied
+component/product/CAD model version IDs follow selected components. Catalog order
+is retained because existing SPD selection consumes the first candidate.
+
+`DocumentIdentities` carries explicit `(namespace, role, document_id)` bindings.
+Roles are the existing generator identifiers, not names, ratings, catalog IDs or
+array positions in the working document. Unbound new roles retain legacy IDs;
+callers retain bindings for removed roles. Adapters temporarily use role IDs for
+the legacy engines' fixed lookups/sorting, then rebind component/module/calculation,
+net/connection IDs and schematic endpoint references. Terminal IDs remain local
+to supplied component records; `PANEL_ROOT` remains the reserved enclosure
+interface. Duplicate/effective ID collisions are rejected. Reversed lexical
+document IDs do not reorder feeders, phases, terminal pairs or schematic layout.
+
+Selection accepts explicit pinned component choices, including accepted ratings.
+Connectivity accepts explicit authoritative topology and checks references before
+returning it without regeneration. Schematic execution produces a generated legacy
+engine dictionary; it does not merge a saved `SchematicPresentation` or authorize
+overwriting manual drawing intent. The caller must retain manual presentation or
+explicitly request regeneration. Calculations continue using requirement-derived
+prototype methods; adapters do not reinterpret manual ratings as new engineering
+methods. They return owned slices, never mutate a working document, and do not
+publish anything. These extraction boundaries do not implement the later scheduler,
+cache, physical adapters or manual-intent reconciliation.
+
+The full generator remains unchanged as the independent oracle. Adapter tests in
+[test_electrical_stages.py](../../backend/tests/test_electrical_stages.py) compare
+both saved baseline boards against full generation and pinned CEM/schematic hashes,
+exercise deterministic mapped IDs and reference integrity, serialization/schema,
+deep immutability, explicit pins/choices/topology and existing failures. A separate
+test poisons file access, repository construction and database transaction/query
+entry after input materialization and executes all five stages successfully.
+No wire-schema or engine/generator version change is needed for this extraction:
+the original algorithms and baseline engineering output remain unchanged.
