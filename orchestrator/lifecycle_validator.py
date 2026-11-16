@@ -73,6 +73,18 @@ def validate_lifecycle(data, schema):
                 ordered.append((phase, milestone, task))
     if not ordered:
         raise OrchestratorError("Lifecycle has no tasks.")
+    merged_sources = set()
+    for _, _, task in ordered:
+        if "merged_from" not in task:
+            continue
+        sources = task["merged_from"]
+        if (not isinstance(sources, list) or len(sources) < 2
+                or any(not isinstance(source, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", source) for source in sources)
+                or sources[0] != task["id"] or len(set(sources)) != len(sources)):
+            raise OrchestratorError(f"{task['id']}: malformed merged_from provenance")
+        if task["type"] in {"human_gate", "phase_acceptance"} or merged_sources & set(sources) or (set(sources) - {task["id"]}) & seen:
+            raise OrchestratorError(f"{task['id']}: consolidation overlaps executable tasks, another merge or an approval checkpoint")
+        merged_sources.update(sources)
     pending = {t["id"]: set(t["dependencies"]) for _, _, t in ordered}
     for tid, deps in pending.items():
         if deps - seen:

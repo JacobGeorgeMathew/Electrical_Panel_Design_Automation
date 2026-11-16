@@ -2,7 +2,7 @@ import {beforeEach,describe,expect,it,vi} from 'vitest';
 import fixture from '../types/fixtures/document-v1.json';
 import {ApiError} from '../api/client';
 import {documentStatus,documentSave} from './documentStore';
-const api=vi.hoisted(()=>({fetchDocument:vi.fn(),saveDocument:vi.fn(),fetchRevision:vi.fn(),createProject:vi.fn(),saveRecovery:vi.fn(),markProjectOpened:vi.fn(),listProjects:vi.fn(),fetchArchetypes:vi.fn(),fetchProject:vi.fn(),fetchDesign:vi.fn(),fetchRevisions:vi.fn(),updateProject:vi.fn(),generateDesign:vi.fn(),restoreRevision:vi.fn(),startCadJob:vi.fn(),fetchCadJob:vi.fn()}));
+const api=vi.hoisted(()=>({fetchDocument:vi.fn(),saveDocument:vi.fn(),fetchRevision:vi.fn(),createProject:vi.fn(),saveRecovery:vi.fn(),markProjectOpened:vi.fn(),listProjects:vi.fn(),fetchArchetypes:vi.fn(),fetchProject:vi.fn(),fetchDesign:vi.fn(),fetchRevisions:vi.fn(),updateProject:vi.fn(),generateDesign:vi.fn(),restoreRevision:vi.fn(),startCadJob:vi.fn(),fetchCadJob:vi.fn(),validatePlacement:vi.fn()}));
 vi.mock('../api/client',async(importOriginal)=>({...await importOriginal<typeof import('../api/client')>(),...api}));
 import {useProjectStore} from './projectStore';
 
@@ -24,6 +24,35 @@ const workingDocument=()=>({...fixture,content_sha256:'a'.repeat(64),
   }]}}});
 
 describe('versioned document adapter',()=>{
+  it('recovers, checkpoints and saves placement overlays without routing or publishing',async()=>{
+    const view=workingDocument();
+    const workspace={editorTransforms:{C1:{x:10,y:20,z:30,rotation_deg:0}},schematicData:design.schematic};
+    const checkpoint={schema_version:2,recovery_sequence:1,base_version:2,saved_at:'2026-11-16T00:00:00Z',
+      document:{schema_version:2,baseRevisionId:'R1',
+        baseDocument:{document_id:view.document.document_id,document_sequence:0,schema_version:view.document.schema_version},
+        requirements:{incomer_rating:400},configuration:{},workspace}};
+    api.fetchDocument.mockResolvedValue(view);
+    api.markProjectOpened.mockResolvedValue({...project,recovery_version:1,recovery:checkpoint});
+    await useProjectStore.getState().openProject('P1');
+    expect(useProjectStore.getState().requirementValues.incomer_rating).toBe(250);
+    useProjectStore.getState().recoverChanges();
+    expect(useProjectStore.getState()).toMatchObject({pendingRecovery:null,hasUnsavedChanges:true,
+      requirementValues:{incomer_rating:400},editorTransforms:workspace.editorTransforms});
+    api.saveRecovery.mockResolvedValue({...project,recovery_version:2});
+    await useProjectStore.getState().autosave();
+    expect(api.saveRecovery).toHaveBeenCalledWith('P1',2,1,expect.objectContaining({workspace}));
+    const request=documentSave(useProjectStore.getState());
+    api.saveDocument.mockResolvedValue({...view,document:{...view.document,lock_version:3,document_sequence:1},
+      snapshots:{...view.snapshots,requirements:request.requirements}});
+    api.updateProject.mockResolvedValue({...project,lock_version:4,recovery_version:3,workspace});
+    await useProjectStore.getState().saveCurrentProject();
+    expect(api.updateProject).toHaveBeenCalledWith('P1',3,expect.objectContaining({workspace,expected_recovery_version:2}));
+    expect(useProjectStore.getState()).toMatchObject({hasUnsavedChanges:false,currentRevisionId:'R1',
+      requirementValues:{incomer_rating:400},editorTransforms:workspace.editorTransforms});
+    for(const method of [api.validatePlacement,api.generateDesign,api.restoreRevision,api.startCadJob])
+      expect(method).not.toHaveBeenCalled();
+  });
+
   it('saves and reopens the draft without publication and excludes workspace display state',async()=>{
     const view=workingDocument();
     api.fetchDocument.mockResolvedValue(view);

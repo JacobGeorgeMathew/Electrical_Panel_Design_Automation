@@ -29,6 +29,8 @@ class DecisionManager:
         task = self.tracker.lifecycle.tasks[tid]
         record = self.tracker.state["tasks"][tid]
         if record["status"] != "NEEDS_REVIEW":
+            if record["status"] == "PARTIALLY_COMPLETED":
+                raise OrchestratorError(f"{tid} is PARTIALLY_COMPLETED. Use menu option 11 to mark it COMPLETED by explicit human override, or retry to finish the remaining work.")
             raise OrchestratorError(f"Cannot accept {tid}: saved status is {record['status']}, not NEEDS_REVIEW. Review the report and resolve failed/incomplete work or revise its scope explicitly before retrying. Typing a status into the evidence note does not change it.")
         if not reviewer.strip() or not evidence.strip():
             raise OrchestratorError("Acceptance requires a named reviewer and a nonempty evidence note.")
@@ -57,6 +59,64 @@ class DecisionManager:
         self.tracker.transition(tid, "VERIFIED")
         self.tracker.refresh()
         self.tracker.commit("TASK_ACCEPTED", tid)
+
+    def partial_acceptance_review(self, tid):
+        """Return the exact exceptions a human would accept; never mutate progress."""
+        task = self.tracker.lifecycle.tasks[tid]
+        record = self.tracker.state["tasks"][tid]
+        if record["status"] != "PARTIALLY_COMPLETED" or not record["attempts"]:
+            raise OrchestratorError("Human completion override requires a PARTIALLY_COMPLETED task with an execution report.")
+        if self.tracker.state["current_task_id"]:
+            raise OrchestratorError("Finish or recover the active attempt before accepting a task.")
+        attempt = record["attempts"][-1]
+        if attempt.get("lifecycle_fingerprint") != self.tracker.lifecycle.fingerprint:
+            raise OrchestratorError("Attempt belongs to an earlier lifecycle. Retry under the current task definition before overriding completion.")
+        if any(self.tracker.state["tasks"][d]["status"] != "VERIFIED" for d in task["dependencies"]):
+            raise OrchestratorError("All prerequisites must still be VERIFIED.")
+        expected = {d: digest(self.tracker.state["tasks"][d]["acceptance"]) for d in task["dependencies"]}
+        if attempt.get("dependency_acceptances", {}) != expected:
+            raise OrchestratorError("Prerequisite acceptance changed since this attempt. Retry with current prerequisites.")
+        report = self.reports.inspect(self.tracker.config["root"] / attempt["report_path"], task, attempt["number"])
+        if attempt["exit_code"] != 0 or report["errors"] or report["assessment"] != "PARTIALLY_COMPLETED":
+            raise OrchestratorError("Override requires exit code zero and a valid PARTIALLY_COMPLETED report. Missing/malformed reports or process failures require recovery/retry.")
+        if report["sha256"] != attempt.get("report_sha256"):
+            raise OrchestratorError("Report changed after execution. Preserve it and retry before requesting an override.")
+        valid = [d for d in record["human_decisions"] if d.get("definition_hash") == digest(task)]
+        if task["type"] == "human_gate" and not any(d["action"] == "GATE_APPROVED" and d.get("attempt") == attempt["number"] for d in valid):
+            raise OrchestratorError("Record the required named human gate approval (menu option 9) before overriding completion.")
+        if task.get("human_input") and not any(d["action"] == "INPUT_CONFIRMED" for d in valid):
+            raise OrchestratorError("Record required human input (menu option 10) before overriding completion.")
+        exceptions = []
+        for kind, items in (("criterion", report["result"]["acceptance_criteria"]),
+                            ("profile", report["result"]["verification_profiles"])):
+            for item in items:
+                if item["result"] != "PASS":
+                    identifier = item["index"] if kind == "criterion" else item["id"]
+                    description = task["acceptance_criteria"][identifier - 1] if kind == "criterion" else identifier
+                    exceptions.append({"kind": kind, "id": identifier, "description": description,
+                                       "result": item["result"], "evidence": item["evidence"]})
+        return {"task_id": tid, "attempt": attempt["number"], "report_path": attempt["report_path"],
+                "report_sha256": report["sha256"], "original_assessment": report["assessment"],
+                "exceptions": exceptions}
+
+    def accept_partial(self, tid, reviewer, evidence, rationale, responsibility_acknowledged=False):
+        if not reviewer.strip() or not evidence.strip() or not rationale.strip():
+            raise OrchestratorError("Human override requires your name, evidence reviewed, and a rationale covering remaining work and consequences.")
+        if responsibility_acknowledged is not True:
+            raise OrchestratorError("Explicit responsibility acknowledgement is required for human completion override.")
+        review = self.partial_acceptance_review(tid)
+        record = self.tracker.state["tasks"][tid]
+        acceptance = {"timestamp": now(), "reviewer": reviewer, "evidence": evidence,
+                      "evidence_reviewed": True, "definition_hash": digest(self.tracker.lifecycle.tasks[tid]),
+                      "attempt": review["attempt"], "report_sha256": review["report_sha256"],
+                      "mode": "HUMAN_OVERRIDE", "human_assessment": "COMPLETED",
+                      "original_assessment": review["original_assessment"], "rationale": rationale,
+                      "responsibility_acknowledged": True, "accepted_exceptions": review["exceptions"]}
+        self.record(tid, "HUMAN_COMPLETION_OVERRIDE", rationale, acceptance=acceptance)
+        record["acceptance"] = acceptance
+        self.tracker.transition(tid, "VERIFIED")
+        self.tracker.refresh()
+        self.tracker.commit("TASK_COMPLETED_BY_HUMAN_OVERRIDE", tid, acceptance)
 
     def retry(self, tid, reason, reopen=False, instructions=""):
         record = self.tracker.state["tasks"][tid]

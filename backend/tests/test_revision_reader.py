@@ -11,6 +11,7 @@ from app.persistence.repositories import PersistenceError
 from app.services.project_service import ProjectService
 from app.services.revision_reader import RevisionReader
 from tests.test_postgres import checked, create
+from tests.integrity_support import privileged_connection
 
 
 def disable_generators(monkeypatch):
@@ -73,7 +74,7 @@ def test_historical_reads_use_exact_snapshots_and_original_artifacts(api, postgr
 def make_legacy(db, rid):
     """Construct a pre-bundle fixture; application code never edits history."""
     rid = identifier(rid)
-    with db.sessions.begin() as session:
+    with privileged_connection(db) as session:
         revision = session.execute(select(m.project_revisions).where(m.project_revisions.c.id == rid)).mappings().one()
         manifest = deepcopy(revision['model_manifest'])
         manifest.pop('output_manifest_sha256')
@@ -119,7 +120,7 @@ def test_missing_anchored_manifest_is_corruption(api, postgres_database):
     service = ProjectService(postgres_database)
     project = create(api)
     design = service.generate(project['id'], {'num_feeders': 4}, project['lock_version'])
-    with postgres_database.sessions.begin() as session:
+    with privileged_connection(postgres_database) as session:
         session.execute(delete(m.revision_output_snapshots).where(
             m.revision_output_snapshots.c.project_revision_id == identifier(design['revision_id'])))
         session.execute(delete(m.revision_output_manifests).where(

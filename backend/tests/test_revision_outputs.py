@@ -21,8 +21,11 @@ def bundle(tmp_path):
     from app.models.requirements import RequirementSet
     pid = str(uuid4())
     project = dict(id=pid, database_id=pid, configuration={})
-    source = dict(document=dict(document_id='doc', project_id=pid, document_sequence=0),
-                  content_sha256='a'*64)
+    from app.services.document_service import DocumentService
+    from app.persistence.documents import document_hash
+    resolved = DocumentService.empty_document(dict(id=pid, lock_version=1),
+        dict(archetype_version_id=str(uuid4())))
+    source = {**resolved.model_dump(mode='json'), 'content_sha256': document_hash(resolved.document)}
     pdm = dict(validation_policy={'version': 'strict-v1'}, validation_results=[], routes=[],
                mounting_plate_x=30, mounting_plate_y=40, mounting_plate_z=20, components=[])
     result = dict(cem={'components': []}, pdm=pdm, schematic={'symbols': []},

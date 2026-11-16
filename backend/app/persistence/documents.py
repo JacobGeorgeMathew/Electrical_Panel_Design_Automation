@@ -47,7 +47,7 @@ class DocumentRepository:
                     or doc.base_revision_id != (str(row['base_revision_id']) if row['base_revision_id'] else None)
                     or document_hash(doc) != row['content_sha256']):
                 raise ValueError('Document metadata or content differs')
-        except (ValidationError, KeyError, TypeError, ValueError):
+        except (ValidationError, KeyError, TypeError, ValueError, AttributeError, RecursionError):
             raise PersistenceError('DOCUMENT_INTEGRITY',
                 'Stored working-document content is corrupt or incompatible.', 409) from None
         doc.lock_version = project['lock_version']

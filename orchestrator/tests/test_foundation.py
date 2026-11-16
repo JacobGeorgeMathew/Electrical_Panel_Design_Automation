@@ -16,11 +16,11 @@ from .support import Harness, ROOT
 class LifecycleTests(Harness):
     def test_real_lifecycle_schema_and_order(self):
         actual = load_lifecycle(ROOT / "planning/development_lifecycle.json", ROOT / "planning/schema.json")
-        self.assertEqual(len(actual.tasks), 119)
+        self.assertEqual(len(actual.tasks), 94)
         self.assertEqual([t["id"] for _, _, t in actual.ordered[:5]], [f"P0-T0{i}" for i in range(1, 6)])
         self.assertEqual(actual.forward_dependencies, [])
         self.assertEqual(actual.tasks["P0-T05"]["verification_profiles"], ["document_review"])
-        self.assertIn("P5-T00", actual.tasks["P5-T01"]["dependencies"])
+        self.assertEqual(actual.tasks["P5-T00"]["merged_from"], [f"P5-T0{i}" for i in range(7)])
         self.assertIn("native_cad", actual.tasks["P5-T00"]["verification_profiles"])
         self.assertTrue(all(t["status"] == "deferred" for t in actual.tasks.values() if t["id"].startswith("P8-")))
 

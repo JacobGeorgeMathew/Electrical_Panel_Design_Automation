@@ -10,13 +10,21 @@ import math
 from uuid import uuid4
 
 from sqlalchemy import insert, select
+from pydantic import ValidationError
 
 from app.persistence import models as m
 from app.persistence.assets import AssetUnavailable, content_hash
 from app.persistence.repositories import PersistenceError, identifier
+from app.models.document import ResolvedDocument
+from app.persistence.documents import document_hash
 
 OUTPUT_KINDS = frozenset({'DOCUMENT', 'REQUIREMENTS', 'CEM', 'PDM', 'SCHEMATIC',
                           'BOM', 'CAD', 'VALIDATION', 'INPUTS_AND_PINS'})
+ARTIFACT_FIELDS = frozenset({'id', 'artifact_type', 'file_format', 'storage_backend',
+    'storage_key', 'sha256', 'byte_size', 'generator_name', 'generator_version',
+    'source_model_kind', 'source_model_sha256'})
+ASSET_FORMATS = {'GLB': 'glb', 'JSON': 'json', 'PY': 'py', 'STEP': 'step',
+                 'FCSTD': 'fcstd', 'PDF': 'pdf'}
 
 
 @dataclass(frozen=True)
@@ -153,16 +161,39 @@ def verify_outputs(manifest, digest, snapshots, artifacts, assets):
             raise ValueError('Incomplete output set')
         for kind, row in snapshots.items():
             ref = manifest['outputs'][kind]
-            if row['schema_version'] != 1 or ref != {'schema_version': 1, 'sha256': row['sha256']}:
+            if (type(row['schema_version']) is not int or row['schema_version'] != 1
+                    or type(ref['schema_version']) is not int
+                    or ref != {'schema_version': 1, 'sha256': row['sha256']}):
                 raise ValueError('Snapshot reference differs')
             if content_hash(row['snapshot']) != row['sha256']:
                 raise ValueError('Snapshot digest differs')
+        source = snapshots['DOCUMENT']['snapshot']
+        resolved = ResolvedDocument.model_validate({k: source[k] for k in ('document', 'snapshots')})
+        doc = resolved.document
+        if (doc.project_id != manifest['project_id']
+                or source['content_sha256'] != document_hash(doc)
+                or manifest['source_document'] != {'id': doc.document_id,
+                    'sequence': doc.document_sequence, 'sha256': source['content_sha256']}):
+            raise ValueError('Source document differs')
         stored = {str(row['id']): row for row in artifacts}
+        if len(stored) != len(artifacts):
+            raise ValueError('Duplicate artifact rows')
+        seen = set()
         for ref in manifest['artifacts']:
+            if set(ref) != ARTIFACT_FIELDS or not identifier(ref['id']) or ref['id'] in seen:
+                raise ValueError('Invalid artifact reference')
+            seen.add(ref['id'])
             row = stored[ref['id']]
             if any(str(row[key]) != str(value) for key, value in ref.items()):
                 raise ValueError('Artifact metadata differs')
+            if (row.get('generation_status', 'READY') != 'READY'
+                    or str(row.get('project_revision_id', manifest['project_revision_id'])) != manifest['project_revision_id']
+                    or ref['source_model_kind'] != 'PDM'
+                    or ref['source_model_sha256'] != snapshots['PDM']['sha256']
+                    or ref['storage_backend'] != 'LOCAL'
+                    or ASSET_FORMATS.get(ref['file_format']) != ref['storage_key'].rsplit('.', 1)[-1]):
+                raise ValueError('Artifact source or status differs')
             assets.verified_path(row['storage_key'], row['sha256'], row['byte_size'])
-    except (KeyError, TypeError, ValueError, AssetUnavailable) as exc:
+    except (KeyError, TypeError, ValueError, AttributeError, RecursionError, ValidationError, AssetUnavailable, OSError):
         raise PersistenceError('REVISION_OUTPUT_INTEGRITY',
-            'Saved revision outputs are incomplete, corrupt or incompatible.', 409) from exc
+            'Saved revision outputs are incomplete, corrupt or incompatible.', 409) from None

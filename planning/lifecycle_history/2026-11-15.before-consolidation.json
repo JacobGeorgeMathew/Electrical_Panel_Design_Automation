@@ -1,0 +1,2430 @@
+{
+  "schema_version": "1.0.0",
+  "project": "PanelFlow",
+  "title": "Repository-based development lifecycle",
+  "created_date": "2026-11-10",
+  "baseline_commit": "1a8359f123adfb4559b89e390ef2a2a7aef24d29",
+  "purpose": "Planning only. Task descriptions authorize no implementation, production migration, deployment, purchases or engineering certification.",
+  "scope": {
+    "first_release": "Document-centric prototype Distribution Board (DB) designer through P3.",
+    "recommended_release": "Reviewed bounded DB engineering, exact CAD exports, structured AI assistance and release hardening through P7.",
+    "extended_release": "Conditional P8 capabilities after use-case approval and re-estimation.",
+    "non_goals": ["Complete rewrite","Microservices by default","Manufacturing or standards certification","Unbounded general-purpose CAD","Additional panel archetypes before engineering approval","Training a proprietary model"]
+  },
+  "evidence": {
+    "method": "Read architecture and lifecycle documentation and inspect implementation paths. Source behavior takes precedence over older status prose. No application test suite, database migration, native kernel or desktop installer was executed during planning.",
+    "documents": ["AGENTS.md","ARCHITECTURE_ASSESSMENT.md","CODEX_IMPLEMENTATION_ESTIMATE.md","README.md","PROJECT_STATUS_REPORT.md","docs/PROJECT_LIFECYCLE.md","docs/CAD_WORKSPACE.md","docs/CONSTRAINT_POLICY_UPDATE.md","docs/PANEL_ASSEMBLY.md","docs/WIRING_IMPLEMENTATION.md","docs/database/OPERATIONS.md"],
+    "verified_findings": [
+      {
+        "id": "E01",
+        "finding": "PostgreSQL, managed content-addressed assets, immutable CEM/PDM revisions, version conflicts, dashboard and recovery already exist.",
+        "files": ["backend/app/persistence/revisions.py","backend/app/persistence/assets.py","backend/app/services/project_lifecycle.py","frontend/src/stores/projectStore.ts"]
+      },
+      {
+        "id": "E02",
+        "finding": "ProjectService.load_revision reconstructs schematic, CAD descriptors and BOM with current generators after verifying stored CEM/PDM hashes; historical output completeness is not yet guaranteed.",
+        "files": ["backend/app/services/project_service.py"]
+      },
+      {
+        "id": "E03",
+        "finding": "Save persists overlay drafts; manual transforms and schematic changes do not currently publish authoritative engineering revisions.",
+        "files": ["docs/PROJECT_LIFECYCLE.md","frontend/src/stores/projectStore.ts","frontend/src/components/schematic/SchematicViewer.tsx"]
+      },
+      {
+        "id": "E04",
+        "finding": "Change propagation reports a diff after full generation. The hardcoded dependency map is not a stage scheduler.",
+        "files": ["backend/app/services/change_propagation.py","backend/app/services/project_service.py","backend/app/services/orchestrator.py"]
+      },
+      {
+        "id": "E05",
+        "finding": "CAD export uses an in-process executor and restart-wide pending-artifact failure. Native FreeCAD/STEP execution is not established by generated scripts.",
+        "files": ["backend/app/main.py","backend/app/api/routes_cad.py","backend/app/services/cad_engine.py"]
+      },
+      {
+        "id": "E06",
+        "finding": "Duct routing rejects nonzero component rotations. Wire geometry can report PASS while required engineering subchecks are UNRESOLVED.",
+        "files": ["backend/app/services/physical_routing.py","backend/app/services/wire_geometry.py","backend/app/services/validation_engine.py"]
+      },
+      {
+        "id": "E07",
+        "finding": "Requirements states, CP-SAT placement, duct routing, CEM/PDM identity contracts and frontend interaction tests are reusable foundations.",
+        "files": ["backend/app/models/requirements.py","backend/app/algorithms/cp_sat_placement.py","backend/app/algorithms/duct_routing.py","backend/app/models/cem.py","backend/app/models/pdm.py","frontend/src/components/layout/Layout2DViewer.test.tsx"]
+      },
+      {
+        "id": "E08",
+        "finding": "Migration head is 0004_projects; schema mapping and baseline manifest are generator-owned. Active desktop wrapper is frontend/src-tauri.",
+        "files": ["backend/migrations/versions/0004_projects.py","backend/tools/build_schema_models.py","frontend/src-tauri/src/lib.rs"]
+      }
+    ],
+    "unresolved_runtime_questions": ["Actual passing test counts and performance","Native kernel availability, compatibility and distribution license review","Supported OS installer behavior","Quality/completeness of manufacturer data and reviewed electrical methods","Deployment mode and acceptable engineering applicability limits"],
+    "document_conflicts": ["Preserve AGENTS.md historical-read intent by fixing E02; do not describe current output reconstruction as a complete immutable snapshot.","Current Save/autosave semantics are contractual. Proposed working-document changes require P0-T06 approval and an explicit compatibility migration.","Older operations/status documentation may predate 0004_projects and active duct routing; verify against source before implementation."]
+  },
+  "invariants": ["CEM owns electrical intent and connectivity; PDM owns physical arrangement; schematic stores presentation referencing electrical identities; CAD and meshes derive from PDM.","Preserve stable component, terminal, conductor, net, route and feature IDs; use enclosure millimetres with explicit mounting-plate transforms.","Retain the modular monolith and PostgreSQL; isolate CPU/native geometry in workers without introducing distributed services unless measured need justifies them.","Manual, automatic and AI changes converge on validated, version-fenced operations. Preview cannot mutate published or working state.","Save and recovery cannot implicitly regenerate, reroute or publish. Explicit Recompute and Publish actions control these effects.","Published snapshots and shared assets are immutable. Legacy missing outputs cannot be retroactively claimed byte-identical.","Keep computation outside database transactions; publish snapshots, pins and artifact metadata atomically in a short transaction.","Preserve expected_version/lock_version and independent recovery versions; failed writes retain local edits.","Generation requires zero physical violations, including warnings. Optimization cannot trade hard constraints for score.","UNRESOLVED engineering checks are not PASS; prototype preview availability and engineering release eligibility are distinct.","Runtime HTTP reads use PostgreSQL, never implicit legacy JSON fallback.","Use additive migrations; preserve frozen baseline/seed payloads and regenerate mappings using the repository tool in an isolated authorized database.","Tombstones retain history; imports/duplication allocate and rebind identities and verify all hashes.","AI context and outputs are untrusted; allowlisted proposals require deterministic checks and explicit human acceptance.","No user database, credentials, generated native binaries or private manufacturer material enters committed fixtures."],
+  "agents": [
+    {
+      "id": "architecture_lead",
+      "specialization": "Contracts, scope, ADRs and cross-model integration",
+      "authority": "Prepares decisions; cannot grant human approvals."
+    },
+    {
+      "id": "database_engineer",
+      "specialization": "Additive Alembic migrations, PostgreSQL repositories, revisions and assets"
+    },
+    {
+      "id": "backend_application_engineer",
+      "specialization": "Document lifecycle, operations, API contracts and jobs"
+    },
+    {
+      "id": "frontend_cad_engineer",
+      "specialization": "React/Zustand workspace, SVG, React Flow and Three.js interaction"
+    },
+    {
+      "id": "electrical_engineering_agent",
+      "specialization": "Deterministic DB algorithms and engineering traceability",
+      "authority": "Implements reviewed methods; qualified human approves applicability and reference values."
+    },
+    {
+      "id": "physical_optimization_agent",
+      "specialization": "CP-SAT constraints, enclosure geometry, duct routing and physical validation"
+    },
+    {
+      "id": "cad_kernel_engineer",
+      "specialization": "Geometry adapters, native workers, assembly identity, STEP/GLB and drawings"
+    },
+    {
+      "id": "ai_integration_engineer",
+      "specialization": "Provider adapters, retrieval, structured proposals and offline evaluations"
+    },
+    {
+      "id": "quality_engineer",
+      "specialization": "Independent regression, consistency, concurrency and end-to-end acceptance"
+    },
+    {
+      "id": "security_release_engineer",
+      "specialization": "Local session boundary, CI, worker isolation, packaging and operations"
+    },
+    {
+      "id": "technical_writer",
+      "specialization": "User workflows, support matrix and operational runbooks"
+    }
+  ],
+  "execution_policy": {
+    "task_dependencies": "Only task IDs appear in dependencies. Every listed dependency must be complete with evidence; phase order alone is not a scheduling rule.",
+    "assignments": "Agent IDs designate future specialized Codex roles, not agents launched during this planning task.",
+    "human_gates": "A human_gate task is complete only after the named approver records an explicit decision. Codex prepares evidence and options. Silence, elapsed time and generated prose never count as approval.",
+    "definition_of_ready": ["Dependencies accepted","Read current AGENTS.md and scoped source files","Confirm baseline has not invalidated assumptions","Required data, credentials and approvals available","Agree task-specific test fixture and expected result"],
+    "definition_of_done": ["Acceptance criteria verified with evidence","Focused regression checks pass; skipped checks explicitly recorded","Affected backend, frontend and API contracts remain consistent","No secrets or unintended file changes","Relevant workflow documentation updated when behavior changes","Task implementation reviewed before dependent work is accepted"],
+    "sizing": "Implementation tasks target one independently reviewable change. If discovery exceeds approximately three focused developer days, split into child task IDs and update downstream dependencies before coding; preserve the original as an acceptance gate.",
+    "concurrency": "Parallel work is permitted on independent DAG branches. Serialize edits/migrations touching shared CEM/PDM schemas, projectStore, revision writer or OpenAPI contracts through their owning agent.",
+    "baseline_protection": "Do not reset or alter unrelated working-tree changes. AGENTS.md was already untracked at planning start.",
+    "change_control": "Re-read touched files when implementation begins; substitute current equivalents only with an explicit plan update. Do not silently expand supported engineering behavior.",
+    "evidence_record": "Future execution should record task ID, commit, tests, skips, measured results and human decisions in the team's tracking system; this JSON describes planned work only."
+  },
+  "verification_profiles": {
+    "backend_unit": {
+      "cwd": "backend",
+      "command": "python -m pytest",
+      "limits": "PostgreSQL tests may skip; report skips. Select relevant test files during individual tasks."
+    },
+    "postgres_isolated": {
+      "cwd": "backend",
+      "command": "PANEL_RUN_POSTGRES_TESTS=1 python -m pytest",
+      "limits": "Private configuration and account permitted to create/drop disposable panel_integration_test_<uuid> databases. Never use development data as the fixture."
+    },
+    "frontend_unit": {
+      "cwd": "frontend",
+      "command": "npm test",
+      "limits": "Use focused Vitest suites first."
+    },
+    "frontend_build": {
+      "cwd": "frontend",
+      "command": "npm run build",
+      "limits": "TypeScript and Vite compilation; no configured lint script."
+    },
+    "contract": {
+      "method": "Pydantic/OpenAPI and TypeScript fixtures, IDs, finite units, reference integrity and schema compatibility."
+    },
+    "browser": {
+      "method": "Real browser interaction suite introduced by P2-T12; exercise WebGL picking and drag, not only jsdom mocks."
+    },
+    "native_cad": {
+      "method": "Pinned native worker executes export; independently reopen STEP and compare units, counts, bounds and validity against approved tolerances."
+    },
+    "engineering_review": {
+      "method": "Qualified electrical reviewer signs independently calculated fixtures and applicability limits; software tests alone do not certify a panel."
+    },
+    "security": {
+      "method": "Origin/session authorization, hostile inputs, resource limits and redacted structured errors."
+    },
+    "manual_platform": {
+      "method": "Supported OS clean install, upgrade, Tauri sidecar and WebGL smoke checks on actual machines."
+    },
+    "document_review": {
+      "method": "Verify paths, contracts, stated limitations and recorded decisions against implementation."
+    }
+  },
+  "estimates": {
+    "source": "ARCHITECTURE_ASSESSMENT.md sections 7 and 8",
+    "unit": "developer_hours",
+    "meaning": "Inherited planning ranges, not measured Codex execution time or a sum of individually sized tasks. Recalibrate after P0 and after each phase.",
+    "mvp": [880,1360],
+    "recommended": [2080,3280],
+    "extended_total": [3280,5680],
+    "exclusions": ["Human approval waiting time","Certification and physical laboratory testing","Procurement and license delays"],
+    "token_estimates": "CODEX_IMPLEMENTATION_ESTIMATE.md contains speculative token scenarios; no token or speed guarantees are implied here."
+  },
+  "phases": [
+    {
+      "id": "P0",
+      "title": "Establish executable baseline and approve bounded contracts",
+      "objective": "Resolve current-state discrepancies before changing document authority.",
+      "effort_hours": [80,120],
+      "release_scope": "mvp",
+      "risks": ["Unprovisioned isolated PostgreSQL","Missing engineering reviewer or native CAD environment"],
+      "milestones": [
+        {
+          "id": "P0-M1",
+          "title": "Baseline and independent reference cases",
+          "tasks": [
+            {
+              "id": "P0-T01",
+              "title": "Record current workflow and contract inventory",
+              "type": "analysis",
+              "status": "planned",
+              "assigned_agent": "architecture_lead",
+              "dependencies": [],
+              "planned_outputs": ["docs/architecture/current-contracts.md"],
+              "implementation_steps": ["Trace create/save/recovery/generate/open/restore/export with actual request and state transitions.","Document E02 historical output reconstruction, overlay authority, all version counters and endpoints affected by later operations."],
+              "acceptance_criteria": ["Inventory distinguishes implemented, partial and unverified behavior with source symbols.","Every mutation path identifies version preconditions, persisted records and side effects."],
+              "verification_profiles": ["document_review"],
+              "input_files": ["backend/app/services/project_service.py","backend/app/services/project_lifecycle.py","backend/app/services/orchestrator.py","frontend/src/stores/projectStore.ts"]
+            },
+            {
+              "id": "P0-T02",
+              "title": "Execute isolated baseline verification",
+              "type": "verification",
+              "status": "planned",
+              "assigned_agent": "quality_engineer",
+              "dependencies": ["P0-T01"],
+              "planned_outputs": ["docs/verification/baseline.md"],
+              "implementation_steps": ["Run backend units, disposable PostgreSQL integration tests, frontend tests and build using pinned dependencies.","Record failures/skips, environment and fixture database cleanup; triage defects without silently changing expected outputs."],
+              "acceptance_criteria": ["Exact commands, exit codes and skip reasons are recorded.","No development database is migrated or used as test data; a failing baseline has explicit blocking defect IDs."],
+              "verification_profiles": ["backend_unit","postgres_isolated","frontend_unit","frontend_build"],
+              "human_input": "Provision authorized test database credentials if unavailable.",
+              "input_files": ["backend/tests/conftest.py","backend/requirements.txt","frontend/package.json","frontend/package-lock.json"]
+            },
+            {
+              "id": "P0-T03",
+              "title": "Create deterministic DB reference and failure fixtures",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "quality_engineer",
+              "dependencies": ["P0-T02"],
+              "planned_outputs": ["backend/tests/fixtures/design_baselines/","docs/verification/performance-baseline.md"],
+              "implementation_steps": ["Capture feasible DB and infeasible placement/routing cases with semantic CEM/PDM expectations, version pins and artifact hashes.","Measure current open/generate/render timings on declared hardware and board sizes; normalize only nondeterministic timestamps in comparisons."],
+              "acceptance_criteria": ["Fixtures preserve component-terminal-connection-route references and separate observed output from independently validated engineering values.","Board sizes and measurement procedure are repeatable; no unmeasured performance claim is labeled achieved."],
+              "verification_profiles": ["backend_unit","postgres_isolated","frontend_unit"],
+              "input_files": ["backend/tests/test_backend.py","backend/tests/test_postgres.py","backend/tests/test_constraints.py","frontend/src/stores/projectStore.editor.test.ts"]
+            }
+          ],
+          "completion_rule": "Every task in this milestone satisfies its acceptance criteria with recorded verification evidence; human gates require named human approval."
+        },
+        {
+          "id": "P0-M2",
+          "title": "Architecture and engineering decision gates",
+          "tasks": [
+            {
+              "id": "P0-T04",
+              "title": "Specify document, operation and compatibility contracts",
+              "type": "design",
+              "status": "planned",
+              "assigned_agent": "architecture_lead",
+              "dependencies": ["P0-T01"],
+              "planned_outputs": ["docs/architecture/document-operation-adr.md"],
+              "implementation_steps": ["Define working document, immutable revision, display state, operation envelope and schema compatibility rules with example payloads.","Define Save, explicit Recompute, Publish, Restore, dirty/stale/non-current states and legacy-overlay proposal migration; retain current Save behavior until approved."],
+              "acceptance_criteria": ["ADR includes IDs, origin, base sequence, preconditions, affected models, idempotency and validation status.","Legacy missing output behavior and non-destructive conversion are specified; ordinary open never silently regenerates."],
+              "verification_profiles": ["contract","document_review"],
+              "input_files": ["backend/app/models/cem.py","backend/app/models/pdm.py","backend/app/models/requirements.py","backend/app/models/api.py","frontend/src/types/api.ts"]
+            },
+            {
+              "id": "P0-T05",
+              "title": "Complete native geometry investigation and register qualification blockers",
+              "type": "spike",
+              "status": "planned",
+              "assigned_agent": "cad_kernel_engineer",
+              "dependencies": ["P0-T03"],
+              "planned_outputs": ["docs/architecture/geometry-kernel-evaluation.md","backend/tests/fixtures/cad_reference/"],
+              "implementation_steps": ["Review the existing comparison, pinned runtime provenance and retained native experiment evidence; preserve every prior report and failed result. Run a bounded experiment only if evidence is missing and local runtime permission is available.","Record the adapter recommendation, unit/identity mapping, measured outcomes, limitations and unresolved issues with downstream owners. An unavailable or failing native experiment is a valid research outcome, never a native_cad PASS.","Link exporter pivot defect P0-T05-NATIVE-001 to mandatory P5-T00 correction and qualification. Track semantic identity under P5-T05/P5-T06, production isolation under P5-T02 and distribution under P7-T03."],
+              "acceptance_criteria": ["Recommendation names one adapter path, exact observed or proposed environment and unit/identity mapping; executed results are distinguishable from proposals.","The evidence review records native PASS, FAIL or NOT_RUN honestly, preserves evidence and assigns unresolved issues to mandatory downstream qualification tasks. Expected values and tolerances are not relaxed to hide failures.","Completion qualifies the investigation only, not native geometry, distribution or engineering release. P5-T00 must pass before native implementation proceeds."],
+              "verification_profiles": ["document_review"],
+              "human_input": "Confirm permission to review existing local evidence. New native execution requires local runtime permission; redistribution remains a later release gate.",
+              "input_files": ["backend/app/services/cad_engine.py","backend/app/services/panel_geometry.py","backend/panel-backend.spec","frontend/src-tauri/tauri.conf.json"]
+            },
+            {
+              "id": "P0-T06",
+              "title": "Approve product scope, document semantics and deployment boundary",
+              "type": "human_gate",
+              "status": "awaiting_future_approval",
+              "assigned_agent": "architecture_lead",
+              "dependencies": ["P0-T03","P0-T04","P0-T05"],
+              "planned_outputs": ["docs/decisions/approved-product-scope.md"],
+              "implementation_steps": ["Present DB-only MVP, Save/Recompute/Publish UX, legacy migration strategy, local desktop default, supported OS, conditional kernel recommendation and reference board limits.","Request explicit product-owner choices; recommend modular monolith, PostgreSQL, existing editors, custom typed operations and isolated geometry worker. Review P0-T05 findings and explicitly exclude unqualified native STEP from the MVP.","Record whether kernel redistribution is in scope now; deferral retains P7-T03 distribution approval and P5-T00 native qualification. Product scope approval cannot clear these gates."],
+              "acceptance_criteria": ["Product owner records approved scope and document semantics, deployment mode, supported platforms and initial performance targets.","Selecting hosted multi-user deployment requires a separately approved identity/authorization backlog before hosted exposure; it is not covered by local-session protection."],
+              "verification_profiles": ["document_review"],
+              "approver": "Product owner and technical lead; license owner only if kernel distribution is approved in this decision",
+              "decision_id": "D01",
+              "input_files": ["ARCHITECTURE_ASSESSMENT.md","docs/PROJECT_LIFECYCLE.md"]
+            },
+            {
+              "id": "P0-T07",
+              "title": "Specify electrical identity and validation applicability",
+              "type": "design",
+              "status": "planned",
+              "assigned_agent": "electrical_engineering_agent",
+              "dependencies": ["P0-T01","P0-T04"],
+              "planned_outputs": ["docs/architecture/electrical-semantics-adr.md"],
+              "implementation_steps": ["Define conductor edges versus equipotential nets, terminal equivalence, phase/protective-earth boundaries and graphical junction semantics for DB.","Define PASS/FAIL/UNRESOLVED/NOT_APPLICABLE aggregation, required-check scopes and prototype-preview versus engineering-release labels.","Prepare reviewable examples and mark proposed semantics as awaiting P0-T08 qualified human approval. Completing this document does not authorize implementation."],
+              "acceptance_criteria": ["Examples cover shared busbar terminals, cross-phase rejection and graphical crossings without electrical junctions.","Missing bend/diameter/earth data cannot satisfy an applicable required check."],
+              "verification_profiles": ["contract","document_review"],
+              "input_files": ["backend/app/services/netlist_engine.py","backend/app/services/graph_engine.py","backend/app/services/wire_geometry.py","backend/app/services/validation_engine.py"]
+            },
+            {
+              "id": "P0-T08",
+              "title": "Accept bounded electrical semantics for the academic prototype",
+              "type": "human_gate",
+              "status": "awaiting_future_approval",
+              "assigned_agent": "electrical_engineering_agent",
+              "dependencies": ["P0-T07"],
+              "planned_outputs": ["docs/decisions/approved-electrical-semantics.md"],
+              "implementation_steps": ["Record JacobGM's explicit acceptance of the academic prototype documentation based on their attestation that Josh, a fourth-year electrical engineering student, reviewed and approved the documents on 2026-11-14; retain net/conductor interpretation, required checks and manual-edit limits in D02.","Record unsupported conditions and evidence needed for later method and catalog approval; explicitly defer qualified electrical engineering review and preserve D03/P4-T03 and D04/P4-T16 authority. This academic acceptance does not establish engineering applicability or release eligibility."],
+              "acceptance_criteria": ["Product owner JacobGM explicitly accepts the academic prototype decision packet based on their attestation of Josh's student peer review; the decision records reviewer role/date, approval provenance, and deferred qualified engineering review without fabricating Josh's signature or independently worked evidence.","Prototype constraints remain explicit; approval does not claim certification or approve unreviewed calculation methods."],
+              "verification_profiles": ["document_review"],
+              "approver": "JacobGM, product owner, for academic prototype acceptance only; qualified electrical engineering approval deferred",
+              "decision_id": "D02",
+              "input_files": ["backend/app/models/electrical_graph.py","backend/app/models/cem.py"]
+            }
+          ],
+          "completion_rule": "Every task in this milestone satisfies its acceptance criteria with recorded verification evidence; human gates require named human approval."
+        },
+        {
+          "id": "P0-M3",
+          "title": "Repeatable development baseline",
+          "tasks": [
+            {
+              "id": "P0-T09",
+              "title": "Introduce baseline CI with disposable database coverage",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "security_release_engineer",
+              "dependencies": ["P0-T02","P0-T06"],
+              "planned_outputs": [".github/workflows/ci.yml"],
+              "implementation_steps": ["Add backend unit, explicitly enabled disposable PostgreSQL, frontend test and build lanes with pinned toolchains.","Publish test results and fail when an intended database lane silently skips; keep credentials in CI secrets."],
+              "acceptance_criteria": ["The committed workflow defines backend unit, explicitly enabled disposable PostgreSQL, frontend test and frontend build lanes with pinned toolchains, result publication and required database skip detection; all four mandatory local verification profiles pass with disclosed skips. JacobGM explicitly defers hosted execution while the GitHub billing lock prevents runner startup, as recorded in docs/verification/ci-hosted-verification-deferral.md; hosted checks remain unverified.","Source review and the executed local isolated-database profile demonstrate fixture-owned disposable database creation/removal, a passing teardown audit, CI credentials referenced through secrets, and no secrets or generated build artifacts in the implementation commit. Hosted container provisioning/teardown and result artifact publication remain documented follow-up obligations before relying on hosted CI as a release gate."],
+              "verification_profiles": ["backend_unit","postgres_isolated","frontend_unit","frontend_build"],
+              "input_files": ["backend/tests/conftest.py","backend/requirements.txt","frontend/package.json","docs/verification/ci-hosted-verification-deferral.md"]
+            },
+            {
+              "id": "P0-T10",
+              "title": "Accept baseline and recalibrate task scope",
+              "type": "phase_acceptance",
+              "status": "planned",
+              "assigned_agent": "quality_engineer",
+              "dependencies": ["P0-T03","P0-T06","P0-T08","P0-T09"],
+              "planned_outputs": ["docs/verification/phase-0-acceptance.md"],
+              "implementation_steps": ["Review unresolved baseline defects, environment availability and approved decisions.","Calibrate effort using actual pilot task time and review effort; identify owner for each shared contract."],
+              "acceptance_criteria": ["Every baseline failure is fixed or explicitly blocks its dependent tasks.","P1 can start with approved examples, repeatable CI and no unspecified document authority decision."],
+              "verification_profiles": ["document_review"],
+              "input_files": ["ARCHITECTURE_ASSESSMENT.md","CODEX_IMPLEMENTATION_ESTIMATE.md"]
+            }
+          ],
+          "completion_rule": "Every task in this milestone satisfies its acceptance criteria with recorded verification evidence; human gates require named human approval."
+        }
+      ],
+      "exit_task_id": "P0-T10"
+    },
+    {
+      "id": "P1",
+      "title": "Durable working documents and complete immutable revisions",
+      "objective": "Make saved engineering state coherent without losing legacy history or current recovery behavior.",
+      "effort_hours": [240,360],
+      "release_scope": "mvp",
+      "risks": ["Legacy outputs were never fully snapshotted","Migration and identity rebinding can corrupt references"],
+      "milestones": [
+        {
+          "id": "P1-M1",
+          "title": "Versioned document contract and storage",
+          "tasks": [
+            {
+              "id": "P1-T01",
+              "title": "Implement versioned document and identity contracts",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "backend_application_engineer",
+              "dependencies": ["P0-T10"],
+              "planned_outputs": ["backend/app/models/document.py","backend/app/models/schematic.py","frontend/src/types/document.ts"],
+              "implementation_steps": ["Add aggregate schema version, document sequence, requirements/CEM/PDM/schematic references, provenance, dirty stages and pinned versions.","Define shared stable-ID/reference validation and typed single-page symbol/pin/wire presentation independent of net connectivity."],
+              "acceptance_criteria": ["Round-trip fixtures preserve IDs, requirement states and enclosure-mm coordinates.","Unknown references, nonfinite coordinates and unsupported schema versions produce structured failures."],
+              "verification_profiles": ["contract","backend_unit","frontend_build"],
+              "input_files": ["backend/app/models/cem.py","backend/app/models/pdm.py","backend/app/models/requirements.py","frontend/src/types/cem.ts","frontend/src/types/pdm.ts"]
+            },
+            {
+              "id": "P1-T02",
+              "title": "Add working-document and complete-output storage migration",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "database_engineer",
+              "dependencies": ["P1-T01"],
+              "planned_outputs": ["backend/migrations/versions/<next>_design_documents.py","backend/app/persistence/models.py","backend/app/persistence/baseline_manifest.json"],
+              "implementation_steps": ["Add document storage, schema/sequence fields and revision output manifest/snapshot storage through a new additive migration.","Regenerate mappings and manifest with the existing isolated-database tool; preserve frozen migrations and seeds."],
+              "acceptance_criteria": ["Fresh install and upgrade from 0004_projects produce equivalent new schema.","Existing revision bytes/hashes are unchanged; generated mappings match migration head."],
+              "verification_profiles": ["postgres_isolated","contract"],
+              "human_input": "Authorized isolated database administration is needed for the mapping generator.",
+              "input_files": ["backend/migrations/versions/0004_projects.py","backend/app/persistence/repositories.py","backend/tools/build_schema_models.py"]
+            },
+            {
+              "id": "P1-T03",
+              "title": "Implement working-document repository and versioned API",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "backend_application_engineer",
+              "dependencies": ["P1-T02"],
+              "planned_outputs": ["backend/app/services/document_service.py","backend/app/api/routes_documents.py"],
+              "implementation_steps": ["Add document load and explicit Save endpoints with expected document/project versions, structured errors and persisted dirty status.","Keep requirement input drafts and display state separate; Save performs no routing, generation or revision publication."],
+              "acceptance_criteria": ["Two saves from one base version yield one success and one conflict retaining the losing client's edits.","Open/save round-trip does not call calculation, routing or CAD engines and does not create a revision."],
+              "verification_profiles": ["postgres_isolated","contract"],
+              "input_files": ["backend/app/api/routes_projects.py","backend/app/api/dependencies.py","backend/app/services/project_service.py","backend/app/persistence/ports.py"]
+            }
+          ],
+          "completion_rule": "Every task in this milestone satisfies its acceptance criteria with recorded verification evidence; human gates require named human approval."
+        },
+        {
+          "id": "P1-M2",
+          "title": "Frozen output publication and historical reads",
+          "tasks": [
+            {
+              "id": "P1-T04",
+              "title": "Snapshot every published engineering output atomically",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "database_engineer",
+              "dependencies": ["P1-T02"],
+              "planned_outputs": ["backend/app/persistence/revision_outputs.py"],
+              "implementation_steps": ["Extend publication to hash and store schematic, BOM, CAD descriptors, validation report, CEM, PDM and generator/catalog pins.","Build assets before the short publication transaction; commit all snapshot references/current pointer under the version fence."],
+              "acceptance_criteria": ["Injecting failure at each database write leaves the prior revision/current pointer intact.","Manifest verifies every stored representation and artifact; no computation runs inside the write transaction."],
+              "verification_profiles": ["postgres_isolated","backend_unit"],
+              "input_files": ["backend/app/persistence/revisions.py","backend/app/services/project_service.py","backend/app/persistence/assets.py"]
+            },
+            {
+              "id": "P1-T05",
+              "title": "Remove current-generator calls from historical reads",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "backend_application_engineer",
+              "dependencies": ["P1-T04"],
+              "planned_outputs": ["backend/app/services/revision_reader.py"],
+              "implementation_steps": ["Read complete output snapshots directly and separate non-current, input-stale and incompatible-version statuses.","For legacy revisions retain original bytes, expose missing-output status and offer an explicit compatibility conversion/new revision; never invent historical output bytes."],
+              "acceptance_criteria": ["Changing installed schematic/BOM/CAD generators does not change hashes or bytes returned for complete historical revisions.","Tests replace generators with raising sentinels and historical reads still succeed; legacy limitations are explicit."],
+              "verification_profiles": ["postgres_isolated","contract"],
+              "input_files": ["backend/app/services/project_service.py","backend/app/api/routes_schematic.py","backend/app/api/routes_cad.py","backend/app/api/routes_projects.py"]
+            },
+            {
+              "id": "P1-T06",
+              "title": "Preserve restore and legacy conversion semantics",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "backend_application_engineer",
+              "dependencies": ["P1-T03","P1-T05"],
+              "planned_outputs": ["backend/app/services/document_compatibility.py"],
+              "implementation_steps": ["Restore by publishing a new revision linked to its source, preserving historical snapshots/assets.","Convert old overlay transforms to a reviewable draft proposal only when base IDs and versions match; require explicit user action for incompatible conversion."],
+              "acceptance_criteria": ["Restoration adds one revision and does not alter any original hash.","Legacy read alone creates no revision or hidden regeneration; incompatible overlays remain recoverable with an explicit explanation."],
+              "verification_profiles": ["postgres_isolated","backend_unit"],
+              "input_files": ["backend/app/services/project_service.py","backend/app/services/project_lifecycle.py","backend/tests/test_project_lifecycle.py"]
+            }
+          ],
+          "completion_rule": "Every task in this milestone satisfies its acceptance criteria with recorded verification evidence; human gates require named human approval."
+        },
+        {
+          "id": "P1-M3",
+          "title": "Recovery, portability and frontend adoption",
+          "tasks": [
+            {
+              "id": "P1-T07",
+              "title": "Extend recovery checkpoints for document sequence and schema",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "backend_application_engineer",
+              "dependencies": ["P1-T03","P1-T06"],
+              "planned_outputs": ["frontend/src/types/recovery.ts"],
+              "implementation_steps": ["Version recovery payloads with base document/revision and independent recovery sequence; provide a compatibility reader for current checkpoints.","Retain immediate browser checkpoint, debounced server checkpoint and explicit Recover/Discard; prevent late responses clearing newer edits."],
+              "acceptance_criteria": ["Restart/reopen restores compatible drafts and retains incompatible edits for conflict resolution.","Simultaneous recovery writes conflict independently of project saves; autosave invokes no generation."],
+              "verification_profiles": ["postgres_isolated","frontend_unit"],
+              "input_files": ["backend/app/services/project_lifecycle.py","frontend/src/stores/projectRecovery.ts","frontend/src/hooks/useProjectRecovery.ts"]
+            },
+            {
+              "id": "P1-T08",
+              "title": "Add versioned portable package with verified managed assets",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "database_engineer",
+              "dependencies": ["P1-T05","P1-T06"],
+              "planned_outputs": ["backend/app/services/project_package.py"],
+              "implementation_steps": ["Define package v2 with frozen outputs, hashes and bounded embedded or bundled asset payloads; retain safe v1 import with explicit legacy limitations.","Verify all input before atomic project creation, enforce size/path/hash limits and rebind identities for import/duplicate; required catalog pins must exist or fail explicitly."],
+              "acceptance_criteria": ["Export/import into an isolated compatible installation preserves output and artifact content hashes while allocating new project/revision identities.","Corrupt/missing assets, unsafe paths, unsupported versions and missing pins cause no partial project; shared assets and tombstoned history are retained."],
+              "verification_profiles": ["postgres_isolated","security"],
+              "input_files": ["backend/app/services/project_lifecycle.py","backend/app/persistence/assets.py","backend/tests/test_project_lifecycle.py"]
+            },
+            {
+              "id": "P1-T09",
+              "title": "Bind frontend document state to explicit save and publication states",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "frontend_cad_engineer",
+              "dependencies": ["P1-T03","P1-T05","P1-T07"],
+              "planned_outputs": ["frontend/src/stores/documentStore.ts"],
+              "implementation_steps": ["Introduce a document store/adapter and normalized API contracts while retaining workspace camera, visibility and selection state separately.","Show saved draft, dirty engineering output, historical read-only and unsupported legacy output states; keep Publish separate from Save."],
+              "acceptance_criteria": ["Save/reopen displays the same saved draft and never silently publishes it.","Network/conflict failures retain local data; historical views cannot accidentally submit changes against the current document."],
+              "verification_profiles": ["frontend_unit","frontend_build"],
+              "input_files": ["frontend/src/stores/projectStore.ts","frontend/src/stores/workspaceStore.ts","frontend/src/api/client.ts","frontend/src/components/projects/ProjectPersistenceBar.tsx","frontend/src/pages/ProjectPage.tsx"]
+            },
+            {
+              "id": "P1-T10",
+              "title": "Enforce immutable publication permissions and integrity checks",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "database_engineer",
+              "dependencies": ["P1-T04","P1-T08"],
+              "planned_outputs": ["docs/database/REVISION_INTEGRITY.md"],
+              "implementation_steps": ["Audit update/delete access for snapshots, versioned catalogs and shared assets; add tested guards and deployment role guidance without preventing lifecycle tombstones.","Extend read/audit checks to full output manifests and document schema compatibility."],
+              "acceptance_criteria": ["Supported application paths cannot overwrite published snapshots or catalog versions.","Tampered snapshots and artifacts are rejected with redacted errors; audit reports do not delete content."],
+              "verification_profiles": ["postgres_isolated","security"],
+              "input_files": ["backend/app/persistence/revisions.py","backend/app/persistence/manage.py","docs/database/OPERATIONS.md"]
+            },
+            {
+              "id": "P1-T11",
+              "title": "Accept document lifecycle and historical invariance",
+              "type": "phase_acceptance",
+              "status": "planned",
+              "assigned_agent": "quality_engineer",
+              "dependencies": ["P1-T06","P1-T07","P1-T08","P1-T09","P1-T10"],
+              "planned_outputs": ["docs/verification/phase-1-acceptance.md"],
+              "implementation_steps": ["Exercise create/save/recover/publish/open-old/restore/import/duplicate/delete and changed-generator scenarios.","Verify current and historical outputs separately and document supported v1 compatibility behavior."],
+              "acceptance_criteria": ["All lifecycle actions preserve intended IDs, version conflicts and hash guarantees.","No complete historical read invokes generators; no Save/recovery operation publishes or reroutes."],
+              "verification_profiles": ["postgres_isolated","frontend_unit","frontend_build"],
+              "input_files": ["backend/tests/test_postgres.py","backend/tests/test_project_lifecycle.py","frontend/src/stores/projectStore.persistence.test.ts"]
+            }
+          ],
+          "completion_rule": "Every task in this milestone satisfies its acceptance criteria with recorded verification evidence; human gates require named human approval."
+        }
+      ],
+      "exit_task_id": "P1-T11"
+    },
+    {
+      "id": "P2",
+      "title": "Shared operations and synchronized engineering editing",
+      "objective": "Route manual edits and generated proposals through one authoritative, undoable boundary.",
+      "effort_hours": [280,440],
+      "release_scope": "mvp",
+      "risks": ["Editor tools can exceed validator capability","Large Zustand store and duplicate mutation routes can bypass operations"],
+      "milestones": [
+        {
+          "id": "P2-M1",
+          "title": "Validated atomic operation service",
+          "tasks": [
+            {
+              "id": "P2-T01",
+              "title": "Implement operation envelope, registry and pure preview",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "backend_application_engineer",
+              "dependencies": ["P1-T11"],
+              "planned_outputs": ["backend/app/models/operations.py","backend/app/services/operations/registry.py","backend/app/api/routes_operations.py"],
+              "implementation_steps": ["Define allowlisted operation payloads with target IDs, origin, base sequence, preconditions, parameters, affected models and proposal status.","Preview against an isolated document copy and return typed changes, required checks and dirty stages without durable mutations."],
+              "acceptance_criteria": ["Malformed IDs/parameters and unsupported operations fail before changing any state.","Preview preserves document/revision counts and hashes, returning reproducible differences for the same pinned inputs."],
+              "verification_profiles": ["backend_unit","postgres_isolated","contract"],
+              "input_files": ["backend/app/models/api.py","backend/app/services/design_errors.py","backend/app/api/routes_design.py"]
+            },
+            {
+              "id": "P2-T02",
+              "title": "Persist atomic operation batches with idempotency",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "database_engineer",
+              "dependencies": ["P2-T01"],
+              "planned_outputs": ["backend/migrations/versions/<next>_operations.py","backend/app/persistence/operations.py"],
+              "implementation_steps": ["Store operation sequence, origin, payload hash, before/after state references and idempotency key; regenerate mappings through the standard tool.","Commit a validated batch and document version in one short transaction with base-version recheck and project-scoped key uniqueness."],
+              "acceptance_criteria": ["A failed member rolls back the entire batch.","Retry after a lost response returns the same committed result; reusing a key with different content fails; concurrent same-base batches yield one winner."],
+              "verification_profiles": ["postgres_isolated","contract"],
+              "input_files": ["backend/app/persistence/repositories.py","backend/app/persistence/revisions.py","backend/tools/build_schema_models.py"]
+            },
+            {
+              "id": "P2-T03",
+              "title": "Implement requirement, rating and enclosure operations",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "backend_application_engineer",
+              "dependencies": ["P2-T02"],
+              "planned_outputs": ["backend/app/services/operations/engineering.py"],
+              "implementation_steps": ["Implement UpdateRequirement, ChangeComponentRating and ResizeEnclosure as versioned draft changes referencing permitted catalog choices.","Preserve requirement provenance and identify invalidated outputs; reject unsupported ratings/dimensions rather than fabricating catalog records."],
+              "acceptance_criteria": ["Each operation modifies only declared fields and marks required downstream outputs dirty.","Unsupported catalog substitutions and unknown requirement keys fail without losing prior document state."],
+              "verification_profiles": ["backend_unit","postgres_isolated"],
+              "input_files": ["backend/app/services/requirement_engine.py","backend/app/services/component_selector.py","backend/app/services/enclosure_engine.py"]
+            },
+            {
+              "id": "P2-T04",
+              "title": "Implement authoritative move and bounded rotation operations",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "physical_optimization_agent",
+              "dependencies": ["P2-T02"],
+              "planned_outputs": ["backend/app/services/operations/physical.py"],
+              "implementation_steps": ["Apply MoveComponent in enclosure millimetres with mounting offsets and server-owned dimensions/policy.","Implement RotateComponent contract but reject nonzero unsupported rotations until P4-T10; validate known hard constraints, invalidate routes/CAD and require explicit Recompute before publication."],
+              "acceptance_criteria": ["Valid moves change the working PDM and preserve CEM and component IDs.","Out-of-bounds/overlap or unsupported rotation cannot become publishable; Save alone does not invoke routing."],
+              "verification_profiles": ["backend_unit","postgres_isolated"],
+              "input_files": ["backend/app/models/pdm.py","backend/app/services/physical_routing.py","backend/app/services/validation_engine.py"]
+            }
+          ],
+          "completion_rule": "Every task in this milestone satisfies its acceptance criteria with recorded verification evidence; human gates require named human approval."
+        },
+        {
+          "id": "P2-M2",
+          "title": "Electrical and schematic command coverage",
+          "tasks": [
+            {
+              "id": "P2-T05",
+              "title": "Implement reviewed DB connectivity invariants",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "electrical_engineering_agent",
+              "dependencies": ["P2-T01","P0-T08"],
+              "planned_outputs": ["backend/app/services/electrical_consistency.py"],
+              "implementation_steps": ["Implement terminal-reference, conductor/equipotential grouping and phase/PE boundary checks for existing DB topology.","Provide a compatibility projection for legacy nets and deterministic validation errors; preserve legacy snapshot bytes."],
+              "acceptance_criteria": ["Fixtures distinguish equipotential busbar junctions from individual conductors.","Cross-phase connection, dangling terminal and duplicate connection identity cases are rejected; valid existing DB fixtures remain representable."],
+              "verification_profiles": ["backend_unit","contract","engineering_review"],
+              "input_files": ["backend/app/models/electrical_graph.py","backend/app/services/netlist_engine.py","backend/app/services/graph_engine.py"]
+            },
+            {
+              "id": "P2-T06",
+              "title": "Implement catalog-backed add and remove operations",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "backend_application_engineer",
+              "dependencies": ["P2-T02","P2-T05"],
+              "planned_outputs": ["backend/app/services/operations/components.py"],
+              "implementation_steps": ["AddComponent allocates stable electrical/physical identities from pinned catalog data; require explicit terminal and placement intent.","RemoveComponent returns dependent connection/route/symbol consequences and applies only an explicitly confirmed cascade batch."],
+              "acceptance_criteria": ["Add/save/reopen retains all new identities and catalog version pins.","Removal cannot leave dangling references or silently remove unrelated connections; ambiguous cascade requires a new explicit proposal."],
+              "verification_profiles": ["backend_unit","postgres_isolated"],
+              "input_files": ["backend/app/services/component_selector.py","backend/app/models/cem.py","backend/app/models/pdm.py"]
+            },
+            {
+              "id": "P2-T07",
+              "title": "Implement connection and single-page schematic operations",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "backend_application_engineer",
+              "dependencies": ["P2-T02","P2-T05","P1-T01"],
+              "planned_outputs": ["backend/app/services/operations/schematic.py"],
+              "implementation_steps": ["Implement MoveSymbol and label/junction presentation changes against the typed schematic model.","Implement ModifyElectricalConnection through CEM terminal/conductor semantics and RegenerateSchematic as an explicit proposal; preserve manual positions unless approved to replace."],
+              "acceptance_criteria": ["Moving a symbol never changes electrical connectivity.","Graphical wire crossings do not create connections; electrical connection changes update CEM and presentation references consistently or fail atomically."],
+              "verification_profiles": ["backend_unit","contract"],
+              "input_files": ["backend/app/services/schematic_engine.py","frontend/src/components/schematic/schematicGraph.ts"]
+            },
+            {
+              "id": "P2-T08",
+              "title": "Implement transaction-aware undo and redo",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "backend_application_engineer",
+              "dependencies": ["P2-T03","P2-T04","P2-T06","P2-T07"],
+              "planned_outputs": ["backend/app/services/operations/history.py"],
+              "implementation_steps": ["Store sufficient before-state/inverses to undo accepted batches as new versioned operations; group a drag gesture into one command.","Recheck current preconditions on undo/redo, clear divergent redo branches and never mutate published historical revisions."],
+              "acceptance_criteria": ["Move, requirement, connection, add/remove and mixed batch round trips restore semantic state and dependent dirty status.","Undo from a stale base returns conflict; history survives save/reopen; one drag produces one undo entry."],
+              "verification_profiles": ["backend_unit","postgres_isolated"],
+              "input_files": ["frontend/src/stores/projectStore.ts","backend/app/services/project_service.py"]
+            }
+          ],
+          "completion_rule": "Every task in this milestone satisfies its acceptance criteria with recorded verification evidence; human gates require named human approval."
+        },
+        {
+          "id": "P2-M3",
+          "title": "Workspace tools and automatic generation adapter",
+          "tasks": [
+            {
+              "id": "P2-T09",
+              "title": "Introduce frontend command client and shared selection",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "frontend_cad_engineer",
+              "dependencies": ["P2-T01","P2-T02","P1-T09"],
+              "planned_outputs": ["frontend/src/stores/commandStore.ts","frontend/src/stores/selectionStore.ts"],
+              "implementation_steps": ["Use the central HTTP client for preview/commit/undo with cancellation, normalized errors and stale-response protection.","Resolve selection by persistent engineering ID across browser, inspector, schematic and physical views; remove direct durable model writes from UI handlers."],
+              "acceptance_criteria": ["A rejected command retains local proposal state and displays the structured reason.","Selecting the same entity in any view highlights matching representations without duplicating engineering state."],
+              "verification_profiles": ["frontend_unit","frontend_build"],
+              "input_files": ["frontend/src/api/client.ts","frontend/src/stores/projectStore.ts","frontend/src/stores/workspaceStore.ts","frontend/src/components/workspace/useWorkspaceCommands.ts"]
+            },
+            {
+              "id": "P2-T12",
+              "title": "Bootstrap isolated real-browser command test harness",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "quality_engineer",
+              "dependencies": ["P2-T09"],
+              "planned_outputs": ["frontend/e2e/","frontend/playwright.config.ts"],
+              "implementation_steps": ["Add one browser automation dependency only for interactions jsdom cannot prove; provide isolated seeded backend fixtures and repeatable startup/cleanup.","Use existing viewport smoke checks and the P2-T09 command client with prerequisite backend APIs to prove the harness runs before P2-T10/P2-T11 bindings exist.","Provide reusable fixtures/helpers for picking, gestures, conflicts and save/reopen. P2-T10/P2-T11 add feature-specific tests; P2-T14 owns final integrated cross-view acceptance."],
+              "acceptance_criteria": ["Harness smoke tests run repeatably without developer database state and clean up isolated fixtures.","A real browser loads the representative viewport and exercises the implemented command client/API path; no acceptance depends on bindings delivered by P2-T10/P2-T11.","Documented fixtures and commands support later cross-view tests; pending feature tests are not counted as passing."],
+              "verification_profiles": ["browser","frontend_build"],
+              "input_files": ["frontend/package.json","frontend/src/components/common/DesignViewport.tsx","backend/tests/conftest.py"]
+            },
+            {
+              "id": "P2-T10",
+              "title": "Connect 2D, 3D and inspector transforms to operations",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "frontend_cad_engineer",
+              "dependencies": ["P2-T04","P2-T08","P2-T09","P2-T12"],
+              "planned_outputs": ["frontend/src/components/workspace/OperationPreview.tsx"],
+              "implementation_steps": ["Keep drag previews transient, commit one MoveComponent on release and update both views from returned PDM.","Add coordinate/snap input, explicit dirty/recompute indication and unsupported-rotation disabling; keep camera/visibility changes display-only."],
+              "acceptance_criteria": ["A move through 2D, 3D or inspector produces the same PDM coordinates and undo result.","Camera/visibility changes emit no engineering operation; Save persists a dirty draft without generating routes."],
+              "verification_profiles": ["frontend_unit","frontend_build","browser"],
+              "input_files": ["frontend/src/components/layout/Layout2DViewer.tsx","frontend/src/components/threeD/Panel3DViewer.tsx","frontend/src/components/threeD/editorGeometry.ts","frontend/src/components/workspace/PropertiesInspector.tsx"]
+            },
+            {
+              "id": "P2-T11",
+              "title": "Connect schematic and catalog tools to shared commands",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "frontend_cad_engineer",
+              "dependencies": ["P2-T06","P2-T07","P2-T08","P2-T09","P2-T12"],
+              "planned_outputs": ["frontend/src/components/schematic/ConnectionPreview.tsx"],
+              "implementation_steps": ["Bind symbol moves and pin-connection editing to operations with explicit electrical effect previews.","Use catalog-backed AddComponent and dependency-aware RemoveComponent confirmation; maintain page presentation separately from CEM."],
+              "acceptance_criteria": ["Symbol move/undo preserves net hashes and layout after reopen.","Connecting compatible terminals updates CEM; invalid connections and unconfirmed cascading removals make no durable changes."],
+              "verification_profiles": ["frontend_unit","frontend_build","browser"],
+              "input_files": ["frontend/src/components/schematic/SchematicViewer.tsx","frontend/src/components/schematic/schematicGraph.ts","frontend/src/components/catalog/CatalogBrowser.tsx"]
+            },
+            {
+              "id": "P2-T13",
+              "title": "Adapt automatic generation to proposed operation batches",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "backend_application_engineer",
+              "dependencies": ["P2-T03","P2-T04","P2-T05","P2-T06","P2-T07","P2-T08"],
+              "planned_outputs": ["backend/app/services/generation_proposals.py"],
+              "implementation_steps": ["Wrap the existing deterministic pipeline to produce a proposed document delta and operation batch rather than directly bypassing document authority.","Preserve user-lock metadata and stable matching identities; return a conflict proposal when generation would overwrite a manual intent."],
+              "acceptance_criteria": ["Manual and generated changes pass the same version and invariant checks.","Preview generation changes no revision; accepting a proposal is atomic, undoable and cannot silently discard locked placements."],
+              "verification_profiles": ["backend_unit","postgres_isolated"],
+              "input_files": ["backend/app/services/orchestrator.py","backend/app/services/project_service.py","backend/app/api/routes_design.py"]
+            },
+            {
+              "id": "P2-T14",
+              "title": "Accept editable document vertical slice",
+              "type": "phase_acceptance",
+              "status": "planned",
+              "assigned_agent": "quality_engineer",
+              "dependencies": ["P2-T10","P2-T11","P2-T12","P2-T13"],
+              "planned_outputs": ["docs/verification/phase-2-acceptance.md","docs/PROJECT_LIFECYCLE.md","docs/CAD_WORKSPACE.md"],
+              "implementation_steps": ["Run move/save/reopen/undo, symbol move, connection, add/remove and automatic proposal workflows.","Verify supported operations, missing validation limitations and Save/Recompute/Publish labels are documented.","Run integrated browser tests from P2-T10/P2-T11 with P2-T12 fixtures; verify picking, grouped gestures, conflicts, cross-view movement and save/reopen. Include a negative check detecting mesh-only movement with unchanged saved PDM."],
+              "acceptance_criteria": ["All user mutation paths use shared operations and preserve CEM/PDM authority.","Historical revisions remain unchanged; unsupported rotation is unavailable; no implicit save-time regeneration occurs."],
+              "verification_profiles": ["postgres_isolated","browser","frontend_unit","frontend_build"],
+              "input_files": ["backend/tests/test_project_lifecycle.py","frontend/src/stores/projectStore.editor.test.ts"]
+            }
+          ],
+          "completion_rule": "Every task in this milestone satisfies its acceptance criteria with recorded verification evidence; human gates require named human approval."
+        }
+      ],
+      "exit_task_id": "P2-T14"
+    },
+    {
+      "id": "P3",
+      "title": "Incremental regeneration, durable execution and DB MVP acceptance",
+      "objective": "Compute only affected outputs, recover long-running work safely and prevent stale or unresolved results from becoming approved.",
+      "effort_hours": [280,440],
+      "release_scope": "mvp",
+      "risks": ["Missing dependency edges cause stale results","Worker completion races can overwrite newer edits"],
+      "milestones": [
+        {
+          "id": "P3-M1",
+          "title": "Explicit stage contracts and cache correctness",
+          "tasks": [
+            {
+              "id": "P3-T01",
+              "title": "Define executable stage registry and invalidation matrix",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "architecture_lead",
+              "dependencies": ["P2-T14"],
+              "planned_outputs": ["backend/app/services/stages/contracts.py","docs/architecture/stage-dependencies.md"],
+              "implementation_steps": ["Replace symbolic dirty-node lists with registered stage inputs, outputs, consumed field paths, prerequisites, algorithm versions and validation obligations.","Specify move, rating, connection, symbol-position, display-only, enclosure and catalog-version changes; unknown changes conservatively invalidate affected model closures."],
+              "acceptance_criteria": ["Registry rejects cycles and undefined stage references.","Move excludes electrical calculations; symbol movement excludes netlist; display-only changes schedule zero engineering stages."],
+              "verification_profiles": ["contract","backend_unit"],
+              "input_files": ["backend/app/services/change_propagation.py","backend/app/services/orchestrator.py"]
+            },
+            {
+              "id": "P3-T02",
+              "title": "Extract deterministic electrical stage adapters",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "electrical_engineering_agent",
+              "dependencies": ["P3-T01"],
+              "planned_outputs": ["backend/app/services/stages/electrical.py"],
+              "implementation_steps": ["Wrap existing algorithms with explicit immutable inputs, pinned catalogs/rules and serializable outputs; remove implicit runtime repository access from stage execution.","Keep generated IDs stable by document identity mapping and preserve current reviewed behavior before algorithm upgrades."],
+              "acceptance_criteria": ["Baseline semantic output matches full-generation fixtures with deterministic identities.","Stages execute from supplied inputs without a live database transaction or hidden catalog lookup."],
+              "verification_profiles": ["backend_unit","contract"],
+              "input_files": ["backend/app/services/orchestrator.py","backend/app/services/requirement_engine.py","backend/app/services/calculation_engine.py","backend/app/services/component_selector.py","backend/app/services/graph_engine.py","backend/app/services/netlist_engine.py","backend/app/services/schematic_engine.py"]
+            },
+            {
+              "id": "P3-T03",
+              "title": "Extract physical, geometry and documentation stage adapters",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "physical_optimization_agent",
+              "dependencies": ["P3-T01"],
+              "planned_outputs": ["backend/app/services/stages/physical.py","backend/app/services/stages/artifacts.py"],
+              "implementation_steps": ["Expose enclosure/zoning/placement/duct routing/physical validation/CAD/BOM stages with explicit dependency ordering and lock inputs.","Retain DuctRouter and hard constraints; distinguish regenerating local geometry from rerouting the connected duct network."],
+              "acceptance_criteria": ["Invalid placement or disconnected/obstructed duct trunks fail before eligible CAD publication.","Stage adapters retain terminal endpoints and route-to-connection IDs and match baseline output."],
+              "verification_profiles": ["backend_unit","contract"],
+              "input_files": ["backend/app/services/orchestrator.py","backend/app/services/panel_assembly.py","backend/app/services/physical_routing.py","backend/app/services/cad_engine.py","backend/app/services/validation_engine.py"]
+            },
+            {
+              "id": "P3-T04",
+              "title": "Implement content signatures, stale detection and stage cache",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "database_engineer",
+              "dependencies": ["P3-T02","P3-T03"],
+              "planned_outputs": ["backend/migrations/versions/<next>_stage_results.py","backend/app/services/stages/cache.py"],
+              "implementation_steps": ["Persist stage results keyed by canonical consumed inputs, schema/engine/rule/catalog/model versions and policy hash.","Track document-specific input/output versions, dirty/blocked/failed/valid states and cache integrity; cached data never changes historical revisions."],
+              "acceptance_criteria": ["Changing a relevant rule/catalog/policy invalidates its consuming stages; unrelated fields preserve eligible cache entries.","Corrupt/mismatched cache entries are rejected and recomputed only through explicit execution."],
+              "verification_profiles": ["postgres_isolated","backend_unit"],
+              "input_files": ["backend/app/persistence/assets.py","backend/app/persistence/repositories.py","backend/tools/build_schema_models.py"]
+            },
+            {
+              "id": "P3-T05",
+              "title": "Implement incremental scheduler and explicit recompute API",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "backend_application_engineer",
+              "dependencies": ["P3-T04"],
+              "planned_outputs": ["backend/app/services/stages/scheduler.py"],
+              "implementation_steps": ["Schedule the dirty dependency closure from the working document and expose explicit Recompute with stage execution records.","Reuse full generation as an oracle; replace propagate-change's immediate publish behavior with preview/operation/recompute boundaries."],
+              "acceptance_criteria": ["Incremental output equals full recomputation semantically across the change matrix.","Moved component records zero calculation/netlist executions while routing/validation/CAD refresh; Save still schedules nothing."],
+              "verification_profiles": ["backend_unit","postgres_isolated"],
+              "input_files": ["backend/app/services/orchestrator.py","backend/app/services/change_propagation.py","backend/app/api/routes_design.py"]
+            }
+          ],
+          "completion_rule": "Every task in this milestone satisfies its acceptance criteria with recorded verification evidence; human gates require named human approval."
+        },
+        {
+          "id": "P3-M2",
+          "title": "Durable jobs and safe worker completion",
+          "tasks": [
+            {
+              "id": "P3-T06",
+              "title": "Add durable job records, claims and leases",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "database_engineer",
+              "dependencies": ["P3-T01"],
+              "planned_outputs": ["backend/migrations/versions/<next>_jobs.py","backend/app/persistence/jobs.py"],
+              "implementation_steps": ["Persist queued/running/succeeded/failed/cancelled state, input signatures, base sequence, attempts, lease owner/expiry and artifact intent.","Implement atomic claim/heartbeat/expiry recovery with unique execution keys; remove blanket restart failure only when the durable path is integrated."],
+              "acceptance_criteria": ["Two workers cannot claim the same active lease.","Restart preserves queued jobs and healthy leases; only expired work is recoverable and retries have bounded attempts."],
+              "verification_profiles": ["postgres_isolated"],
+              "input_files": ["backend/app/main.py","backend/app/api/routes_cad.py","backend/tools/build_schema_models.py"]
+            },
+            {
+              "id": "P3-T07",
+              "title": "Implement bounded worker execution and result fencing",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "backend_application_engineer",
+              "dependencies": ["P3-T05","P3-T06"],
+              "planned_outputs": ["backend/app/jobs/worker.py","backend/app/jobs/runner.py"],
+              "implementation_steps": ["Run stage/native workloads outside request transactions with cancellation, time/resource budgets and structured failure records.","Fence completion by job token, base document sequence and signatures; store superseded artifacts as non-current or discard their attachment safely."],
+              "acceptance_criteria": ["Old, cancelled or lease-lost workers cannot mark newer outputs valid or replace the current revision.","Worker crash after blob creation leaves prior revision readable; retries do not create duplicate accepted outputs."],
+              "verification_profiles": ["postgres_isolated","backend_unit","security"],
+              "input_files": ["backend/app/main.py","backend/app/services/project_service.py","backend/app/api/routes_cad.py"]
+            },
+            {
+              "id": "P3-T08",
+              "title": "Expose job progress and explicit recompute UX",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "frontend_cad_engineer",
+              "dependencies": ["P3-T07"],
+              "planned_outputs": ["frontend/src/stores/jobStore.ts"],
+              "implementation_steps": ["Add job submit/status/cancel client contracts and stage-specific progress, failure and retry UI.","Use polling initially; tie results to document sequence and protect local drafts from late completion."],
+              "acceptance_criteria": ["Long jobs acknowledge asynchronously and survive page reload.","Cancel/retry behavior is visible; late results from an older base never replace newer editor state."],
+              "verification_profiles": ["frontend_unit","frontend_build","browser"],
+              "input_files": ["frontend/src/api/client.ts","frontend/src/components/workspace/WorkspaceBottomPanel.tsx","frontend/src/components/loading/LoadingPage.tsx","frontend/src/stores/documentStore.ts"]
+            }
+          ],
+          "completion_rule": "Every task in this milestone satisfies its acceptance criteria with recorded verification evidence; human gates require named human approval."
+        },
+        {
+          "id": "P3-M3",
+          "title": "Unified validation and protected publication",
+          "tasks": [
+            {
+              "id": "P3-T09",
+              "title": "Implement aggregate validation with explicit applicability",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "electrical_engineering_agent",
+              "dependencies": ["P0-T08","P3-T02","P3-T03"],
+              "planned_outputs": ["backend/app/models/validation.py","backend/app/services/validation_report.py"],
+              "implementation_steps": ["Aggregate requirement, electrical, physical, thermal-screen and geometry results by object, rule version, severity and applicability.","Separate geometric feasibility and prototype preview from engineering release eligibility; retain strict zero-violation physical generation."],
+              "acceptance_criteria": ["Any applicable required UNRESOLVED or FAIL check prevents engineering release eligibility.","Geometry PASS cannot mask unresolved bend, conductor, segregation or earth-anchor checks; NOT_APPLICABLE requires recorded rationale."],
+              "verification_profiles": ["backend_unit","contract","engineering_review"],
+              "input_files": ["backend/app/services/validation_engine.py","backend/app/services/wire_geometry.py","backend/app/models/pdm.py"]
+            },
+            {
+              "id": "P3-T10",
+              "title": "Harden placement validation and publication inputs",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "backend_application_engineer",
+              "dependencies": ["P3-T05","P3-T09","P2-T04"],
+              "planned_outputs": ["backend/app/services/publish_service.py"],
+              "implementation_steps": ["Resolve dimensions, terminal data, catalog pins and saved validation policy server-side instead of trusting client-supplied PDM fields.","Require matching base sequence, valid required stage outputs and report signatures for Publish; reject bypass through legacy generate/reroute routes."],
+              "acceptance_criteria": ["Client attempts to shrink dimensions, erase policy or submit a foreign component cannot pass validation.","Publication fails on stale/missing outputs and preserves the previous revision; draft Save remains allowed without claiming validity."],
+              "verification_profiles": ["postgres_isolated","security","backend_unit"],
+              "input_files": ["backend/app/api/routes_design.py","backend/app/api/routes_validation.py","backend/app/services/physical_routing.py","backend/app/services/project_service.py"]
+            },
+            {
+              "id": "P3-T11",
+              "title": "Add correlated execution logging and diagnostic redaction",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "security_release_engineer",
+              "dependencies": ["P3-T07","P3-T10"],
+              "planned_outputs": ["backend/app/observability.py"],
+              "implementation_steps": ["Propagate request/document/operation/job/stage IDs through structured logs, durations and failure records.","Redact credentials, SQL parameters, internal paths and sensitive requirement text; add bounded diagnostic retention settings."],
+              "acceptance_criteria": ["A failed operation can be traced through job/stage IDs without exposing secrets.","Log tests inject credential-like values and confirm public errors and normal diagnostics redact them."],
+              "verification_profiles": ["backend_unit","security"],
+              "input_files": ["backend/app/main.py","backend/app/services/design_errors.py","backend/app/persistence/repositories.py"]
+            },
+            {
+              "id": "P3-T12",
+              "title": "Implement approved local application trust boundary",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "security_release_engineer",
+              "dependencies": ["P0-T06","P2-T09"],
+              "planned_outputs": ["backend/app/security/local_session.py"],
+              "implementation_steps": ["For approved local deployment, bind backend to loopback and add per-session mutation authorization with strict origin handling and appropriate Tauri handoff.","Keep secrets out of bundles/logs, preserve dev workflow explicitly, and enforce per-project access assumptions; hosted deployment remains blocked pending its separate approved security backlog."],
+              "acceptance_criteria": ["An untrusted origin or unauthenticated local mutation request is rejected.","Authorized frontend and desktop sessions work, session rotation is tested and credentials never appear in client errors or committed configuration."],
+              "verification_profiles": ["security","frontend_unit","postgres_isolated","manual_platform"],
+              "input_files": ["backend/app/main.py","frontend/src/api/client.ts","frontend/src-tauri/src/lib.rs","frontend/src-tauri/capabilities/default.json"]
+            }
+          ],
+          "completion_rule": "Every task in this milestone satisfies its acceptance criteria with recorded verification evidence; human gates require named human approval."
+        },
+        {
+          "id": "P3-M4",
+          "title": "MVP reliability evidence",
+          "tasks": [
+            {
+              "id": "P3-T13",
+              "title": "Verify concurrency, restart and incremental equivalence",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "quality_engineer",
+              "dependencies": ["P3-T08","P3-T10","P3-T11","P3-T12"],
+              "planned_outputs": ["backend/tests/test_operations_concurrency.py","backend/tests/test_stage_equivalence.py","backend/tests/test_job_recovery.py"],
+              "implementation_steps": ["Exercise parallel commits, lost responses, stale previews, crash after job claim, expired leases and completion after cancellation.","Compare full and incremental outputs for every change kind, assert stage invocation counts and test cache/policy corruption."],
+              "acceptance_criteria": ["All concurrency cases produce exactly one accepted commit or explicit conflict with no lost local edits.","Failure injection preserves previous revisions and healthy jobs; dependency matrix has no unexplained mismatch."],
+              "verification_profiles": ["postgres_isolated","backend_unit","browser"],
+              "input_files": ["backend/tests/test_postgres.py","backend/tests/test_project_lifecycle.py","frontend/e2e/"]
+            },
+            {
+              "id": "P3-T14",
+              "title": "Accept document-centric DB MVP",
+              "type": "phase_acceptance",
+              "status": "planned",
+              "assigned_agent": "quality_engineer",
+              "dependencies": ["P3-T13","P2-T14","P1-T11"],
+              "planned_outputs": ["docs/verification/mvp-acceptance.md"],
+              "implementation_steps": ["Run move/recompute/publish/reopen/export, historical revision, undo/redo, recovery, graphical/electrical edit and automatic-generation scenarios.","Measure approved P0 open/interaction/job-ack targets and document known prototype engineering limits and missing native STEP."],
+              "acceptance_criteria": ["All required MVP scenarios pass with valid stage-count and hash evidence.","UI cannot present incomplete engineering checks as certified/released design; failed performance thresholds become blocking defects or explicitly approved scope changes."],
+              "verification_profiles": ["browser","postgres_isolated","frontend_build","document_review"],
+              "input_files": ["docs/PROJECT_LIFECYCLE.md","docs/CAD_WORKSPACE.md"]
+            }
+          ],
+          "completion_rule": "Every task in this milestone satisfies its acceptance criteria with recorded verification evidence; human gates require named human approval."
+        }
+      ],
+      "exit_task_id": "P3-T14"
+    },
+    {
+      "id": "P4",
+      "title": "Strengthen reviewed DB engineering and physical constraints",
+      "objective": "Replace hardcoded prototype choices with traceable, bounded methods and catalog-backed constraints.",
+      "effort_hours": [400,640],
+      "release_scope": "recommended",
+      "risks": ["Manufacturer data and qualified review can dominate elapsed time","Method correctness cannot be inferred from matching old output"],
+      "milestones": [
+        {
+          "id": "P4-M1",
+          "title": "Requirement and engineering evidence contracts",
+          "tasks": [
+            {
+              "id": "P4-T01",
+              "title": "Extend requirements with per-feeder loads and traceability",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "electrical_engineering_agent",
+              "dependencies": ["P1-T11","P0-T08"],
+              "planned_outputs": ["backend/app/models/loads.py","frontend/src/types/loads.ts"],
+              "implementation_steps": ["Add stable load/feeder IDs, demand inputs, environmental assumptions, source evidence and confirmed/assumed/missing/derived states.","Extend questionnaire and validation without guessing absent engineering data; preserve compatibility with current DB defaults as explicit assumptions."],
+              "acceptance_criteria": ["Round-trip retains per-feeder identity, units and provenance.","Missing mandatory load data blocks applicable calculations while incomplete requirements can still be saved as drafts."],
+              "verification_profiles": ["contract","backend_unit","frontend_unit","frontend_build"],
+              "input_files": ["backend/app/models/requirements.py","backend/app/models/cem.py","backend/app/services/requirement_engine.py","frontend/src/components/requirements/Questionnaire.tsx"]
+            },
+            {
+              "id": "P4-T02",
+              "title": "Prepare method registry specification and independent worked cases",
+              "type": "design",
+              "status": "planned",
+              "assigned_agent": "electrical_engineering_agent",
+              "dependencies": ["P4-T01"],
+              "planned_outputs": ["docs/engineering/db-methods.md","backend/tests/fixtures/engineering_reference/"],
+              "implementation_steps": ["List current fixed diversity, busbar margins, feeder-rating repetition, wire lengths and thermal assumptions; propose bounded replacement methods.","Prepare independently calculated normal/boundary/infeasible cases and required catalog fields for protection, conductor, terminal, mounting and heat-loss checks."],
+              "acceptance_criteria": ["Each proposed method has units, input range, required data, source and unsupported conditions.","Reference expected values have an independent reviewer/source, not formulas copied from the implementation."],
+              "verification_profiles": ["engineering_review","document_review"],
+              "input_files": ["backend/app/services/calculation_engine.py","backend/app/services/component_selector.py","backend/app/services/enclosure_engine.py","backend/app/data/components.json"]
+            },
+            {
+              "id": "P4-T03",
+              "title": "Approve engineering methods, data rights and reference values",
+              "type": "human_gate",
+              "status": "awaiting_future_approval",
+              "assigned_agent": "electrical_engineering_agent",
+              "dependencies": ["P4-T02","P0-T08"],
+              "planned_outputs": ["docs/decisions/approved-db-methods-and-data.md"],
+              "implementation_steps": ["Obtain named engineering approval of method applicability, required checks, numeric tolerances and reference answers.","Obtain manufacturer-data access/usage permission and approved catalog sample; record missing data as blockers rather than synthesizing authoritative values."],
+              "acceptance_criteria": ["Approval explicitly lists supported DB cases and excludes certification claims.","Every required input has an approved source or a blocked capability; unresolved protection/thermal methods remain unavailable."],
+              "verification_profiles": ["engineering_review"],
+              "approver": "Qualified electrical engineer and catalog/data rights owner",
+              "decision_id": "D03",
+              "input_files": ["docs/engineering/db-methods.md"]
+            }
+          ],
+          "completion_rule": "Every task in this milestone satisfies its acceptance criteria with recorded verification evidence; human gates require named human approval."
+        },
+        {
+          "id": "P4-M2",
+          "title": "Deterministic electrical and catalog modules",
+          "tasks": [
+            {
+              "id": "P4-T04",
+              "title": "Implement versioned calculation and rule registry",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "electrical_engineering_agent",
+              "dependencies": ["P3-T14","P4-T03"],
+              "planned_outputs": ["backend/app/engineering/methods.py","backend/app/engineering/rules.py"],
+              "implementation_steps": ["Implement only approved load/demand, busbar, voltage-drop and protection checks with explicit units and applicability guards.","Return calculation input IDs, intermediate results, method/rule versions and unresolved requirements; remove silent fixed-factor assumptions from approved paths."],
+              "acceptance_criteria": ["Independent reference cases match approved numeric tolerances.","Missing fault level/derating/length data cannot produce a false protection or cable-sizing PASS; unsupported cases return explicit status."],
+              "verification_profiles": ["backend_unit","engineering_review"],
+              "input_files": ["backend/app/services/calculation_engine.py","backend/app/services/requirement_engine.py","backend/app/persistence/repositories.py"]
+            },
+            {
+              "id": "P4-T05",
+              "title": "Replace repeating feeder selection with constrained catalog selection",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "electrical_engineering_agent",
+              "dependencies": ["P4-T04"],
+              "planned_outputs": ["backend/app/engineering/selection.py"],
+              "implementation_steps": ["Select devices per feeder/load, phase, rating, protection and catalog availability using approved constraints.","Return feasible alternatives and selection rationale; preserve manual catalog locks and expose infeasibility instead of reusing 16/32/40A cycling."],
+              "acceptance_criteria": ["Mixed-load fixtures choose admissible devices per feeder and identify exact catalog/method versions.","No feasible candidate yields a structured failure; soft preference never overrides a hard electrical constraint."],
+              "verification_profiles": ["backend_unit","engineering_review"],
+              "input_files": ["backend/app/services/component_selector.py","backend/app/services/calculation_engine.py","backend/app/models/cem.py"]
+            },
+            {
+              "id": "P4-T06",
+              "title": "Complete DB functional graph, netlist and ERC adapters",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "electrical_engineering_agent",
+              "dependencies": ["P4-T05","P2-T05"],
+              "planned_outputs": ["backend/app/engineering/electrical_rules.py"],
+              "implementation_steps": ["Build topology from supported functional modules and feeder intent using approved terminal equivalence and conductor/net distinctions.","Add grounded connectivity, phase, terminal-capacity and protection-path checks with source requirements; keep schematics a projection."],
+              "acceptance_criteria": ["Every connection has stable terminal and conductor references and applicable protection-path validation.","Fixtures reject dangling/misphased/overcapacity cases and preserve known valid busbar equivalence without broadening panel archetypes."],
+              "verification_profiles": ["backend_unit","contract","engineering_review"],
+              "input_files": ["backend/app/services/graph_engine.py","backend/app/services/netlist_engine.py","backend/app/models/electrical_graph.py","backend/app/services/schematic_engine.py"]
+            },
+            {
+              "id": "P4-T07",
+              "title": "Version conductor, terminal and mounting catalog contracts",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "database_engineer",
+              "dependencies": ["P4-T03","P1-T02"],
+              "planned_outputs": ["backend/migrations/versions/<next>_engineering_catalog.py","backend/app/models/catalog_engineering.py"],
+              "implementation_steps": ["Add reviewed conductor dimensions/ampacity/bend data, terminal positions/capacity, permitted orientation/mounting and heat-loss provenance through versioned catalog structures.","Represent missing values explicitly and provide unit-aware validation; regenerate mappings only through the existing tool."],
+              "acceptance_criteria": ["New catalog versions leave published old versions untouched.","Invalid units, duplicate terminal IDs and unverified nominal values cannot be marked reviewed."],
+              "verification_profiles": ["postgres_isolated","contract"],
+              "input_files": ["backend/app/persistence/parameters.py","backend/app/persistence/repositories.py","backend/app/models/pdm.py","backend/tools/build_schema_models.py"]
+            },
+            {
+              "id": "P4-T08",
+              "title": "Import bounded reviewed catalog and add quality audit",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "electrical_engineering_agent",
+              "dependencies": ["P4-T07"],
+              "planned_outputs": ["backend/app/persistence/catalog_quality.py","backend/tests/fixtures/catalog_reviewed/"],
+              "implementation_steps": ["Import only the approved sample as new catalog versions with source/provenance; keep legacy fixtures available for explicit tests.","Audit missing geometry, conductor/terminal limits and mounting/thermal data with object-specific findings."],
+              "acceptance_criteria": ["Approved sample passes schema and provenance checks; incomplete records remain explicitly incomplete.","Reimport is idempotent and never rewrites pinned historical catalog versions."],
+              "verification_profiles": ["postgres_isolated","engineering_review"],
+              "input_files": ["backend/app/persistence/manage.py","backend/app/persistence/import_legacy.py","backend/app/persistence/import_panel_hardware.py"]
+            }
+          ],
+          "completion_rule": "Every task in this milestone satisfies its acceptance criteria with recorded verification evidence; human gates require named human approval."
+        },
+        {
+          "id": "P4-M3",
+          "title": "Constraint-aware placement, routing and editing",
+          "tasks": [
+            {
+              "id": "P4-T09",
+              "title": "Implement shared oriented geometry and mounting validation",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "physical_optimization_agent",
+              "dependencies": ["P3-T14","P4-T07"],
+              "planned_outputs": ["backend/app/geometry/transforms.py","backend/tests/fixtures/geometry_transforms/"],
+              "implementation_steps": ["Define enclosure-mm transforms for mounted device bounds, terminal anchors and supported orthogonal rotations.","Add independent depth, mounting, clearance and accessibility checks with matching frontend fixtures while keeping backend authoritative."],
+              "acceptance_criteria": ["Backend and frontend agree on corners/anchors within an explicitly specified fixture tolerance.","Boundary/contact/overlap and mounting-offset cases are checked for every supported orientation; unknown orientations remain rejected."],
+              "verification_profiles": ["backend_unit","frontend_unit","contract"],
+              "input_files": ["backend/app/services/validation_engine.py","backend/app/services/panel_geometry.py","frontend/src/components/threeD/editorGeometry.ts","backend/app/models/pdm.py"]
+            },
+            {
+              "id": "P4-T10",
+              "title": "Enable only validated device rotations and terminal routing",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "physical_optimization_agent",
+              "dependencies": ["P4-T09","P4-T08","P2-T04"],
+              "planned_outputs": ["backend/tests/test_rotated_routing.py"],
+              "implementation_steps": ["Transform permitted terminal anchors and obstacles for catalog-approved rotations and reroute through DuctRouter.","Enable RotateComponent UI only for the supported device/orientation combinations; unsupported combinations still fail explicitly."],
+              "acceptance_criteria": ["Rotated terminal endpoints and routed geometry agree with PDM and CAD transforms.","Every enabled orientation passes clearance/routing validation; non-supported angles cannot bypass backend checks."],
+              "verification_profiles": ["backend_unit","frontend_unit","browser"],
+              "input_files": ["backend/app/services/physical_routing.py","backend/app/services/operations/physical.py","frontend/src/components/workspace/PropertiesInspector.tsx"]
+            },
+            {
+              "id": "P4-T11",
+              "title": "Add DIN rail, cable duct and placement-lock operations",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "physical_optimization_agent",
+              "dependencies": ["P2-T08","P3-T10","P4-T09"],
+              "planned_outputs": ["backend/app/services/operations/infrastructure.py"],
+              "implementation_steps": ["Implement ModifyDINRail, ModifyCableDuct and lock/unlock operations with mounting dependencies and route invalidation.","Expose bounded 2D/inspector tools; require explicit dependent-component relocation when infrastructure changes make current mounting invalid."],
+              "acceptance_criteria": ["Undo restores infrastructure, locks and references atomically.","Disconnected/obstructed duct changes cannot publish; Save keeps them as clearly invalid drafts without free-air fallback."],
+              "verification_profiles": ["backend_unit","postgres_isolated","frontend_unit"],
+              "input_files": ["backend/app/services/panel_assembly.py","backend/app/algorithms/layout_config.py","frontend/src/components/layout/Layout2DViewer.tsx"]
+            },
+            {
+              "id": "P4-T12",
+              "title": "Integrate zoning, enclosure choice and hard locked placement",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "physical_optimization_agent",
+              "dependencies": ["P4-T05","P4-T08","P4-T11"],
+              "planned_outputs": ["backend/tests/test_locked_placement.py"],
+              "implementation_steps": ["Add functional zones, permitted orientations/mounting, access constraints and user locks to CP-SAT feasibility; use reviewed enclosure/cabinet data.","Expose OptimizePlacement as an explicit operation proposal with stable identities and objective explanation."],
+              "acceptance_criteria": ["Locked components remain fixed; impossible locks return infeasible instead of being ignored.","Improving wire/heat score never permits overlap, mounting, zone or accessibility hard violations."],
+              "verification_profiles": ["backend_unit","engineering_review"],
+              "input_files": ["backend/app/algorithms/cp_sat_placement.py","backend/app/services/zoning_engine.py","backend/app/services/enclosure_engine.py","backend/app/services/orchestrator.py"]
+            },
+            {
+              "id": "P4-T13",
+              "title": "Implement data-backed duct capacity and wire constraints",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "physical_optimization_agent",
+              "dependencies": ["P4-T06","P4-T08","P4-T10","P4-T12"],
+              "planned_outputs": ["backend/tests/test_routing_capacity.py"],
+              "implementation_steps": ["Replace fixed lane/fallback-diameter assumptions in reviewed paths with conductor dimensions, terminal capacity, fill/segregation and bend constraints.","Keep DuctRouter as active routing engine and full connected-network reroute as initial safe scope; use explicit failure/UNRESOLVED for missing data."],
+              "acceptance_criteria": ["Capacity, bend and segregation fixtures include exact-boundary and infeasible cases.","Disconnected trunks and impossible routing fail without free-air fallback; every route retains connection and terminal IDs."],
+              "verification_profiles": ["backend_unit","engineering_review"],
+              "input_files": ["backend/app/algorithms/duct_routing.py","backend/app/services/physical_routing.py","backend/app/services/wire_geometry.py"]
+            },
+            {
+              "id": "P4-T14",
+              "title": "Implement bounded thermal screening and validation explanation",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "electrical_engineering_agent",
+              "dependencies": ["P4-T04","P4-T08","P4-T12"],
+              "planned_outputs": ["backend/app/engineering/thermal_screen.py"],
+              "implementation_steps": ["Implement only approved thermal estimation applicability with ambient/load/enclosure inputs and catalog heat losses.","Explain assumptions and missing data in validation UI; distinguish simple screening from validated temperature rise or compliance."],
+              "acceptance_criteria": ["Approved thermal reference cases match reviewed tolerance.","Missing/out-of-range data produces UNRESOLVED or unsupported status and cannot be labeled compliant."],
+              "verification_profiles": ["backend_unit","frontend_unit","engineering_review"],
+              "input_files": ["backend/app/services/enclosure_engine.py","backend/app/services/validation_engine.py","frontend/src/components/validation/ValidationPanel.tsx"]
+            }
+          ],
+          "completion_rule": "Every task in this milestone satisfies its acceptance criteria with recorded verification evidence; human gates require named human approval."
+        },
+        {
+          "id": "P4-M4",
+          "title": "Engineering acceptance",
+          "tasks": [
+            {
+              "id": "P4-T15",
+              "title": "Verify strengthened engineering against independent fixtures",
+              "type": "verification",
+              "status": "planned",
+              "assigned_agent": "quality_engineer",
+              "dependencies": ["P4-T06","P4-T08","P4-T10","P4-T11","P4-T12","P4-T13","P4-T14"],
+              "planned_outputs": ["docs/verification/phase-4-engineering-evidence.md"],
+              "implementation_steps": ["Run reviewed reference cases, infeasible/missing-data cases and changed-method-version invalidation through full and incremental pipelines.","Confirm manual, generation and optimization paths use identical hard constraints and traceability."],
+              "acceptance_criteria": ["Every accepted result cites method/catalog versions and supported input domain.","All known invalid/missing-data cases fail or remain unresolved as designed; historical hashes remain unchanged."],
+              "verification_profiles": ["backend_unit","postgres_isolated","engineering_review"],
+              "input_files": ["backend/tests/test_constraints.py","backend/tests/test_wire_engine.py","backend/tests/test_panel_assembly.py"]
+            },
+            {
+              "id": "P4-T16",
+              "title": "Approve bounded DB engineering release claims",
+              "type": "human_gate",
+              "status": "awaiting_future_approval",
+              "assigned_agent": "electrical_engineering_agent",
+              "dependencies": ["P4-T15"],
+              "planned_outputs": ["docs/decisions/db-engineering-acceptance.md"],
+              "implementation_steps": ["Present numeric evidence, unsupported cases and user-facing claims to the qualified reviewer.","Record approved scope and residual limits; require independent physical/compliance work outside Codex if such claims are requested."],
+              "acceptance_criteria": ["Named engineer accepts only the documented method/data envelope.","Any unresolved required engineering check blocks the corresponding release claim; no software-only certification is asserted."],
+              "verification_profiles": ["engineering_review"],
+              "approver": "Qualified electrical engineer and product owner",
+              "decision_id": "D04",
+              "input_files": ["docs/verification/phase-4-engineering-evidence.md"]
+            }
+          ],
+          "completion_rule": "Every task in this milestone satisfies its acceptance criteria with recorded verification evidence; human gates require named human approval."
+        }
+      ],
+      "exit_task_id": "P4-T16"
+    },
+    {
+      "id": "P5",
+      "title": "Exact CAD worker, interoperability and frozen documentation",
+      "objective": "Turn the existing primitive and FreeCAD-script pipeline into tested revision-bound CAD and document outputs.",
+      "effort_hours": [320,520],
+      "release_scope": "recommended",
+      "risks": ["Native packaging and vendor STEP quality","Topology identity and preview/exact geometry divergence"],
+      "milestones": [
+        {
+          "id": "P5-M1",
+          "title": "Geometry boundary and bounded parametric model",
+          "tasks": [
+            {
+              "id": "P5-T00",
+              "title": "Correct exporter pivot mapping and qualify the native reference",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "cad_kernel_engineer",
+              "dependencies": ["P3-T14","P0-T05","P0-T06"],
+              "planned_outputs": ["backend/app/services/cad_engine.py","backend/tests/test_cad_reference.py","docs/verification/native-reference-qualification.md"],
+              "implementation_steps": ["Inspect the P0-T05 retained 30 mm mounted-part bound failure and independently derive the correct centre/pivot transform for rotated boxes and cylinders. Reuse the qualified runtime and unchanged reference expectations.","Correct only exporter transform mapping and add zero/nonzero-rotation regression cases. Review generator version pins and historical revision compatibility; never rewrite saved artifacts or frozen baseline evidence.","Run pinned native export and fresh-process STEP reopen. Retain artifacts, provenance, units, counts, per-part bounds, validity, volume comparison, timings and failure logs. Record human reference-test tolerance approval.","Close P0-T05-NATIVE-001 only on passing native evidence. Keep semantic identity, production isolation and distribution qualification in their respective downstream tasks."],
+              "acceptance_criteria": ["Rotated and unrotated native geometry agrees with independent PDM placement expectations within approved tolerances; the demonstrated 30 mm regression is covered without changing its expected bounds.","The native_cad profile passes with retained STEP and fresh-process evidence, including mm units, counts, bounds and validity; missing runtime or failed geometry prevents acceptance.","Generator/version compatibility is reviewed and historical revisions/artifact bytes remain unchanged."],
+              "verification_profiles": ["backend_unit","native_cad","document_review"],
+              "human_input": "Provide the pinned runtime and approve reference-test tolerances and local execution. Redistribution remains a separate P7 release decision.",
+              "input_files": ["docs/architecture/geometry-kernel-evaluation.md","backend/tests/fixtures/cad_reference/","backend/app/services/cad_engine.py","backend/app/services/panel_geometry.py","backend/app/persistence/revisions.py"]
+            },
+            {
+              "id": "P5-T01",
+              "title": "Define geometry adapter and assembly input contract",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "cad_kernel_engineer",
+              "dependencies": ["P3-T14","P0-T06","P5-T00"],
+              "planned_outputs": ["backend/app/geometry/kernel.py","backend/app/models/cad_document.py"],
+              "implementation_steps": ["Specify declarative PDM-derived assembly instances, primitive/feature parameters, stable object references, units, origins and schema/kernel versions.","Retain the existing primitive renderer as a fast adapter; choose the native adapter approved in P0 and define shape validity/bounds tolerances."],
+              "acceptance_criteria": ["Contract fixtures map each geometric instance to a PDM ID and pinned component model.","No frontend mesh or arbitrary script is accepted as authoritative geometry input."],
+              "verification_profiles": ["contract","backend_unit"],
+              "input_files": ["backend/app/services/cad_engine.py","backend/app/services/panel_geometry.py","backend/app/models/pdm.py"]
+            },
+            {
+              "id": "P5-T02",
+              "title": "Implement isolated native worker process",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "cad_kernel_engineer",
+              "dependencies": ["P5-T01","P3-T07"],
+              "planned_outputs": ["backend/app/geometry/native_worker.py"],
+              "implementation_steps": ["Execute approved pinned kernel using structured input/output files in isolated temporary directories with deadlines and bounded resources.","Handle missing kernel, crash, timeout, cancellation and output validation through durable job errors; do not execute user-supplied Python."],
+              "acceptance_criteria": ["Crashing/timing-out worker cannot terminate the API or publish partial outputs.","Job retries and fencing remain valid; logs reveal no private paths or credentials."],
+              "verification_profiles": ["native_cad","postgres_isolated","security"],
+              "input_files": ["backend/app/jobs/runner.py","backend/panel-backend.spec","backend/app/services/cad_engine.py"]
+            },
+            {
+              "id": "P5-T03",
+              "title": "Build bounded parametric panel assembly and feature hierarchy",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "cad_kernel_engineer",
+              "dependencies": ["P5-T02"],
+              "planned_outputs": ["backend/app/geometry/panel_features.py"],
+              "implementation_steps": ["Generate enclosure/backplate, rails, ducts, component instances and supported wire sweeps from PDM using stable feature IDs and dependency references.","Keep initial feature kinds bounded to existing panel geometry; export semantic instance mapping independent of kernel face numbering."],
+              "acceptance_criteria": ["Regenerating an unchanged PDM retains object/feature IDs and valid shapes.","Assembly dimensions, mounting offsets and bounds match reference PDM within approved tolerance; unsupported features fail explicitly."],
+              "verification_profiles": ["native_cad","backend_unit"],
+              "input_files": ["backend/app/services/panel_assembly.py","backend/app/services/cad_engine.py","backend/app/services/panel_geometry.py"]
+            }
+          ],
+          "completion_rule": "Every task in this milestone satisfies its acceptance criteria with recorded verification evidence; human gates require named human approval."
+        },
+        {
+          "id": "P5-M2",
+          "title": "STEP/GLB interoperability and artifact lineage",
+          "tasks": [
+            {
+              "id": "P5-T04",
+              "title": "Import bounded component STEP geometry safely",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "cad_kernel_engineer",
+              "dependencies": ["P5-T02","P1-T10"],
+              "planned_outputs": ["backend/app/geometry/step_import.py"],
+              "implementation_steps": ["Import STEP into new catalog model versions via isolated jobs with file-size/entity-count/time limits and declared units/origin.","Generate verified geometry metadata and tessellation mapping; require explicit alignment confirmation for ambiguous vendor origins."],
+              "acceptance_criteria": ["Malformed, oversized and unit-ambiguous inputs fail without partial active catalog versions.","Representative approved STEP imports retain dimensions and assembly mapping; imported geometry does not independently alter CEM/PDM."],
+              "verification_profiles": ["native_cad","postgres_isolated","security"],
+              "input_files": ["backend/app/persistence/assets.py","backend/app/api/routes_catalog.py","backend/app/persistence/repositories.py"]
+            },
+            {
+              "id": "P5-T05",
+              "title": "Generate identity-preserving tessellation and previews",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "cad_kernel_engineer",
+              "dependencies": ["P5-T03","P5-T04"],
+              "planned_outputs": ["backend/app/geometry/tessellation.py"],
+              "implementation_steps": ["Cache tessellation by exact model/PDM transform/tolerance/kernel versions and attach persistent object IDs to GLB metadata.","Maintain declared millimetre-to-render-unit transforms and separate geometry quality from engineering validation."],
+              "acceptance_criteria": ["GLB picking resolves the same component ID as PDM and STEP instance mapping.","Cache invalidates on geometry/tolerance changes and never mutates historical artifact bytes."],
+              "verification_profiles": ["native_cad","backend_unit","frontend_unit"],
+              "input_files": ["backend/app/services/panel_geometry.py","backend/app/persistence/assets.py","frontend/src/components/threeD/AssetObject.tsx"]
+            },
+            {
+              "id": "P5-T06",
+              "title": "Export and independently reopen revision-bound STEP",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "cad_kernel_engineer",
+              "dependencies": ["P5-T03","P5-T05","P3-T10"],
+              "planned_outputs": ["backend/app/geometry/step_export.py","backend/tests/test_native_cad.py"],
+              "implementation_steps": ["Export exact saved-revision geometry with pinned kernel/catalog/model metadata and hash-managed artifact records.","Reopen STEP in an independent reader path and compare expected instance/solid counts, units, bounds and validity; keep legacy PY script labeled as a script."],
+              "acceptance_criteria": ["Native execution and reopened results satisfy approved fixtures; generating Python text alone cannot pass.","Export from an old complete revision matches its stored inputs/artifacts without silently regenerating with a different engine."],
+              "verification_profiles": ["native_cad","postgres_isolated"],
+              "input_files": ["backend/app/api/routes_cad.py","backend/app/services/project_service.py","backend/app/persistence/revisions.py"]
+            }
+          ],
+          "completion_rule": "Every task in this milestone satisfies its acceptance criteria with recorded verification evidence; human gates require named human approval."
+        },
+        {
+          "id": "P5-M3",
+          "title": "Engineering drawings and documentation",
+          "tasks": [
+            {
+              "id": "P5-T07",
+              "title": "Produce revision-bound BOM CSV and parts schedules",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "backend_application_engineer",
+              "dependencies": ["P1-T05","P4-T08"],
+              "planned_outputs": ["backend/app/documents/bom_export.py"],
+              "implementation_steps": ["Render BOM CSV and parts schedules from saved revision snapshots including catalog versions, quantities and provenance.","Separate engineering BOM from display-only parts and attach revision/validation status to outputs."],
+              "acceptance_criteria": ["CSV totals and stable IDs equal the stored BOM snapshot.","Changed catalog or current design does not change an old exported schedule; CSV content is safely escaped."],
+              "verification_profiles": ["backend_unit","postgres_isolated","security"],
+              "input_files": ["backend/app/services/panel_assembly.py","frontend/src/components/bom/BOMTable.tsx","backend/app/persistence/assets.py"]
+            },
+            {
+              "id": "P5-T08",
+              "title": "Generate schematic and panel drawing PDF/SVG",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "cad_kernel_engineer",
+              "dependencies": ["P5-T03","P1-T05","P2-T07"],
+              "planned_outputs": ["backend/app/documents/drawings.py"],
+              "implementation_steps": ["Render saved schematic pages and dimensioned panel orthographic drawings with scale, units, object labels, revision and prototype-validation status.","Use a documented export renderer that does not depend on mutable browser state; package fonts/assets under reviewed terms."],
+              "acceptance_criteria": ["Reference drawing dimensions and pin labels match saved schematic/PDM within approved rendering tolerances.","Old revision drawing bytes remain frozen; unavailable required geometry produces a clear export failure."],
+              "verification_profiles": ["backend_unit","native_cad","postgres_isolated"],
+              "input_files": ["backend/app/services/schematic_engine.py","backend/app/services/panel_geometry.py"]
+            },
+            {
+              "id": "P5-T09",
+              "title": "Generate terminal, connection and wire-cut schedules",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "electrical_engineering_agent",
+              "dependencies": ["P4-T13","P1-T05"],
+              "planned_outputs": ["backend/app/documents/wiring_export.py"],
+              "implementation_steps": ["Export terminal/connection IDs, conductor specification, routed length and explicitly approved cut allowance from frozen outputs.","Label provisional geometry lengths and unresolved manufacturer details; never fabricate a manufacturing-ready cut list."],
+              "acceptance_criteria": ["Every exported wire maps to exactly one supported CEM connection and PDM route.","Missing required sizing/allowance data prevents a manufacturing-ready label and is traceable in the schedule."],
+              "verification_profiles": ["backend_unit","engineering_review"],
+              "input_files": ["backend/app/services/wire_geometry.py","backend/app/services/panel_assembly.py","backend/app/models/cem.py"]
+            },
+            {
+              "id": "P5-T10",
+              "title": "Expose assembly hierarchy, CAD jobs and documentation exports",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "frontend_cad_engineer",
+              "dependencies": ["P5-T05","P5-T06","P5-T07","P5-T08","P5-T09"],
+              "planned_outputs": ["frontend/src/components/workspace/ArtifactPanel.tsx"],
+              "implementation_steps": ["Display bounded model hierarchy and exact/preview artifact states by revision with shared object selection.","Offer export/download/import actions only when backend capabilities and validation scope permit; show missing-kernel and historical compatibility errors."],
+              "acceptance_criteria": ["Selecting an assembly node resolves the matching PDM component in all views.","Downloads use verified managed asset URLs and identify revision, format and validation limitations."],
+              "verification_profiles": ["frontend_unit","frontend_build","browser"],
+              "input_files": ["frontend/src/components/workspace/ProjectBrowser.tsx","frontend/src/components/threeD/AssetObject.tsx","frontend/src/components/workspace/WorkspaceMenuBar.tsx","frontend/src/api/client.ts"]
+            },
+            {
+              "id": "P5-T11",
+              "title": "Accept CAD and document interoperability on supported platforms",
+              "type": "phase_acceptance",
+              "status": "planned",
+              "assigned_agent": "quality_engineer",
+              "dependencies": ["P5-T10","P4-T16"],
+              "planned_outputs": ["docs/verification/phase-5-cad-acceptance.md","docs/CAD_WORKSPACE.md"],
+              "implementation_steps": ["Run native import/export/reopen, missing asset, worker crash, wire sweep and historical artifact tests on the approved OS matrix.","Compare saved PDM, exact assembly, GLB and drawings; record packaging dependencies and tolerances."],
+              "acceptance_criteria": ["All advertised native exports execute and reopen successfully on supported platforms.","Current and historical output identities/units agree; untested platforms are explicitly excluded from support claims."],
+              "verification_profiles": ["native_cad","manual_platform","browser","postgres_isolated"],
+              "input_files": ["backend/tests/test_native_cad.py","frontend/src-tauri/tauri.conf.json"]
+            }
+          ],
+          "completion_rule": "Every task in this milestone satisfies its acceptance criteria with recorded verification evidence; human gates require named human approval."
+        }
+      ],
+      "exit_task_id": "P5-T11"
+    },
+    {
+      "id": "P6",
+      "title": "Structured AI assistance with deterministic approval controls",
+      "objective": "Add useful requirement interpretation, explanation and bounded proposals without granting AI engineering authority.",
+      "effort_hours": [240,400],
+      "release_scope": "recommended",
+      "risks": ["Unlicensed or poor-quality knowledge corpus","Prompt injection, invented references and stale proposals","External provider latency and data exposure"],
+      "milestones": [
+        {
+          "id": "P6-M1",
+          "title": "Provider, data and context boundary",
+          "tasks": [
+            {
+              "id": "P6-T01",
+              "title": "Specify supported assistant intents and provider contract",
+              "type": "design",
+              "status": "planned",
+              "assigned_agent": "ai_integration_engineer",
+              "dependencies": ["P3-T14","P4-T03"],
+              "planned_outputs": ["docs/architecture/assistant-boundary.md","backend/app/ai/contracts.py"],
+              "implementation_steps": ["Define requirement-question, explanation, design-review, candidate-recommendation and allowlisted operation-proposal response schemas.","Specify provider-neutral structured output, context limits, time/cost budgets, redaction and evaluation corpus; no arbitrary tool/code execution."],
+              "acceptance_criteria": ["Every mutating intent maps to an existing operation and explicit approval workflow.","Provider outages or invalid output have a deterministic no-mutation fallback."],
+              "verification_profiles": ["contract","document_review"],
+              "input_files": ["backend/app/models/operations.py","backend/app/services/validation_report.py","frontend/src/components/workspace/WorkspaceBottomPanel.tsx"]
+            },
+            {
+              "id": "P6-T02",
+              "title": "Approve provider, permitted data and evaluation thresholds",
+              "type": "human_gate",
+              "status": "awaiting_future_approval",
+              "assigned_agent": "ai_integration_engineer",
+              "dependencies": ["P6-T01"],
+              "planned_outputs": ["docs/decisions/assistant-data-and-provider.md"],
+              "implementation_steps": ["Present provider/deployment options, data sent, retention/cost controls, licensed knowledge sources and proposed evaluation set.","Obtain explicit approval and private credential provisioning; define supported intents and minimum task-quality thresholds before evaluation."],
+              "acceptance_criteria": ["Owner records permitted data categories, provider choice, budget ceilings and required redaction.","Knowledge source rights and evaluation thresholds are recorded; credentials are absent from repository and client bundle."],
+              "verification_profiles": ["document_review","security"],
+              "approver": "Product owner and data/security owner",
+              "decision_id": "D05",
+              "input_files": ["docs/architecture/assistant-boundary.md"]
+            },
+            {
+              "id": "P6-T03",
+              "title": "Implement provider adapter with resource and privacy controls",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "ai_integration_engineer",
+              "dependencies": ["P6-T02"],
+              "planned_outputs": ["backend/app/ai/provider.py","backend/app/ai/service.py"],
+              "implementation_steps": ["Implement the approved provider behind an injectable adapter with strict schema parsing, timeout, bounded retries and per-request token/cost limits.","Load credentials server-side, redact configured data and record model/provider/version usage without raw secrets."],
+              "acceptance_criteria": ["Offline tests cover timeout, malformed JSON, rate limiting and budget exhaustion with zero document mutations.","Actual controlled provider smoke test uses approved data and credentials; unavailable credentials are reported as an unverified live integration."],
+              "verification_profiles": ["backend_unit","security"],
+              "input_files": ["backend/app/main.py","backend/app/persistence/config.py"]
+            },
+            {
+              "id": "P6-T04",
+              "title": "Implement versioned knowledge retrieval and document context",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "ai_integration_engineer",
+              "dependencies": ["P6-T02","P1-T05","P4-T08"],
+              "planned_outputs": ["backend/app/ai/context.py","backend/app/ai/retrieval.py"],
+              "implementation_steps": ["Start with curated rule/catalog/document lookup and source/version citations; add vector infrastructure only if evaluation proves lexical/structured retrieval insufficient.","Build bounded context from approved document projections and treat retrieved text as data, never instructions or tool authority."],
+              "acceptance_criteria": ["Every cited rule/catalog claim resolves to an approved source version.","Private unrelated projects and disallowed data are absent from context; hostile source text cannot extend operation permissions."],
+              "verification_profiles": ["backend_unit","security"],
+              "input_files": ["backend/app/persistence/repositories.py","backend/app/services/revision_reader.py"]
+            }
+          ],
+          "completion_rule": "Every task in this milestone satisfies its acceptance criteria with recorded verification evidence; human gates require named human approval."
+        },
+        {
+          "id": "P6-M2",
+          "title": "Useful bounded assistance capabilities",
+          "tasks": [
+            {
+              "id": "P6-T05",
+              "title": "Implement requirement extraction and clarification proposals",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "ai_integration_engineer",
+              "dependencies": ["P6-T03","P6-T04","P4-T01"],
+              "planned_outputs": ["backend/app/ai/requirements.py"],
+              "implementation_steps": ["Convert natural-language input to typed proposed requirements with units, source spans, uncertainty and targeted missing/ambiguous questions.","Validate against requirement schemas and present UpdateRequirement proposals; confirmation must not convert unsupported assumptions into verified facts."],
+              "acceptance_criteria": ["Ambiguous units and conflicting values produce questions or rejected proposals rather than silent choices.","Accepted changes use shared operations and retain requirement provenance; extraction alone changes no document."],
+              "verification_profiles": ["backend_unit","contract"],
+              "input_files": ["backend/app/services/requirement_engine.py","frontend/src/components/requirements/Questionnaire.tsx"]
+            },
+            {
+              "id": "P6-T06",
+              "title": "Implement evidence-grounded explanation and design review",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "ai_integration_engineer",
+              "dependencies": ["P6-T03","P6-T04","P4-T16"],
+              "planned_outputs": ["backend/app/ai/explanation.py"],
+              "implementation_steps": ["Explain existing calculation traces, selection rationale and validation findings using cited stored evidence.","Return review suggestions as non-authoritative findings with links to objects/checks; forbid unsupported compliance or certification assertions."],
+              "acceptance_criteria": ["Reference cases distinguish calculated facts, assumptions, unavailable evidence and recommendations.","Invented object/rule IDs are rejected and applicable UNRESOLVED checks remain visible."],
+              "verification_profiles": ["backend_unit","engineering_review"],
+              "input_files": ["backend/app/engineering/methods.py","backend/app/services/validation_report.py"]
+            },
+            {
+              "id": "P6-T07",
+              "title": "Implement feasible recommendations and bounded layout alternatives",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "ai_integration_engineer",
+              "dependencies": ["P6-T03","P6-T04","P4-T05","P4-T12"],
+              "planned_outputs": ["backend/app/ai/recommendations.py"],
+              "implementation_steps": ["Restrict component candidates to deterministic feasible sets from pinned catalogs.","Convert layout requests to bounded OptimizePlacement parameters with fixed solver budgets and protected hard constraints/locks; present comparison metrics and tradeoffs."],
+              "acceptance_criteria": ["Unavailable or infeasible components never become actionable recommendations.","Alternative generation cannot relax hard constraints or overwrite locked placement; each alternative is pinned to its base sequence."],
+              "verification_profiles": ["backend_unit","engineering_review"],
+              "input_files": ["backend/app/engineering/selection.py","backend/app/services/operations/infrastructure.py"]
+            },
+            {
+              "id": "P6-T08",
+              "title": "Implement audited AI proposal preview and approved commit",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "backend_application_engineer",
+              "dependencies": ["P6-T05","P6-T06","P6-T07","P2-T02","P3-T10"],
+              "planned_outputs": ["backend/app/models/ai_proposal.py","backend/app/api/routes_assistant.py"],
+              "implementation_steps": ["Persist proposal ID, operations, base sequence, cited evidence, model/prompt versions, deterministic preview and approval/rejection status.","Allow explicit user Apply through the same operation service with renewed precondition/validation checks and idempotency; stale proposals require new preview and approval."],
+              "acceptance_criteria": ["No model response, background job or preview endpoint can commit without an explicit user action.","Malicious/unknown targets, stale bases and altered payload-after-approval fail; approval and applied operation IDs are traceable."],
+              "verification_profiles": ["postgres_isolated","security","backend_unit"],
+              "input_files": ["backend/app/api/routes_operations.py","backend/app/services/operations/registry.py","backend/app/persistence/operations.py"]
+            },
+            {
+              "id": "P6-T09",
+              "title": "Add assistant workspace with preview, reject and apply",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "frontend_cad_engineer",
+              "dependencies": ["P6-T08"],
+              "planned_outputs": ["frontend/src/components/assistant/AssistantPanel.tsx","frontend/src/components/assistant/ProposalReview.tsx"],
+              "implementation_steps": ["Present questions, cited explanations, validation consequences and before/after proposal changes separately from chat text.","Provide explicit Apply/Reject, cancellation and stale-proposal handling; display privacy and capability information when it affects the user's choice."],
+              "acceptance_criteria": ["Opening or receiving a proposal never changes the engineering document.","User can inspect affected objects/checks, reject without mutation and apply exactly once through the operation client."],
+              "verification_profiles": ["frontend_unit","frontend_build","browser"],
+              "input_files": ["frontend/src/components/workspace/WorkspaceBottomPanel.tsx","frontend/src/api/client.ts","frontend/src/stores/commandStore.ts"]
+            }
+          ],
+          "completion_rule": "Every task in this milestone satisfies its acceptance criteria with recorded verification evidence; human gates require named human approval."
+        },
+        {
+          "id": "P6-M3",
+          "title": "Adversarial and functional assistant acceptance",
+          "tasks": [
+            {
+              "id": "P6-T10",
+              "title": "Build offline adversarial and live bounded evaluations",
+              "type": "verification",
+              "status": "planned",
+              "assigned_agent": "quality_engineer",
+              "dependencies": ["P6-T09"],
+              "planned_outputs": ["backend/tests/test_ai_proposals.py","backend/tests/fixtures/ai_evaluations/","docs/verification/assistant-evaluation.md"],
+              "implementation_steps": ["Cover prompt injection in retrieved text, malformed references, unknown parts, infeasible placement, stale base, repeated approval, timeout and unsupported engineering claims.","Run deterministic mocked suites plus approved controlled provider cases; report quality/latency/cost against P6-T02 thresholds."],
+              "acceptance_criteria": ["All no-unauthorized-mutation and hard-constraint bypass tests pass without exception.","Functional quality meets approved thresholds; model/provider changes require rerunning the same suite."],
+              "verification_profiles": ["backend_unit","postgres_isolated","security","browser"],
+              "input_files": ["backend/app/ai/contracts.py","backend/app/api/routes_assistant.py","frontend/e2e/"]
+            },
+            {
+              "id": "P6-T11",
+              "title": "Accept bounded assistant capability release",
+              "type": "phase_acceptance",
+              "status": "planned",
+              "assigned_agent": "quality_engineer",
+              "dependencies": ["P6-T10","P4-T16"],
+              "planned_outputs": ["docs/verification/phase-6-acceptance.md"],
+              "implementation_steps": ["Complete requirement interpretation, evidence explanation, review suggestion, candidate recommendation and natural-language modification scenarios.","Document unsupported intents, data controls, costs and fallback behavior."],
+              "acceptance_criteria": ["No assistant path bypasses operations, validation, version checks or user approval.","All advertised capabilities meet recorded evaluation thresholds and evidence limitations remain visible."],
+              "verification_profiles": ["document_review","browser","engineering_review"],
+              "input_files": ["docs/architecture/assistant-boundary.md"]
+            }
+          ],
+          "completion_rule": "Every task in this milestone satisfies its acceptance criteria with recorded verification evidence; human gates require named human approval."
+        }
+      ],
+      "exit_task_id": "P6-T11"
+    },
+    {
+      "id": "P7",
+      "title": "Release hardening, recovery drills and supported deployment",
+      "objective": "Deliver a reproducible supported local product with verified upgrades, backups, resource limits and user acceptance.",
+      "effort_hours": [240,360],
+      "release_scope": "recommended",
+      "risks": ["Platform-specific sidecar/kernel failures","Inconsistent database and asset backups","Retention policy can delete still-needed content"],
+      "milestones": [
+        {
+          "id": "P7-M1",
+          "title": "Operational decisions and security review",
+          "tasks": [
+            {
+              "id": "P7-T01",
+              "title": "Audit application, import and worker security boundaries",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "security_release_engineer",
+              "dependencies": ["P3-T14","P5-T04","P6-T08"],
+              "planned_outputs": ["docs/security/threat-review.md"],
+              "implementation_steps": ["Review local session origin/authorization, project references, import/archive parsing, asset path containment, native worker input and AI boundaries.","Implement focused fixes for confirmed defects and regression tests; confirm release blocks hosted exposure without its separately scoped authorization work."],
+              "acceptance_criteria": ["Untrusted origin, path traversal, oversized package/job and cross-project reference cases fail safely.","No critical unresolved security defect remains in the supported deployment boundary."],
+              "verification_profiles": ["security","postgres_isolated","backend_unit"],
+              "input_files": ["backend/app/main.py","backend/app/api/routes_assets.py","backend/app/services/project_lifecycle.py","frontend/src-tauri/capabilities/default.json"]
+            },
+            {
+              "id": "P7-T02",
+              "title": "Approve release support, backup and retention policy",
+              "type": "human_gate",
+              "status": "awaiting_future_approval",
+              "assigned_agent": "security_release_engineer",
+              "dependencies": ["P0-T06","P7-T01"],
+              "planned_outputs": ["docs/decisions/release-operations-policy.md"],
+              "implementation_steps": ["Present supported OS/hardware/project sizes, local PostgreSQL provisioning, signing/distribution responsibility, recovery objectives and retention options.","Choose conservative artifact GC grace period and protected roots; require explicit policy for deletion of unreferenced assets and any future tombstone purge."],
+              "acceptance_criteria": ["Owner approves support matrix, distribution/license prerequisites and backup recovery objectives.","Historical/shared assets remain protected; absent retention approval means report-only audit, not deletion."],
+              "verification_profiles": ["document_review"],
+              "approver": "Product owner, deployment administrator and distribution/license owner",
+              "decision_id": "D06",
+              "input_files": ["docs/database/OPERATIONS.md","frontend/src-tauri/tauri.conf.json"]
+            }
+          ],
+          "completion_rule": "Every task in this milestone satisfies its acceptance criteria with recorded verification evidence; human gates require named human approval."
+        },
+        {
+          "id": "P7-M2",
+          "title": "Packaging, upgrades and operational recovery",
+          "tasks": [
+            {
+              "id": "P7-T03",
+              "title": "Package backend and native worker for approved platforms",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "security_release_engineer",
+              "dependencies": ["P7-T02","P5-T11"],
+              "planned_outputs": ["docs/deployment/desktop-install.md"],
+              "implementation_steps": ["Package pinned backend/kernel resources with local-session handshake and reliable start/stop lifecycle.","Provide explicit PostgreSQL configuration/readiness diagnostics and clean-install instructions; never bundle private connection strings or silently initialize a user's database."],
+              "acceptance_criteria": ["Clean supported-OS install launches, detects absent/unready PostgreSQL and handles worker errors without corrupting state.","Closing desktop leaves no orphan sidecar/native processes; signing steps and required human credentials are documented."],
+              "verification_profiles": ["manual_platform","native_cad","security"],
+              "input_files": ["backend/desktop_main.py","backend/panel-backend.spec","frontend/src-tauri/src/lib.rs","frontend/src-tauri/tauri.conf.json"]
+            },
+            {
+              "id": "P7-T04",
+              "title": "Verify additive upgrades and interrupted migration recovery",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "database_engineer",
+              "dependencies": ["P7-T02","P4-T07","P3-T06"],
+              "planned_outputs": ["backend/tests/test_upgrade_compatibility.py","docs/database/UPGRADES.md"],
+              "implementation_steps": ["Test upgrade from frozen 0004_projects fixtures through every new migration, schema generation consistency and readiness behavior.","Document backup-first upgrade/rollback recovery with engine/schema compatibility rules; do not claim downgrade support where unavailable."],
+              "acceptance_criteria": ["Old snapshot hashes remain identical after upgrade and compatible projects reopen.","Interrupted/failed upgrade prevents normal writes until recovered; restoration procedure is tested using disposable data."],
+              "verification_profiles": ["postgres_isolated","contract"],
+              "input_files": ["backend/migrations/","backend/app/persistence/manage.py","backend/app/persistence/database.py","backend/tools/build_schema_models.py"]
+            },
+            {
+              "id": "P7-T05",
+              "title": "Implement and drill coherent database-plus-asset backup restore",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "security_release_engineer",
+              "dependencies": ["P7-T02","P1-T10","P7-T04"],
+              "planned_outputs": ["docs/database/BACKUP_RESTORE.md"],
+              "implementation_steps": ["Define consistent database and content-addressed blob capture, catalog/version coverage, encryption/access responsibility and restore procedure.","Restore to an isolated installation, verify referenced hashes, historical revisions and current/recovery documents against approved recovery objectives."],
+              "acceptance_criteria": ["Restored installation has no missing referenced artifact or catalog pin.","Measured restore time/data loss satisfy approved objectives; project package export is not mislabeled a full database backup."],
+              "verification_profiles": ["postgres_isolated","document_review"],
+              "input_files": ["backend/app/persistence/assets.py","backend/app/persistence/manage.py","docs/database/OPERATIONS.md"]
+            },
+            {
+              "id": "P7-T06",
+              "title": "Implement conservative asset reachability audit and controlled GC",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "database_engineer",
+              "dependencies": ["P7-T02","P7-T05","P3-T07"],
+              "planned_outputs": ["backend/app/persistence/asset_reachability.py"],
+              "implementation_steps": ["Mark assets reachable from all revisions, tombstones, catalogs, packages/checkpoints where referenced and active jobs; track orphan age.","Keep dry-run default; support approved quarantine/grace period and explicit administrative deletion with a fresh reachability check."],
+              "acceptance_criteria": ["Shared and historical assets survive GC, including assets referenced by another project or active job.","Orphan-after-rollback fixture is reported and deleted only after approved grace/quarantine conditions; audit-only mode deletes nothing."],
+              "verification_profiles": ["postgres_isolated","security"],
+              "input_files": ["backend/app/persistence/assets.py","backend/app/persistence/manage.py"]
+            }
+          ],
+          "completion_rule": "Every task in this milestone satisfies its acceptance criteria with recorded verification evidence; human gates require named human approval."
+        },
+        {
+          "id": "P7-M3",
+          "title": "Performance, end-to-end release and handover",
+          "tasks": [
+            {
+              "id": "P7-T07",
+              "title": "Measure and tune supported-size performance",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "quality_engineer",
+              "dependencies": ["P3-T14","P5-T10","P6-T09","P7-T02"],
+              "planned_outputs": ["docs/verification/performance-results.md"],
+              "implementation_steps": ["Measure approved board sizes/hardware for drag frames, cached open, job acknowledgement, generation, import/export and memory.","Fix demonstrated bottlenecks using measured caching/batching/render bounds and retain invariant tests; do not introduce distributed services without evidence."],
+              "acceptance_criteria": ["Recorded p95 timings and memory meet P0/P7 approved limits or block release.","Measurements include cold/warm behavior and stage execution counts; invalidation correctness remains unchanged."],
+              "verification_profiles": ["browser","native_cad","postgres_isolated"],
+              "input_files": ["backend/app/services/stages/scheduler.py","frontend/src/components/threeD/Panel3DViewer.tsx","frontend/src/components/layout/Layout2DViewer.tsx"]
+            },
+            {
+              "id": "P7-T08",
+              "title": "Expand CI to browser, native CAD and release checks",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "security_release_engineer",
+              "dependencies": ["P7-T03","P7-T04","P7-T07","P6-T10"],
+              "planned_outputs": [".github/workflows/release-validation.yml"],
+              "implementation_steps": ["Add real-browser and pinned native-kernel lanes plus approved OS packaging smoke checks; keep live paid AI tests opt-in with approved secrets/budgets.","Publish hashes, dependency versions, test evidence and explicit platform skips; require core DB/operation/history tests on every release candidate."],
+              "acceptance_criteria": ["A release candidate cannot pass by silently skipping required PostgreSQL, browser or native-CAD lanes.","No CI logs/artifacts expose credentials; reproducible dependency versions are recorded."],
+              "verification_profiles": ["postgres_isolated","browser","native_cad","manual_platform"],
+              "input_files": [".github/workflows/ci.yml","frontend/playwright.config.ts","backend/tests/test_native_cad.py"]
+            },
+            {
+              "id": "P7-T09",
+              "title": "Update user workflows and operator runbooks",
+              "type": "implementation",
+              "status": "planned",
+              "assigned_agent": "technical_writer",
+              "dependencies": ["P5-T11","P6-T11","P7-T03","P7-T05","P7-T06"],
+              "planned_outputs": ["docs/USER_WORKFLOWS.md","docs/deployment/SUPPORT_MATRIX.md"],
+              "implementation_steps": ["Document Save/Recompute/Publish, undo/history, recovery conflicts, native export, AI proposal review, engineering limits and supported operating modes.","Correct stale migration/route/tooling instructions and add troubleshooting, backup and restore steps with no secrets."],
+              "acceptance_criteria": ["Every documented command/path is checked against current source and appropriate environment.","Docs clearly distinguish prototype screening, complete historical outputs, unverified platforms and external certification responsibilities."],
+              "verification_profiles": ["document_review"],
+              "input_files": ["README.md","docs/PROJECT_LIFECYCLE.md","docs/CAD_WORKSPACE.md","docs/database/OPERATIONS.md","docs/WIRING_IMPLEMENTATION.md"]
+            },
+            {
+              "id": "P7-T10",
+              "title": "Execute integrated release candidate acceptance",
+              "type": "verification",
+              "status": "planned",
+              "assigned_agent": "quality_engineer",
+              "dependencies": ["P7-T01","P7-T04","P7-T05","P7-T06","P7-T08","P7-T09","P4-T16","P5-T11","P6-T11"],
+              "planned_outputs": ["docs/verification/release-candidate.md"],
+              "implementation_steps": ["Execute all lifecycle, movement, history, schematic, AI, concurrency, restart, backup, package and native CAD acceptance scenarios.","Perform user-observed workflows on approved platforms and record residual defects, evidence and release scope."],
+              "acceptance_criteria": ["No critical data-integrity, authorization, constraint-bypass or history-invariance defect remains.","All advertised features have passing evidence; skipped/unverified capabilities are explicitly excluded or block release."],
+              "verification_profiles": ["postgres_isolated","browser","native_cad","manual_platform","engineering_review"],
+              "input_files": ["frontend/e2e/","backend/tests/"]
+            },
+            {
+              "id": "P7-T11",
+              "title": "Approve recommended release and operational handover",
+              "type": "human_gate",
+              "status": "awaiting_future_approval",
+              "assigned_agent": "architecture_lead",
+              "dependencies": ["P7-T10"],
+              "planned_outputs": ["docs/decisions/recommended-release-acceptance.md"],
+              "implementation_steps": ["Present tested artifact versions, engineering scope, known limits, operating responsibilities and rollback/restore evidence.","Obtain owner/operator acceptance; signing, publication and production migration require their separately authorized execution."],
+              "acceptance_criteria": ["Product owner accepts the exact supported release and operators accept recovery/runbook responsibility.","Qualified engineering claims remain within P4 approval; this gate does not authorize certification or silent production deployment."],
+              "verification_profiles": ["document_review"],
+              "approver": "Product owner, deployment operator and qualified electrical reviewer",
+              "decision_id": "D07",
+              "input_files": ["docs/verification/release-candidate.md","docs/deployment/SUPPORT_MATRIX.md"]
+            }
+          ],
+          "completion_rule": "Every task in this milestone satisfies its acceptance criteria with recorded verification evidence; human gates require named human approval."
+        }
+      ],
+      "exit_task_id": "P7-T11"
+    },
+    {
+      "id": "P8",
+      "title": "Conditional broader ECAD, parametric features and design reuse",
+      "objective": "Extend only proven use cases after recommended release; this phase is a gated candidate backlog, not a commitment to general-purpose CAD.",
+      "status": "deferred",
+      "effort_hours": [1200,2400],
+      "release_scope": "extended",
+      "risks": ["Open-ended feature/topology scope","New engineering methods and panel types require new evidence","Kernel constraint and geometry naming complexity"],
+      "milestones": [
+        {
+          "id": "P8-M1",
+          "title": "Approve a bounded extension contract",
+          "tasks": [
+            {
+              "id": "P8-T01",
+              "title": "Specify extension use cases and re-estimate each branch",
+              "type": "design",
+              "status": "deferred",
+              "assigned_agent": "architecture_lead",
+              "dependencies": ["P7-T11"],
+              "planned_outputs": ["docs/architecture/extended-scope.md"],
+              "implementation_steps": ["Define testable multipage schematic, bounded sketch/feature, one additional archetype and similar-design/review use cases from actual user needs.","Propose limits, contract migrations, representative designs and branch-level estimates; justify each new dependency with a short feasibility comparison."],
+              "acceptance_criteria": ["Specification names supported entities, operations, size limits and exclusions for each proposed branch.","Every requested extension has fixtures and a cost/risk estimate; unbounded SolidWorks-like modeling is excluded."],
+              "verification_profiles": ["document_review"],
+              "input_files": ["ARCHITECTURE_ASSESSMENT.md","docs/verification/release-candidate.md","backend/app/models/document.py","backend/app/models/cad_document.py"]
+            },
+            {
+              "id": "P8-T02",
+              "title": "Approve extended branches and benchmark limits",
+              "type": "human_gate",
+              "status": "deferred",
+              "assigned_agent": "architecture_lead",
+              "dependencies": ["P8-T01"],
+              "planned_outputs": ["docs/decisions/extended-scope-approval.md"],
+              "implementation_steps": ["Obtain explicit branch selection, budget and exact panel archetype/feature vocabulary; approve any new constraint solver or retrieval dependency.","If a branch is deferred, revise release definitions and dependencies before execution rather than marking its unfinished tasks complete."],
+              "acceptance_criteria": ["Approved contract supplies precise scope and fixtures to all selected implementation branches.","Unselected branches remain deferred; no additional panel type or general feature tool is advertised prematurely."],
+              "verification_profiles": ["document_review"],
+              "approver": "Product owner, technical lead and qualified electrical engineer",
+              "decision_id": "D08",
+              "input_files": ["docs/architecture/extended-scope.md"]
+            }
+          ],
+          "completion_rule": "Every task in this milestone satisfies its acceptance criteria with recorded verification evidence; human gates require named human approval."
+        },
+        {
+          "id": "P8-M2",
+          "title": "Multipage schematic and symbol library",
+          "tasks": [
+            {
+              "id": "P8-T03",
+              "title": "Version schematic pages and reusable symbol definitions",
+              "type": "implementation",
+              "status": "deferred",
+              "assigned_agent": "backend_application_engineer",
+              "dependencies": ["P8-T02"],
+              "planned_outputs": ["backend/app/models/symbol_library.py"],
+              "implementation_steps": ["Add persistent page IDs, page order, symbol definition/version IDs, terminals and page-local presentation coordinates.","Migrate single-page working documents compatibly while preserving published snapshot bytes and CEM connectivity."],
+              "acceptance_criteria": ["Existing one-page projects open with unchanged IDs and net hashes.","Duplicate/missing page or symbol-pin references fail validation; library versions are pinned."],
+              "verification_profiles": ["contract","postgres_isolated"],
+              "input_files": ["backend/app/models/schematic.py","backend/app/services/operations/schematic.py","frontend/src/types/document.ts"]
+            },
+            {
+              "id": "P8-T04",
+              "title": "Implement page operations and cross-reference generation",
+              "type": "implementation",
+              "status": "deferred",
+              "assigned_agent": "backend_application_engineer",
+              "dependencies": ["P8-T03"],
+              "planned_outputs": ["backend/app/services/schematic_crossrefs.py"],
+              "implementation_steps": ["Implement add/reorder/remove page and place symbol operations with atomic dependency handling and undo.","Generate cross-page net/terminal references from CEM IDs, not graphical wire intersections, and include them in frozen drawing outputs."],
+              "acceptance_criteria": ["Moving a symbol between pages preserves electrical identity and creates correct cross-references.","Deleting a referenced page requires explicit relocation/removal consequences; undo restores pages and references."],
+              "verification_profiles": ["backend_unit","postgres_isolated"],
+              "input_files": ["backend/app/services/operations/schematic.py","backend/app/services/schematic_engine.py","backend/app/documents/drawings.py"]
+            },
+            {
+              "id": "P8-T05",
+              "title": "Add page navigation, symbol placement and multipage acceptance",
+              "type": "implementation",
+              "status": "deferred",
+              "assigned_agent": "frontend_cad_engineer",
+              "dependencies": ["P8-T04"],
+              "planned_outputs": ["frontend/src/components/schematic/PageNavigator.tsx","frontend/src/components/schematic/SymbolPalette.tsx"],
+              "implementation_steps": ["Bind page navigation, reviewed symbol placement and cross-reference jump to shared commands and selection.","Test the approved multipage fixture through save/reopen/undo/export with page-local edits and electrical connection changes."],
+              "acceptance_criteria": ["Page navigation and cross-reference jumps select the correct persistent objects.","Exported pages match saved snapshots; graphical edits never change CEM nets without an electrical operation."],
+              "verification_profiles": ["browser","frontend_unit","postgres_isolated"],
+              "input_files": ["frontend/src/components/schematic/SchematicViewer.tsx","frontend/src/components/workspace/ProjectBrowser.tsx","frontend/e2e/"]
+            }
+          ],
+          "completion_rule": "Every task in this milestone satisfies its acceptance criteria with recorded verification evidence; human gates require named human approval."
+        },
+        {
+          "id": "P8-M3",
+          "title": "Bounded parametric feature and sketch editing",
+          "tasks": [
+            {
+              "id": "P8-T06",
+              "title": "Add versioned editable feature dependency graph",
+              "type": "implementation",
+              "status": "deferred",
+              "assigned_agent": "cad_kernel_engineer",
+              "dependencies": ["P8-T02","P5-T03"],
+              "planned_outputs": ["backend/app/geometry/feature_graph.py"],
+              "implementation_steps": ["Represent approved feature types and dependencies with stable semantic IDs and parameter provenance tied to PDM manufacturing intent.","Detect graph cycles and unsupported topology changes; retain exact geometry as a derived artifact."],
+              "acceptance_criteria": ["Changing one feature invalidates only its downstream geometry closure.","Feature references survive save/reopen; cycles and references to transient kernel face numbers are rejected."],
+              "verification_profiles": ["backend_unit","native_cad","contract"],
+              "input_files": ["backend/app/models/cad_document.py","backend/app/geometry/panel_features.py","backend/app/services/stages/contracts.py"]
+            },
+            {
+              "id": "P8-T07",
+              "title": "Implement approved bounded 2D sketch constraint adapter",
+              "type": "implementation",
+              "status": "deferred",
+              "assigned_agent": "cad_kernel_engineer",
+              "dependencies": ["P8-T06"],
+              "planned_outputs": ["backend/app/geometry/sketch_constraints.py"],
+              "implementation_steps": ["Implement the D08-approved line/rectangle/circle and dimension/orthogonality/coincidence subset using the selected deterministic solver.","Report solved, underconstrained, inconsistent and unsupported states with bounded execution time."],
+              "acceptance_criteria": ["Independent fixtures solve within approved tolerance and conflicting dimensions are reported without arbitrary geometry.","Unsupported constraints and timeouts retain the last valid sketch and cannot publish a silently altered shape."],
+              "verification_profiles": ["backend_unit","native_cad"],
+              "input_files": ["backend/app/geometry/kernel.py","backend/app/models/cad_document.py"]
+            },
+            {
+              "id": "P8-T08",
+              "title": "Expose mounting-hole and cutout feature operations",
+              "type": "implementation",
+              "status": "deferred",
+              "assigned_agent": "backend_application_engineer",
+              "dependencies": ["P8-T07","P4-T11"],
+              "planned_outputs": ["backend/app/services/operations/manufacturing_features.py"],
+              "implementation_steps": ["Add only approved hole/cutout/parameter operations to the shared transaction and undo system.","Update PDM manufacturing constraints and validate enclosure/backplate edge distances, collisions and feature dependencies before eligible geometry generation."],
+              "acceptance_criteria": ["Hole/cutout edits cannot leave invalid enclosure geometry or orphan references without explicit failure status.","Undo and stale-base conflicts use existing operation semantics; no direct mesh edit changes manufacturing intent."],
+              "verification_profiles": ["backend_unit","postgres_isolated","native_cad"],
+              "input_files": ["backend/app/services/operations/registry.py","backend/app/geometry/panel_features.py","backend/app/services/validation_report.py"]
+            },
+            {
+              "id": "P8-T09",
+              "title": "Add feature inspector and constrained sketch interaction",
+              "type": "implementation",
+              "status": "deferred",
+              "assigned_agent": "frontend_cad_engineer",
+              "dependencies": ["P8-T08"],
+              "planned_outputs": ["frontend/src/components/sketch/SketchEditor.tsx"],
+              "implementation_steps": ["Expose approved feature tree, parameter editing and bounded sketch handles through operation previews.","Show solver status and unsupported tools explicitly; preserve shared selection and separate transient sketch feedback from saved state."],
+              "acceptance_criteria": ["Approved feature workflow survives edit/undo/recompute/publish/reopen and STEP reopen.","Invalid sketches remain drafts with visible reasons; frontend geometry never bypasses backend constraint checks."],
+              "verification_profiles": ["browser","frontend_unit","native_cad","postgres_isolated"],
+              "input_files": ["frontend/src/components/workspace/PropertiesInspector.tsx","frontend/src/components/workspace/ProjectBrowser.tsx","frontend/src/components/layout/Layout2DViewer.tsx"]
+            }
+          ],
+          "completion_rule": "Every task in this milestone satisfies its acceptance criteria with recorded verification evidence; human gates require named human approval."
+        },
+        {
+          "id": "P8-M4",
+          "title": "One explicitly selected additional engineering archetype",
+          "tasks": [
+            {
+              "id": "P8-T10",
+              "title": "Prepare selected-archetype engineering contract and reference cases",
+              "type": "design",
+              "status": "deferred",
+              "assigned_agent": "electrical_engineering_agent",
+              "dependencies": ["P8-T02"],
+              "planned_outputs": ["docs/engineering/selected-archetype.md","backend/tests/fixtures/selected_archetype/"],
+              "implementation_steps": ["Describe the single archetype chosen in D08: required functional modules, load/protection methods, terminal/net semantics, physical zones and catalog coverage.","Prepare independent valid, boundary and infeasible cases; explicitly separate reusable DB stages from archetype-specific behavior."],
+              "acceptance_criteria": ["Contract supplies all inputs and expected values needed by implementation without inventing engineering assumptions.","Missing catalog/method data is listed as a blocker with a responsible human owner."],
+              "verification_profiles": ["engineering_review"],
+              "input_files": ["backend/app/engineering/methods.py","backend/app/services/graph_engine.py","backend/app/services/requirement_engine.py"]
+            },
+            {
+              "id": "P8-T11",
+              "title": "Approve new-archetype methods and catalog evidence",
+              "type": "human_gate",
+              "status": "deferred",
+              "assigned_agent": "electrical_engineering_agent",
+              "dependencies": ["P8-T10"],
+              "planned_outputs": ["docs/decisions/selected-archetype-methods.md"],
+              "implementation_steps": ["Obtain qualified review of methods, independent cases, catalog rights and intended applicability.","Approve the specific limits and reference tolerances before enabling any new archetype."],
+              "acceptance_criteria": ["Reviewer signs the named archetype and fixtures, or the branch remains blocked.","Approval does not imply support for other panel families or manufacturing certification."],
+              "verification_profiles": ["engineering_review"],
+              "approver": "Qualified electrical engineer and product owner",
+              "decision_id": "D09",
+              "input_files": ["docs/engineering/selected-archetype.md"]
+            },
+            {
+              "id": "P8-T12",
+              "title": "Implement archetype requirement and functional graph adapter",
+              "type": "implementation",
+              "status": "deferred",
+              "assigned_agent": "electrical_engineering_agent",
+              "dependencies": ["P8-T11"],
+              "planned_outputs": ["backend/app/engineering/archetypes/"],
+              "implementation_steps": ["Introduce an archetype registry and implement only the approved requirement/module/topology/netlist adapter.","Remove DB-specific branching only behind proven shared interfaces; keep DB fixtures as regressions."],
+              "acceptance_criteria": ["Selected-archetype topology matches reviewed terminal/conductor reference cases.","Unsupported archetype IDs fail explicitly and existing DB generated semantics remain unchanged."],
+              "verification_profiles": ["backend_unit","contract"],
+              "input_files": ["backend/app/services/requirement_engine.py","backend/app/services/graph_engine.py","backend/app/services/netlist_engine.py","backend/app/services/orchestrator.py"]
+            },
+            {
+              "id": "P8-T13",
+              "title": "Implement approved archetype calculations and selection",
+              "type": "implementation",
+              "status": "deferred",
+              "assigned_agent": "electrical_engineering_agent",
+              "dependencies": ["P8-T12"],
+              "planned_outputs": ["backend/tests/test_selected_archetype_methods.py"],
+              "implementation_steps": ["Register approved methods and component compatibility constraints with versioned source evidence.","Add required catalog records as immutable versions and preserve missing-data behavior."],
+              "acceptance_criteria": ["Independent reference values match approved tolerances.","Infeasible or insufficient-data cases fail explicitly and never reuse inappropriate DB constants."],
+              "verification_profiles": ["backend_unit","postgres_isolated","engineering_review"],
+              "input_files": ["backend/app/engineering/methods.py","backend/app/engineering/selection.py","backend/app/persistence/repositories.py"]
+            },
+            {
+              "id": "P8-T14",
+              "title": "Implement archetype physical and schematic templates",
+              "type": "implementation",
+              "status": "deferred",
+              "assigned_agent": "physical_optimization_agent",
+              "dependencies": ["P8-T13"],
+              "planned_outputs": ["backend/tests/test_selected_archetype_design.py"],
+              "implementation_steps": ["Add the approved functional zones, mounting, routing and schematic template parameters through existing stage interfaces.","Run complete generation, manual changes and incremental equivalence with strict constraints and preserved identities."],
+              "acceptance_criteria": ["Reference design passes the approved electrical and physical checks and outputs consistent CEM/schematic/PDM/CAD/BOM.","Impossible physical cases remain infeasible; existing DB cases and manual locks still pass."],
+              "verification_profiles": ["backend_unit","native_cad","postgres_isolated"],
+              "input_files": ["backend/app/services/zoning_engine.py","backend/app/algorithms/cp_sat_placement.py","backend/app/services/schematic_engine.py","backend/app/services/physical_routing.py"]
+            },
+            {
+              "id": "P8-T15",
+              "title": "Accept selected archetype engineering behavior",
+              "type": "human_gate",
+              "status": "deferred",
+              "assigned_agent": "electrical_engineering_agent",
+              "dependencies": ["P8-T14"],
+              "planned_outputs": ["docs/decisions/selected-archetype-acceptance.md"],
+              "implementation_steps": ["Present independently verified method results, generated designs, editing tests and unresolved checks.","Obtain engineering approval of actual implementation within the previously signed scope."],
+              "acceptance_criteria": ["Named reviewer accepts evidence for the exact archetype/version and limitations.","Feature remains disabled until approval; no unsupported family or compliance claim is introduced."],
+              "verification_profiles": ["engineering_review"],
+              "approver": "Qualified electrical engineer and product owner",
+              "decision_id": "D10",
+              "input_files": ["backend/tests/test_selected_archetype_design.py"]
+            }
+          ],
+          "completion_rule": "Every task in this milestone satisfies its acceptance criteria with recorded verification evidence; human gates require named human approval."
+        },
+        {
+          "id": "P8-M5",
+          "title": "Design reuse, comparisons and bounded review assistance",
+          "tasks": [
+            {
+              "id": "P8-T16",
+              "title": "Index approved saved designs for similarity retrieval",
+              "type": "implementation",
+              "status": "deferred",
+              "assigned_agent": "ai_integration_engineer",
+              "dependencies": ["P8-T02","P6-T11"],
+              "planned_outputs": ["backend/app/ai/design_index.py"],
+              "implementation_steps": ["Index approved revision metadata/features and provenance using structured/lexical search first; evaluate embeddings only against D08 quality targets.","Filter by access, archetype, catalog compatibility and data-sharing approval; support removal from search without deleting historical assets."],
+              "acceptance_criteria": ["Results link exact immutable revisions and explain comparable features.","Unauthorized/deleted-from-search projects never enter retrieval context; stale index rows cannot confer write authority."],
+              "verification_profiles": ["backend_unit","postgres_isolated","security"],
+              "input_files": ["backend/app/ai/retrieval.py","backend/app/services/revision_reader.py","backend/app/persistence/repositories.py"]
+            },
+            {
+              "id": "P8-T17",
+              "title": "Implement revision branching and alternative comparison",
+              "type": "implementation",
+              "status": "deferred",
+              "assigned_agent": "backend_application_engineer",
+              "dependencies": ["P8-T16","P2-T13","P4-T12"],
+              "planned_outputs": ["backend/app/services/design_alternatives.py"],
+              "implementation_steps": ["Create alternative working documents from immutable bases with new branch identity and shared verified artifacts.","Compare deterministic engineering/physical metrics and lock/requirement differences; accepting an alternative uses a versioned operation proposal."],
+              "acceptance_criteria": ["Creating and comparing alternatives changes neither source revision nor current document.","Adoption requires fresh validation and explicit approval; artifacts remain linked to exact branch/revision inputs."],
+              "verification_profiles": ["postgres_isolated","backend_unit"],
+              "input_files": ["backend/app/services/project_lifecycle.py","backend/app/services/generation_proposals.py","backend/app/services/change_propagation.py"]
+            },
+            {
+              "id": "P8-T18",
+              "title": "Evaluate similar-design recommendations and review coverage",
+              "type": "implementation",
+              "status": "deferred",
+              "assigned_agent": "quality_engineer",
+              "dependencies": ["P8-T17"],
+              "planned_outputs": ["docs/verification/design-reuse-evaluation.md"],
+              "implementation_steps": ["Add reviewed cases for relevant/irrelevant neighbors, incompatible catalogs, missing rules, misleading precedents and malicious design notes.","Measure retrieval usefulness and design-review coverage against D08 targets while preserving deterministic proposal and approval constraints."],
+              "acceptance_criteria": ["Similarity never implies engineering validity or authorizes automatic adoption.","All approval/security invariants pass and accepted review claims cite actual check/source evidence."],
+              "verification_profiles": ["backend_unit","security","engineering_review"],
+              "input_files": ["backend/app/ai/explanation.py","backend/app/ai/recommendations.py","backend/tests/fixtures/ai_evaluations/"]
+            }
+          ],
+          "completion_rule": "Every task in this milestone satisfies its acceptance criteria with recorded verification evidence; human gates require named human approval."
+        },
+        {
+          "id": "P8-M6",
+          "title": "Extended integration and acceptance",
+          "tasks": [
+            {
+              "id": "P8-T19",
+              "title": "Verify extended scale, compatibility and dependency behavior",
+              "type": "verification",
+              "status": "deferred",
+              "assigned_agent": "quality_engineer",
+              "dependencies": ["P8-T05","P8-T09","P8-T15","P8-T18"],
+              "planned_outputs": ["docs/verification/extended-release.md"],
+              "implementation_steps": ["Run approved large multipage/feature/selected-archetype workloads with incremental/full equivalence and platform resource limits.","Verify migration of earlier documents, immutable history, branching, undo, packages and STEP/drawing identity."],
+              "acceptance_criteria": ["All selected extension branches meet D08 correctness and performance limits.","Prior DB/recommended-release regressions remain green; no missing dependency or historical output mutation is observed."],
+              "verification_profiles": ["browser","native_cad","postgres_isolated","manual_platform"],
+              "input_files": ["frontend/e2e/","backend/tests/test_stage_equivalence.py","backend/tests/test_upgrade_compatibility.py"]
+            },
+            {
+              "id": "P8-T20",
+              "title": "Approve selected extended release",
+              "type": "human_gate",
+              "status": "deferred",
+              "assigned_agent": "architecture_lead",
+              "dependencies": ["P8-T19"],
+              "planned_outputs": ["docs/decisions/extended-release-acceptance.md"],
+              "implementation_steps": ["Review delivered branch scope, remaining exclusions, operational readiness and engineering signoffs.","Approve only the tested selected extensions and update support/release documentation."],
+              "acceptance_criteria": ["Owner acceptance matches actual enabled branches and evidence.","Unselected or incomplete capabilities remain disabled and deferred with explicit reasons."],
+              "verification_profiles": ["document_review","engineering_review"],
+              "approver": "Product owner, technical lead and qualified electrical engineer",
+              "decision_id": "D11",
+              "input_files": ["docs/verification/extended-release.md"]
+            }
+          ],
+          "completion_rule": "Every task in this milestone satisfies its acceptance criteria with recorded verification evidence; human gates require named human approval."
+        }
+      ],
+      "exit_task_id": "P8-T20"
+    }
+  ],
+  "release_definitions": [
+    {
+      "id": "R1",
+      "name": "Document-centric DB MVP",
+      "required_task_ids": ["P0-T10","P1-T11","P2-T14","P3-T14"],
+      "includes": ["Durable documents and complete new revisions","Shared operations and bounded editors","Incremental recompute, jobs, validation and local session protection"],
+      "excludes": ["Certified engineering","Verified native STEP until P5","AI assistance until P6","Unsupported device rotations until P4"],
+      "release_rule": "Acceptance evidence is required. Demonstration or distribution must state prototype engineering limitations; production deployment is a separate authorized action."
+    },
+    {
+      "id": "R2",
+      "name": "Recommended bounded DB application",
+      "required_task_ids": ["P4-T16","P5-T11","P6-T11","P7-T11"],
+      "includes": ["Reviewed bounded DB methods and catalog sample","Exact CAD and frozen engineering documents","Approved structured AI capabilities","Supported local platform packaging and recovery"],
+      "release_rule": "Human engineering and product release signoffs are mandatory; external certification is excluded."
+    },
+    {
+      "id": "R3",
+      "name": "Selected extended capabilities",
+      "required_task_ids": ["P8-T20"],
+      "release_rule": "D08 must select exact branches and re-estimate them. If branches are not selected, revise this DAG and R3 before execution; do not mark unimplemented prerequisites complete."
+    }
+  ],
+  "requirement_traceability": [
+    {
+      "requirement": "Project/document manager, dashboard and recovery",
+      "task_ids": ["P1-T03","P1-T06","P1-T07","P1-T09","P1-T11"],
+      "approach": "Extend existing lifecycle and dashboard; do not rebuild."
+    },
+    {
+      "requirement": "Requirements engineering, completeness, ambiguity and provenance",
+      "task_ids": ["P1-T01","P4-T01","P6-T05"]
+    },
+    {
+      "requirement": "Engineering knowledge/rules engine",
+      "task_ids": ["P0-T07","P4-T04","P6-T04"]
+    },
+    {
+      "requirement": "Electrical calculations",
+      "task_ids": ["P4-T02","P4-T03","P4-T04","P4-T15"]
+    },
+    {
+      "requirement": "Component selection",
+      "task_ids": ["P4-T05","P4-T08","P6-T07"]
+    },
+    {
+      "requirement": "Functional modules and graph engine",
+      "task_ids": ["P2-T05","P4-T06","P8-T12"]
+    },
+    {
+      "requirement": "Netlist generation and validation",
+      "task_ids": ["P2-T05","P2-T07","P4-T06"]
+    },
+    {
+      "requirement": "Automatic schematic generation and graphical electrical separation",
+      "task_ids": ["P1-T01","P2-T07","P2-T11","P3-T02","P8-T03","P8-T04"]
+    },
+    {
+      "requirement": "PDM generation and stable physical identity",
+      "task_ids": ["P1-T01","P2-T04","P2-T13","P3-T03"]
+    },
+    {
+      "requirement": "Functional zoning",
+      "task_ids": ["P4-T12","P8-T14"]
+    },
+    {
+      "requirement": "Enclosure selection",
+      "task_ids": ["P2-T03","P3-T03","P4-T12","P4-T14"]
+    },
+    {
+      "requirement": "Constraint-based component placement",
+      "task_ids": ["P4-T09","P4-T10","P4-T12"]
+    },
+    {
+      "requirement": "Layout optimization",
+      "task_ids": ["P2-T13","P4-T12","P6-T07"]
+    },
+    {
+      "requirement": "Cable and wire routing",
+      "task_ids": ["P3-T03","P4-T10","P4-T13"]
+    },
+    {
+      "requirement": "Thermal estimation and validation",
+      "task_ids": ["P4-T02","P4-T03","P4-T14"]
+    },
+    {
+      "requirement": "Physical validation",
+      "task_ids": ["P3-T09","P3-T10","P4-T09","P4-T13"]
+    },
+    {
+      "requirement": "Parametric CAD generation",
+      "task_ids": ["P5-T01","P5-T02","P5-T03","P8-T06","P8-T07","P8-T08"]
+    },
+    {
+      "requirement": "BOM and documentation",
+      "task_ids": ["P1-T04","P5-T07","P5-T08","P5-T09"]
+    },
+    {
+      "requirement": "Unified engineering validation",
+      "task_ids": ["P0-T08","P3-T09","P3-T10","P4-T15","P4-T16"]
+    },
+    {
+      "requirement": "Unified operations, transactions and undo/redo",
+      "task_ids": ["P2-T01","P2-T02","P2-T08","P2-T13","P6-T08"]
+    },
+    {
+      "requirement": "Selection, inspector, workspace state and synchronized 2D/3D",
+      "task_ids": ["P1-T09","P2-T09","P2-T10","P2-T11","P5-T10"]
+    },
+    {
+      "requirement": "Persistent IDs and cross-model traceability",
+      "task_ids": ["P1-T01","P1-T06","P1-T08","P2-T05","P5-T03","P5-T05"]
+    },
+    {
+      "requirement": "Dependency tracking, versioned outputs, dirty/stale detection and incremental regeneration",
+      "task_ids": ["P3-T01","P3-T02","P3-T03","P3-T04","P3-T05","P3-T13"]
+    },
+    {
+      "requirement": "Durable jobs, failure recovery and concurrency",
+      "task_ids": ["P2-T02","P3-T06","P3-T07","P3-T08","P3-T13"]
+    },
+    {
+      "requirement": "Immutable revision, comparison, restoration and artifact storage",
+      "task_ids": ["P1-T04","P1-T05","P1-T06","P1-T08","P1-T10","P7-T05","P7-T06","P8-T17"]
+    },
+    {
+      "requirement": "Native CAD import/export, tessellation and multi-view identity",
+      "task_ids": ["P5-T04","P5-T05","P5-T06","P5-T10","P5-T11"]
+    },
+    {
+      "requirement": "AI questions, knowledge, recommendations, explanation and review",
+      "task_ids": ["P6-T04","P6-T05","P6-T06","P6-T07","P6-T09","P6-T10"]
+    },
+    {
+      "requirement": "Natural-language modification and AI-assisted optimization",
+      "task_ids": ["P6-T07","P6-T08","P6-T09","P6-T10"]
+    },
+    {
+      "requirement": "Similar-design retrieval and alternative designs",
+      "task_ids": ["P8-T16","P8-T17","P8-T18"]
+    },
+    {
+      "requirement": "Logging, monitoring, CI and deployment",
+      "task_ids": ["P0-T09","P3-T11","P3-T12","P7-T01","P7-T03","P7-T07","P7-T08","P7-T09"]
+    }
+  ],
+  "human_decisions": [
+    {
+      "id": "D01",
+      "gate_task_id": "P0-T06",
+      "decision": "Approve product scope, document semantics and deployment boundary",
+      "approver": "Product owner and technical lead; license owner only if kernel distribution is approved in this decision",
+      "record": "docs/decisions/approved-product-scope.md"
+    },
+    {
+      "id": "D02",
+      "gate_task_id": "P0-T08",
+      "decision": "Accept bounded electrical semantics documentation for the academic prototype based on reported student peer review; qualified engineering approval deferred",
+      "approver": "JacobGM, product owner, for academic prototype acceptance only; qualified electrical engineering approval deferred",
+      "record": "docs/decisions/approved-electrical-semantics.md"
+    },
+    {
+      "id": "D03",
+      "gate_task_id": "P4-T03",
+      "decision": "Approve engineering methods, data rights and reference values",
+      "approver": "Qualified electrical engineer and catalog/data rights owner",
+      "record": "docs/decisions/approved-db-methods-and-data.md"
+    },
+    {
+      "id": "D04",
+      "gate_task_id": "P4-T16",
+      "decision": "Approve bounded DB engineering release claims",
+      "approver": "Qualified electrical engineer and product owner",
+      "record": "docs/decisions/db-engineering-acceptance.md"
+    },
+    {
+      "id": "D05",
+      "gate_task_id": "P6-T02",
+      "decision": "Approve provider, permitted data and evaluation thresholds",
+      "approver": "Product owner and data/security owner",
+      "record": "docs/decisions/assistant-data-and-provider.md"
+    },
+    {
+      "id": "D06",
+      "gate_task_id": "P7-T02",
+      "decision": "Approve release support, backup and retention policy",
+      "approver": "Product owner, deployment administrator and distribution/license owner",
+      "record": "docs/decisions/release-operations-policy.md"
+    },
+    {
+      "id": "D07",
+      "gate_task_id": "P7-T11",
+      "decision": "Approve recommended release and operational handover",
+      "approver": "Product owner, deployment operator and qualified electrical reviewer",
+      "record": "docs/decisions/recommended-release-acceptance.md"
+    },
+    {
+      "id": "D08",
+      "gate_task_id": "P8-T02",
+      "decision": "Approve extended branches and benchmark limits",
+      "approver": "Product owner, technical lead and qualified electrical engineer",
+      "record": "docs/decisions/extended-scope-approval.md"
+    },
+    {
+      "id": "D09",
+      "gate_task_id": "P8-T11",
+      "decision": "Approve new-archetype methods and catalog evidence",
+      "approver": "Qualified electrical engineer and product owner",
+      "record": "docs/decisions/selected-archetype-methods.md"
+    },
+    {
+      "id": "D10",
+      "gate_task_id": "P8-T15",
+      "decision": "Accept selected archetype engineering behavior",
+      "approver": "Qualified electrical engineer and product owner",
+      "record": "docs/decisions/selected-archetype-acceptance.md"
+    },
+    {
+      "id": "D11",
+      "gate_task_id": "P8-T20",
+      "decision": "Approve selected extended release",
+      "approver": "Product owner, technical lead and qualified electrical engineer",
+      "record": "docs/decisions/extended-release-acceptance.md"
+    }
+  ],
+  "operation_coverage": [
+    {
+      "operation": "CreateProject",
+      "task_ids": ["P1-T03","P1-T11"],
+      "note": "Retain existing lifecycle creation; create an empty document aggregate and preserve identity/version semantics."
+    },
+    {
+      "operation": "UpdateRequirement",
+      "task_ids": ["P2-T03","P6-T05"]
+    },
+    {
+      "operation": "AddComponent / RemoveComponent",
+      "task_ids": ["P2-T06","P2-T11"]
+    },
+    {
+      "operation": "MoveComponent / RotateComponent",
+      "task_ids": ["P2-T04","P2-T10","P4-T10"],
+      "note": "Nonzero rotations stay disabled until physical and routing support passes."
+    },
+    {
+      "operation": "ResizeEnclosure / ChangeComponentRating",
+      "task_ids": ["P2-T03"]
+    },
+    {
+      "operation": "ModifyDINRail / ModifyCableDuct",
+      "task_ids": ["P4-T11"]
+    },
+    {
+      "operation": "ModifyElectricalConnection / RegenerateSchematic / MoveSymbol",
+      "task_ids": ["P2-T07","P2-T11"]
+    },
+    {
+      "operation": "OptimizePlacement",
+      "task_ids": ["P4-T12","P6-T07"]
+    },
+    {
+      "operation": "Save / Recompute / Publish / Restore",
+      "task_ids": ["P1-T03","P1-T06","P3-T05","P3-T10"],
+      "note": "Distinct lifecycle actions; Save never implicitly recomputes or publishes."
+    }
+  ],
+  "acceptance_scenarios": [
+    {
+      "id": "A01",
+      "name": "Component movement",
+      "task_ids": ["P2-T10","P3-T13","P3-T14","P5-T11"],
+      "steps": ["Generate reference DB and record document/revision IDs, stage hashes and invocation counts.","Select the component in 2D and verify linked 3D/inspector selection.","Drag and commit one MoveComponent; check working PDM and one undo group.","Explicitly Recompute; verify physical validation/routing/CAD refreshed and calculation/netlist invocation counts stayed zero.","Save/reopen, Publish and export; compare positions within approved tolerance.","Undo/redo and reject invalid placement without mutating history."],
+      "pass": "PDM is authoritative, views and exports agree, and unrelated electrical computations do not execute."
+    },
+    {
+      "id": "A02",
+      "name": "Historical revision",
+      "task_ids": ["P1-T05","P1-T06","P1-T11"],
+      "steps": ["Publish and capture every snapshot/artifact hash.","Change working design and installed generator versions, then publish again.","Reopen prior complete revision with generator calls replaced by raising sentinels.","Verify identical outputs and hashes; restore to a new revision.","Open legacy incomplete revision and confirm explicit missing-output handling without fabricated historic bytes."],
+      "pass": "No historical snapshot is rewritten and complete historical reads invoke no generation."
+    },
+    {
+      "id": "A03",
+      "name": "AI-assisted change",
+      "task_ids": ["P6-T08","P6-T09","P6-T10"],
+      "steps": ["Request a supported change and inspect structured operations and cited evidence.","Preview deterministic effects and unresolved checks without mutation.","Reject once and verify no commit.","Approve a valid fresh proposal and verify exactly one shared operation batch.","Repeat approval and attempt a stale/malicious proposal; confirm idempotent return or explicit rejection."],
+      "pass": "AI never bypasses explicit approval, deterministic validation, operation history or version fencing."
+    },
+    {
+      "id": "A04",
+      "name": "Schematic consistency",
+      "task_ids": ["P2-T07","P2-T11","P8-T05"],
+      "steps": ["Move a symbol and confirm unchanged connectivity hashes.","Connect permitted pins and confirm CEM conductor/net changes.","Draw a crossing without junction and confirm no electrical connection.","Reject cross-phase or invalid terminal connection and undo a valid one.","For selected P8 scope, navigate cross-page references and reopen frozen drawings."],
+      "pass": "Electrical connectivity remains grounded in CEM; presentation and page changes preserve identity."
+    },
+    {
+      "id": "A05",
+      "name": "Concurrent commands and worker recovery",
+      "task_ids": ["P3-T13"],
+      "steps": ["Submit two batches against the same sequence and require one winner.","Replay lost-response request with its idempotency key.","Crash worker after claim and recover only after lease expiry.","Finish superseded/cancelled job and verify it cannot replace current output.","Inject failure after blob creation and before revision commit."],
+      "pass": "No lost update, duplicate accepted commit or corrupted prior revision; active healthy leases survive restart."
+    },
+    {
+      "id": "A06",
+      "name": "Hard engineering constraints and applicability",
+      "task_ids": ["P3-T09","P4-T15","P4-T16"],
+      "steps": ["Test oversize components, infeasible locks, invalid terminals, overloaded ducts and impossible bends.","Try improving optimization score with a hard violation and confirm infeasibility.","Use absent conductor/bend/earth data with geometric PASS.","Check independent numerical fixtures and versioned method/catalog provenance."],
+      "pass": "Required FAIL/UNRESOLVED never becomes global approval; physical generation retains zero-violation policy."
+    },
+    {
+      "id": "A07",
+      "name": "Recovery, portability and backup",
+      "task_ids": ["P1-T11","P7-T05"],
+      "steps": ["Checkpoint edits, terminate client/server and explicitly Recover.","Attempt recovery against a changed base and retain edits with conflict resolution.","Export/import complete package to a compatible isolated installation and verify hashes/new identities.","Reject corrupt asset or missing catalog pin atomically.","Restore coherent database plus assets backup and verify all references."],
+      "pass": "No implicit publication or silent draft loss; project packages and infrastructure backups have distinct verified scopes."
+    },
+    {
+      "id": "A08",
+      "name": "Exact CAD and export agreement",
+      "task_ids": ["P5-T06","P5-T11"],
+      "steps": ["Generate PDM-based exact assembly and tessellated preview through native worker.","Export STEP and reopen in independent reader path.","Compare units, instance/solid counts, orientation and bounds against approved fixtures.","Test worker crash, malformed STEP and missing kernel.","Reopen saved old revision and verify artifact immutability."],
+      "pass": "Executed native output is valid and matches authoritative physical geometry; script text is not counted as a verified STEP export."
+    },
+    {
+      "id": "A09",
+      "name": "Performance and supported platforms",
+      "task_ids": ["P0-T03","P7-T07","P7-T10"],
+      "steps": ["Use approved hardware, datasets and warm/cold measurement definitions.","Measure drag-frame, cached-open, job-acknowledgement and large-design resource budgets.","Install/upgrade on every supported OS and exercise WebGL/Tauri/native worker.","Record exact results, failures and excluded platforms."],
+      "pass": "Approved thresholds and platform checks pass; unmeasured goals are not reported as achieved."
+    }
+  ],
+  "performance_targets": {
+    "status": "Proposed targets from assessment; D01/D06 must approve hardware, datasets and precise percentile methodology.",
+    "initial_candidates": {
+      "drag_frame_budget_ms": 33,
+      "cached_document_open_p95_ms": 2000,
+      "job_acknowledgement_p95_ms": 500
+    },
+    "exclusions": "Cold asset/kernel startup and network/provider latency must be reported separately, not hidden from measurements.",
+    "gate_task_ids": ["P0-T06","P7-T02"]
+  },
+  "input_file_semantics": "input_files includes repository paths verified at planning time and paths produced by prerequisite tasks. planned_outputs names future deliverables, not files created by this planning task. <next> migration filenames mean allocate the next unique revision after checking current Alembic head; never edit a historical migration.",
+  "planning_validation": {
+    "scope": "JSON syntax, unique task IDs, valid dependency and traceability references, acyclic dependency graph, agent/profile assignments, prerequisite-produced paths and task acceptance criteria. Application behavior is unverified by this planning operation.",
+    "status": "passed",
+    "checked_on": "2026-11-13",
+    "checks_passed": ["JSON parses and validates against planning/schema.json", "119 unique task IDs", "All dependencies and task references resolve", "Dependency graph is acyclic and has no forward dependencies", "All phase exits cover their phase tasks", "All agent and verification-profile IDs resolve", "Every task has acceptance criteria and verification methods", "11 human decision gates name approvers", "20 optional P8 tasks remain deferred"],
+    "application_tests_run": false,
+    "application_test_reason": "Planning-only file creation; no application behavior was changed or verified.",
+    "phase_count": 9,
+    "milestone_count": 32,
+    "task_count": 119,
+    "human_gate_count": 11
+  },
+  "scheduling_notes": ["Execute one task at a time in declared phase/milestone/task order; all dependencies must already be VERIFIED. The strict orchestrator policy takes precedence over possible parallel work described in the planning execution_policy.","P0-T05 completes an investigation, including negative findings. It cannot qualify native geometry; P5-T00 is the mandatory correction/qualification gate. P0-T06 can approve the bounded MVP with native STEP excluded.","P0-T07 prepares the electrical design review; by JacobGM's explicit academic-scope amendment, P0-T08 accepts prototype documentation based on reported student peer review. Qualified method/data and engineering-release approval remain deferred to D03/P4-T03 and D04/P4-T16; this does not establish engineering applicability or certification.","P2-T12 bootstraps runnable browser fixtures before P2-T10/P2-T11. Feature-specific browser tests are delivered with those bindings and final cross-view verification belongs to P2-T14.","Failed required implementation checks never satisfy dependencies. Split research findings from implementation qualification instead of using blanket partial acceptance.","All twenty P8 tasks remain deferred. P8-T01/P8-T02 require explicit activation after P7; D08 selects branches. Before activating implementation, update the DAG and R3 for selected branches through reviewed reconciliation. Unselected branches remain deferred, never falsely verified.","Do not merge tasks across specialist ownership, independent acceptance evidence or human approval boundaries merely to reduce session counts.","Reconcile an edited lifecycle only after reviewing the impact preview. Preserve unaffected acceptances only against a fingerprint-verified predecessor; retain every old attempt and decision."]
+}

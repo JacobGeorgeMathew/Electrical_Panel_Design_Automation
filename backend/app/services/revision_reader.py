@@ -6,7 +6,7 @@ from sqlalchemy import select
 from app.persistence import models as m
 from app.persistence.assets import AssetUnavailable, content_hash
 from app.persistence.repositories import CatalogRepository, ProjectRepository, PersistenceError, identifier
-from app.persistence.revision_outputs import OUTPUT_KINDS, verify_outputs
+from app.persistence.integrity import revision_rows, verify_revision_rows
 
 
 class RevisionReader:
@@ -22,42 +22,13 @@ class RevisionReader:
                 m.project_revisions.c.project_id == identifier(project['database_id']))).mappings().first()
             if revision is None:
                 raise PersistenceError('DESIGN_NOT_FOUND', 'No saved design revision was found.', 404)
-            models = {}
-            for kind, table in [('CEM', m.cem_snapshots), ('PDM', m.pdm_snapshots)]:
-                row = session.execute(select(table).where(table.c.project_revision_id == rid)).mappings().first()
-                if row is None or content_hash(row['snapshot']) != row['sha256']:
-                    raise PersistenceError('SNAPSHOT_INTEGRITY', 'Saved snapshot integrity verification failed.', 409)
-                models[kind] = dict(row)
+            rows = revision_rows(session, revision)
             manifest = deepcopy(revision['model_manifest'])
-            if content_hash(dict(cem=models['CEM']['sha256'], pdm=models['PDM']['sha256'],
-                                 manifest=manifest)) != revision['content_sha256']:
-                raise PersistenceError('REVISION_INTEGRITY', 'Saved revision manifest integrity verification failed.', 409)
-            bundle = session.execute(select(m.revision_output_manifests).where(
-                m.revision_output_manifests.c.project_revision_id == rid)).mappings().first()
-            snapshots = {row['output_kind']: dict(row) for row in session.execute(
-                select(m.revision_output_snapshots).where(
-                    m.revision_output_snapshots.c.project_revision_id == rid)).mappings()}
-            files = [dict(row) for row in session.execute(select(m.generated_artifacts).where(
-                m.generated_artifacts.c.project_revision_id == rid).order_by(
-                    m.generated_artifacts.c.created_at.desc())).mappings()]
+            bundle, files = rows['bundle'], rows['files']
 
         # File verification takes place after closing the database read transaction.
+        outputs, missing = verify_revision_rows(rows, self.assets)
         artifacts = [CatalogRepository(None, self.assets).asset_dto(row, True) for row in files]
-        if bundle is not None:
-            if (manifest.get('output_manifest_sha256') != bundle['sha256']
-                    or bundle['manifest'].get('project_revision_id') != str(rid)
-                    or bundle['manifest'].get('project_id') != project['database_id']):
-                raise PersistenceError('REVISION_OUTPUT_INTEGRITY', 'Saved output manifest reference differs.', 409)
-            verify_outputs(bundle['manifest'], bundle['sha256'], snapshots, files, self.assets)
-            if any(snapshots[k]['sha256'] != models[k]['sha256'] for k in models):
-                raise PersistenceError('REVISION_OUTPUT_INTEGRITY', 'Saved model snapshot references differ.', 409)
-            outputs = {kind: deepcopy(row['snapshot']) for kind, row in snapshots.items()}
-            missing = []
-        else:
-            if snapshots or manifest.get('output_manifest_sha256'):
-                raise PersistenceError('REVISION_OUTPUT_INTEGRITY', 'Saved output manifest is missing.', 409)
-            outputs = {kind: deepcopy(row['snapshot']) for kind, row in models.items()}
-            missing = sorted(OUTPUT_KINDS - outputs.keys())
 
         non_current = project['current_revision_id'] != str(rid)
         input_stale = manifest.get('input_sha256') != content_hash({

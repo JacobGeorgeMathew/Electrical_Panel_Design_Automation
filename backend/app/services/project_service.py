@@ -273,5 +273,5 @@ class ProjectService:
                     .values(**file,generation_status='READY',completed_at=datetime.now(timezone.utc)))
         except Exception:
             with self.db.sessions.begin() as s:
-                s.execute(update(m.generated_artifacts).where(m.generated_artifacts.c.id==identifier(job)).values(
+                s.execute(update(m.generated_artifacts).where(m.generated_artifacts.c.id==identifier(job),m.generated_artifacts.c.generation_status=='PENDING').values(
                     generation_status='FAILED',error={'code':'GENERATION_FAILED','message':'Generation failed; regenerate this saved revision.'},completed_at=datetime.now(timezone.utc)))

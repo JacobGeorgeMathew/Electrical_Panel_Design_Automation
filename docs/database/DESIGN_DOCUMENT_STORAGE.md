@@ -40,7 +40,8 @@ document semantics. Updating a working document must retain old referenced value
 
 Assets continue to use existing managed content-addressed storage and artifact
 metadata; these tables add no filesystem paths or asset cleanup behavior.
-Immutable-row access guards belong to a separately scheduled task.
+Runtime immutable-row guards and read-only integrity audits are described in
+[revision integrity](REVISION_INTEGRITY.md).
 
 ## Complete publication bundles
 

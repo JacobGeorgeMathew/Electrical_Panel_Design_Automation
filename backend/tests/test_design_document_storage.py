@@ -162,6 +162,7 @@ def test_document_and_complete_output_storage_round_trip(postgres_database):
 
 
 def test_storage_rejects_invalid_versions_shapes_and_cross_project_links(postgres_database):
+    from tests.integrity_support import privileged_connection
     project, other_project, revision, other_revision = (uuid4() for _ in range(4))
     values, _ = stored_document(project)
     other_values, _ = stored_document(other_project)
@@ -169,7 +170,8 @@ def test_storage_rejects_invalid_versions_shapes_and_cross_project_links(postgre
         source_document_sequence=0, source_document_sha256='a' * 64, manifest={}, sha256='b' * 64)
     snapshot = dict(document_id=values['id'], model_kind='CEM', schema_version=1, sha256='c' * 64, snapshot={})
     output = dict(project_revision_id=revision, output_kind='BOM', schema_version=1, sha256='d' * 64, snapshot=[])
-    with postgres_database.engine.begin() as conn:
+    # Exercise database constraints independently of the runtime mutation guard.
+    with privileged_connection(postgres_database) as conn:
         conn.execute(insert(m.projects), [{'id': project, 'name': 'Storage constraints'},
                                          {'id': other_project, 'name': 'Other project'}])
         conn.execute(insert(m.project_revisions), [dict(id=revision, project_id=project, revision_no=1, status='DRAFT'),
