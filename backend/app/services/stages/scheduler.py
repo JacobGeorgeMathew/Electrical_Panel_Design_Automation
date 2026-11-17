@@ -70,10 +70,16 @@ def dirty_closure(document):
 
 
 class IncrementalScheduler:
-    def __init__(self, cache=None, execute_adapter=None):
+    def __init__(self, cache=None, execute_adapter=None, progress=None):
         self.cache = cache
         self.execute_adapter = execute_adapter
         self.records = []
+        self.progress = progress
+
+    def record(self, execution):
+        self.records.append(execution)
+        if self.progress:
+            self.progress(None, self.records)
 
     def run(self, base: ResolvedDocument, inputs: SchedulerInputs, *, force_full=False):
         self.records = []
@@ -93,6 +99,8 @@ class IncrementalScheduler:
         policy = snapshots.pdm.validation_policy if snapshots.pdm else None
 
         def execute(name, value):
+            if self.progress:
+                self.progress(name, self.records)
             started = perf_counter()
             signature = make_signature(name, value, doc.pins, policy=policy, context=context)
             binding = ADAPTERS[name]
@@ -102,7 +110,7 @@ class IncrementalScheduler:
                     hit = self.cache.lookup(signature)
                     if hit.integrity == 'VALID':
                         self.cache.accept_cached(doc.document_id, doc.document_sequence, signature)
-                        self.records.append(StageExecution(stage_id=binding.stage_id, adapter=name,
+                        self.record(StageExecution(stage_id=binding.stage_id, adapter=name,
                             status='CACHED', executions=0, elapsed_ms=(perf_counter()-started)*1000,
                             input_signature=signature.key))
                         return hit.output
@@ -111,13 +119,13 @@ class IncrementalScheduler:
             except DesignError as exc:
                 if self.cache:
                     self.cache.record_failure(doc.document_id, doc.document_sequence, signature, exc.code)
-                self.records.append(StageExecution(stage_id=binding.stage_id, adapter=name,
+                self.record(StageExecution(stage_id=binding.stage_id, adapter=name,
                     status='FAILED', executions=1, elapsed_ms=(perf_counter()-started)*1000,
                     input_signature=signature.key, failure_code=exc.code))
                 raise
             if self.cache:
                 self.cache.record_success(doc.document_id, doc.document_sequence, signature, output)
-            self.records.append(StageExecution(stage_id=binding.stage_id, adapter=name,
+            self.record(StageExecution(stage_id=binding.stage_id, adapter=name,
                 status='EXECUTED', executions=1, elapsed_ms=(perf_counter()-started)*1000,
                 input_signature=signature.key))
             return output
@@ -154,7 +162,7 @@ class IncrementalScheduler:
         if 'schematic' in dirty:
             if snapshots.schematic and 'schematic' in intent.manual_models:
                 # Reference integrity is checked on the complete candidate below.
-                self.records.append(StageExecution(stage_id='schematic', adapter='schematic',
+                self.record(StageExecution(stage_id='schematic', adapter='schematic',
                     status='RETAINED', executions=0, elapsed_ms=0))
             else:
                 legacy_schematic = execute('schematic', e.SchematicInput(context=context,

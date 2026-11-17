@@ -93,6 +93,16 @@ export const propagateChange = (projectId: string, modifiedField: string, newVal
 export const recomputeDesign = (projectId: string, data: import('../types/operations').RecomputeRequest) =>
   request<import('../types/operations').RecomputeResponse>('/projects/' + id(projectId) + '/design/recompute',
     json('POST', data), 90000);
+const recomputeJobsPath = (projectId: string) => '/projects/' + id(projectId) + '/design/recompute/jobs';
+export const submitRecomputeJob = (projectId: string, data: import('../types/jobs').RecomputeJobRequest, key: string, signal?: AbortSignal) =>
+  request<import('../types/jobs').RecomputeJob>(recomputeJobsPath(projectId),
+    {...json('POST', data), headers: {'Idempotency-Key': key}, signal});
+export const listRecomputeJobs = (projectId: string, signal?: AbortSignal) =>
+  request<import('../types/jobs').RecomputeJob[]>(recomputeJobsPath(projectId), {signal});
+export const fetchRecomputeJob = (projectId: string, jobId: string, signal?: AbortSignal) =>
+  request<import('../types/jobs').RecomputeJob>(recomputeJobsPath(projectId) + '/' + id(jobId), {signal});
+export const cancelRecomputeJob = (projectId: string, jobId: string, signal?: AbortSignal) =>
+  request<import('../types/jobs').RecomputeJob>(recomputeJobsPath(projectId) + '/' + id(jobId) + '/cancel', {...json('POST', {}), signal});
 export const fetchFreeCADScript = (projectId: string) => request<{ script: string; revision_id: string }>('/projects/' + id(projectId) + '/cad/freecad-script');
 export const validatePlacement = (projectId: string, pdm: PhysicalDesignModel) =>
   request<{ pdm: PhysicalDesignModel; validation_results: any[]; is_valid: boolean }>('/projects/' + id(projectId) + '/design/reroute-placement', json('POST', pdm));

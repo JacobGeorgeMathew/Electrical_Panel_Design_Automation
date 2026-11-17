@@ -83,13 +83,14 @@ def materialize(service, source):
             for code, entries in models.items()}))
 
 
-def recompute(service, key, request):
+def recompute(service, key, request, *, progress=None, cancelled=None, execution_scope=None):
     source = DocumentService(service.db).load(key)
     check_base(source, request)
     base, inputs = materialize(service, source)
     from app.jobs.runner import StageExecutor
     scheduler = IncrementalScheduler(StageCache(service.db),
-                                     execute_adapter=StageExecutor(service.db, source))
+        execute_adapter=StageExecutor(service.db, source, cancelled=cancelled, execution_scope=execution_scope),
+        progress=progress)
     try:
         result = scheduler.run(base, inputs)
     except Exception as exc:

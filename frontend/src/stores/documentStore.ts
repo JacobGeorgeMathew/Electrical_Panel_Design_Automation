@@ -7,6 +7,24 @@ import type {PhysicalDesignModel} from '../types/pdm';
 import type {CanonicalEngineeringModel} from '../types/cem';
 import {documentSchematicGraph} from '../components/schematic/schematicGraph';
 
+/** Includes transient drafts that may not advance the durable document clock. */
+export function documentDraftFingerprint(state: ProjectState) {
+  return JSON.stringify([state.requirementValues, state.projectConfiguration,
+    state.schematicData, state.editorTransforms, state.pendingEditorEdit]);
+}
+
+export function recomputeAvailability(state: ProjectState) {
+  const reason = !state.document ? 'Open a working document to recompute.'
+    : state.viewedRevisionId ? 'Historical revisions are read-only.'
+    : state.isLoadingProject || state.isSaving || state.isGenerating ? 'Wait for the current document request.'
+    : state.pendingRecovery ? 'Resolve recovery before recomputing.'
+    : state.hasUnsavedChanges || Object.keys(state.editorTransforms).length || state.pendingEditorEdit ||
+      JSON.stringify(state.schematicData) !== JSON.stringify(documentSchematicGraph(state.document))
+      ? 'Save input drafts and finish or discard transient edits before recomputing.'
+    : null;
+  return {unavailable: !!reason, reason};
+}
+
 export function documentFields(view: DocumentView) {
   if (view.document.schema_version !== '1.0.0') throw new Error('Unsupported working-document schema. Local data retained.');
   const values = Object.fromEntries(view.snapshots.requirements.items.map(item => [item.id, item.value]));
@@ -49,7 +67,7 @@ export function publicationAvailability(state: ProjectState) {
   const needsProposal = !!view && (view.document.document_sequence > 0 ||
     view.snapshots.cem !== null || !!view.document.generation_intent);
   const reason = state.viewedRevisionId ? 'Historical revisions are read-only.'
-    : needsProposal ? 'Publication of edited working documents is unavailable until separate Recompute and Publish support is implemented. Generation proposals can be reviewed and accepted through the API; acceptance changes only the working draft. Save preserves your edits.'
+    : needsProposal ? 'Publication of edited working documents is unavailable. Use separate Recompute and Publish steps: Recompute is available in the workspace; proposal acceptance changes only the working draft. Save preserves your edits.'
     : view && state.hasUnsavedChanges ? 'Save input drafts first. Changed-input Save requires the proposal workflow; publication of that edited document is unavailable.'
     : null;
   return { unavailable: !!reason, reason,

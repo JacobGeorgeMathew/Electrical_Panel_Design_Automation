@@ -533,7 +533,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
   applyChangePropagation: async (field, newValue) => {
     if(get().viewedRevisionId)return;
-    if(get().document){set({errorMessage:'Single-field automatic publication is unavailable for working documents. Save preserves the draft; generation proposals require explicit review and acceptance through the API and do not publish.'});return;}
+    if(get().document){set({errorMessage:'Single-field automatic publication is unavailable for working documents. Save preserves the draft; use Recompute in the workspace, then explicitly review and apply its proposal. Acceptance does not publish.'});return;}
     const state = get();
     if(state.isSaving||state.isGenerating||state.pendingRecovery)return;
     const token=projectRequest;

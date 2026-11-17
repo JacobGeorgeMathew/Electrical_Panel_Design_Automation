@@ -56,7 +56,7 @@ The supported operation surface is bounded:
 | Pin connection or selected wire replace/delete | `ModifyElectricalConnection`, CEM plus dependent PDM/page changes | Explicit conductor data, preview and Apply required; absent supply/terminal evidence rejects. |
 | Catalog insert / inspector remove | `AddComponent` / `RemoveComponent` | Exact catalog version and explicit placement; removal requires confirmation of the exact dependency closure. |
 | Undo / redo | Version-fenced server history | Persists across reopen; changed inputs can fence older history. |
-| Automatic DB proposal | `ApplyGeneration`, API only | Explicit review/acceptance and one undo group; no workspace proposal-review UI. |
+| Recompute saved document | Durable job, then reviewed `ApplyGeneration` | Poll stage progress in Activity & errors; explicit Apply updates the working document as one undo group. |
 | Requirement/rating/enclosure and page regeneration commands | `UpdateRequirement`, `ChangeComponentRating`, `ResizeEnclosure`, `RegenerateSchematic` in backend registry | Command APIs exist; questionnaire/enclosure forms still save input drafts through the document PUT. These forms are not shared-operation undo tools. |
 | Rotate, rail/duct geometry editing, general CAD editing | Unavailable | Nonzero rotation is rejected; mechanical/catalog definitions remain read-only. |
 
@@ -72,28 +72,34 @@ DB assumptions, not manufacturing or standards certification.
 `OperationPreview` shows retained errors/proposals and dirty stages. Save preserves
 the working document without rerouting or publishing; transient physical previews
 and legacy schematic overlays cannot override its saved geometry on reopen. Explicit
-recovery still retains unfinished edits. Manual operation drafts require subsequent
-Recompute support before Publish; the automatic input pipeline cannot silently
-replace them. Recompute implementation is outside these workspace tool bindings.
+recovery still retains unfinished edits. Recompute executes the saved document's
+dirty dependency closure and retains a review proposal. Manual intent remains
+protected; execution and proposal acceptance do not publish a revision.
 The current labels and actual effects are:
 
 | Label | Actual behavior |
 | --- | --- |
 | `Save project`, `Save draft`, `Save & close` | Save input drafts/metadata; accepted engineering operations are already durable. No generation, rerouting or publication. Transient mesh previews are not saved as authoritative PDM. |
-| `Recompute required before Publish` / `Recompute required: …` | Dirty-output status, with no standalone Recompute action implemented. |
+| `Recompute saved document` | Submit asynchronously and poll stage progress. Save input drafts and resolve recovery/transient edits first. |
+| `Cancel job` / `Retry recompute from saved base` | Persist cancellation; retry creates a new job against the current saved document. Transport errors retain submission keys for exact acknowledgement recovery. |
+| `Apply recompute proposal` | Review changed model/target/field records, then explicitly accept against the unchanged base. Completion alone cannot change editor state. |
 | `Generate & publish revision (legacy)` | Combined generation/publication for untouched input-only documents only. This is an explicitly labeled compatibility action. |
-| `Publish unavailable` | Disabled after changed-input Save, CEM or generation intent; explanation identifies pending separate Recompute/Publish. The store and server enforce the same boundary. |
+| `Publish unavailable` | Disabled after changed-input Save, CEM or generation intent. Recompute is available; publication of edited documents remains unavailable. The store and server enforce the same boundary. |
 | `Automatic change unavailable` | Questionnaire single-field generation is disabled for working documents; input drafts remain editable and recoverable. |
 
 The server returns `GENERATION_PROPOSAL_REQUIRED` after a document edit or when
 CEM/generation intent exists. All Publish entry points use the same eligibility
 check, including the toolbar/Design menu, project history, questionnaire and legacy
-Header. Disabled actions explain their limitation. The UI does not switch to the new
-[generation proposal API](GENERATION_PROPOSALS.md). Accepting a proposal changes
-only the working document and leaves CAD dirty. End-to-end publication of edited
-documents is therefore unavailable; do not interpret the status text as a working
-Recompute/Publish pipeline. Acceptance evidence and outstanding regressions are
-recorded in [phase 2 verification](verification/phase-2-acceptance.md).
+Header. Disabled actions explain their limitation. Activity & errors now provides
+Recompute progress, failure codes, stage records and proposal review/acceptance.
+The toolbar also exposes Recompute. Polling resumes after page reload using the
+retained job ID and submission key; recent server jobs can also be discovered.
+Applying a result checks document ID, sequence, project lock, content hash and local
+draft state before and after the request. Newer edits remain in the editor with a
+visible conflict. Display preferences are separate. Successful recompute acceptance
+can clear working dirty stages; published output remains stale and immutable.
+End-to-end publication of edited documents is still unavailable. Earlier phase 2
+boundaries are recorded in [phase 2 verification](verification/phase-2-acceptance.md).
 
 The mutation audit distinguishes model edits from input/lifecycle/display state:
 
@@ -104,7 +110,7 @@ The mutation audit distinguishes model edits from input/lifecycle/display state:
 | Electrical create/replace/delete | `ModifyElectricalConnection` preview then Apply; CEM plus dependent PDM/page hashes and base fences. | Explicit effect review; rejection retains proposal and idempotency key. History restores exact snapshots. |
 | Catalog insertion/removal | `AddComponent` exact version and server preview; `RemoveComponent` dependency-closure confirmation; affected-model hashes and base fences. | One accepted batch/group, server result only. Cancellation/rejection makes no durable model change. |
 | Requirement/enclosure local input and submission | Local setters retain drafts; explicit Save sends input-only document PUT with L/S, then metadata PATCH with advanced L. CEM/PDM remain untouched and dirty. | Separate lifecycle Save contract, no operation group. Unfinished input uses browser/server recovery with independent R and explicit Recover/Discard; conflicts retain edits. |
-| Automatic generation | Read-only API candidate preview; exact retained candidate acceptance through dedicated endpoint with digest, base fences and idempotency key. | One shared undo group; manual models/placement locks protected. No revision/artifact creation; no proposal-review UI. Legacy combined action is restricted as above. |
+| Recompute / automatic generation | Durable recompute job or read-only generation API preview; exact retained candidate acceptance through dedicated endpoint with digest, base fences and idempotency key. | Recompute has workspace review UI. One shared undo group; manual intent protected. No revision/artifact publication. Legacy combined action remains restricted. |
 | Undo/redo, Save/reopen | Server history uses L/S, revision base and content hash. Save cannot replace engineering snapshots; reopen reads them. | Applied operation groups are durable; version drift conflicts visibly. Save is not an additional geometry history group. |
 | Camera, visibility, selection, grid and dock sizes | Workspace/display state only. | No engineering operation required; separate browser preference persistence. |
 

@@ -7,6 +7,10 @@ import {useCommandStore} from '../../stores/commandStore';
 import {ApiError} from '../../api/client';
 import fixture from '../../types/fixtures/document-v1.json';
 const lifecycle=vi.hoisted(()=>({mounted:vi.fn(),unmounted:vi.fn()}));
+// Shell layout/generation tests do not own job transport. Its polling, reload and
+// error behavior are exercised by jobStore tests and the real browser suite.
+vi.mock('../../stores/jobStore',async original=>({...await original<typeof import('../../stores/jobStore')>(),
+  pollDocumentJobs:vi.fn(()=>()=>{})}));
 vi.mock('../threeD/Panel3DViewer',()=>({Panel3DViewer:({embedded}:any)=>{React.useEffect(()=>{lifecycle.mounted();return()=>lifecycle.unmounted();},[]);return <div data-testid="assembly" data-embedded={embedded}><button onClick={()=>useProjectStore.getState().selectObject('PDM-Q1')}>Pick assembly component</button></div>;}}));
 vi.mock('../layout/Layout2DViewer',()=>({Layout2DViewer:({embedded}:any)=><div data-testid="layout" data-embedded={embedded}><button onClick={()=>useProjectStore.getState().selectObject('Q1')}>Pick layout component</button></div>}));
 vi.mock('../schematic/SchematicViewer',()=>({SchematicViewer:({embedded}:any)=><div data-testid="schematic" data-embedded={embedded}/>}));

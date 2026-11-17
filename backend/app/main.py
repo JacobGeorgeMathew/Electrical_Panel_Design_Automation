@@ -9,7 +9,7 @@ from app.persistence.config import Settings,ConfigurationError
 from app.persistence.database import Database
 from app.persistence.repositories import PersistenceError
 from app.services.design_errors import DesignError
-from app.api import routes_documents, routes_operations
+from app.api import routes_documents, routes_operations, routes_jobs
 
 def create_app(database=None):
     @asynccontextmanager
@@ -31,6 +31,7 @@ def create_app(database=None):
     app=FastAPI(title='Automated Electrical Panel Design Platform API',version='1.1.0',lifespan=lifespan)
     app.include_router(routes_documents.router)
     app.include_router(routes_operations.router)
+    app.include_router(routes_jobs.router)
     @app.exception_handler(DesignError)
     async def design_error_handler(request,exc):
         return JSONResponse(status_code=422,content=exc.as_dict())
@@ -44,7 +45,7 @@ def create_app(database=None):
             'code':'PERSISTENCE_CONFLICT' if conflict else 'DATABASE_UNAVAILABLE',
             'message':'This operation conflicts with saved data.' if conflict else 'PostgreSQL is unavailable. Check the service and application migrations.'}})
     app.add_middleware(CORSMiddleware,allow_origins=['http://localhost:3000','http://127.0.0.1:3000','tauri://localhost','http://tauri.localhost','https://tauri.localhost'],
-        allow_credentials=True,allow_methods=['GET','POST','PATCH','PUT','DELETE','OPTIONS'],allow_headers=['Content-Type'])
+        allow_credentials=True,allow_methods=['GET','POST','PATCH','PUT','DELETE','OPTIONS'],allow_headers=['Content-Type', 'Idempotency-Key'])
     for module in (routes_projects,routes_requirements,routes_design,routes_schematic,routes_layout,routes_cad,routes_validation,routes_catalog,routes_assets):
         app.include_router(module.router)
     @app.get('/health')

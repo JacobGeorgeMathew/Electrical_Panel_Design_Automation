@@ -42,12 +42,16 @@ class StageExecutor:
     Completion records a reusable result only. The scheduler's separate cache
     fence and explicit operation acceptance still control document validity.
     """
-    def __init__(self, database, source, *, budget=None):
+    def __init__(self, database, source, *, budget=None, cancelled=None, execution_scope=None):
         self.db, self.source = database, source
         self.budget = budget or Budget()
         self.owner = 'stage-' + uuid4().hex
+        self.parent_cancelled = cancelled or (lambda: False)
+        self.execution_scope = execution_scope or 'sync'
 
     def __call__(self, name, value, stage_signature):
+        if self.parent_cancelled():
+            raise WorkerFailure('JOB_CANCELLED')
         from app.jobs.worker import execute_stage
         from app.services.stages.cache import ADAPTERS
         doc = self.source.document
@@ -59,7 +63,7 @@ class StageExecutor:
         with transaction(self.db) as session:
             repo = JobRepository(session)
             repo.recover_expired(kinds=['STAGE'])
-            job = repo.enqueue(execution_key=f'stage:{doc.document_id}:{doc.document_sequence}:{digest}',
+            job = repo.enqueue(execution_key=f'stage:{doc.document_id}:{doc.document_sequence}:{digest}:{self.execution_scope}',
                 project_id=doc.project_id, document_id=doc.document_id,
                 base_sequence=doc.document_sequence, kind='STAGE', input_signature=digest,
                 inputs=inputs, artifact_intent=intent)
@@ -75,6 +79,8 @@ class StageExecutor:
 
         def cancelled():
             nonlocal last_heartbeat
+            if self.parent_cancelled():
+                return True
             if time.monotonic() - last_heartbeat >= .5:
                 with transaction(self.db) as session:
                     repo = JobRepository(session)
@@ -150,7 +156,7 @@ class JobRunner:
     def claim(self):
         with transaction(self.db) as session:
             repo = JobRepository(session)
-            repo.recover_expired(kinds=[KIND])
+            repo.recover_expired(kinds=[KIND, 'RECOMPUTE'])
             # Mirror terminal jobs for the existing ArtifactView contract.
             pending = list(session.scalars(select(m.generated_artifacts.c.id).join(
                 m.jobs, m.jobs.c.id == m.generated_artifacts.c.id).where(
@@ -165,12 +171,14 @@ class JobRunner:
                     generation_status='FAILED', error={'code': 'JOB_STOPPED',
                         'message': 'Export stopped before completion.'},
                     completed_at=datetime.now(timezone.utc)))
-            return repo.claim(self.owner, lease_seconds=30, kinds=[KIND])
+            return repo.claim(self.owner, lease_seconds=30, kinds=[KIND, 'RECOMPUTE'])
 
     def run_once(self):
         job = self.claim()
         if job is None:
             return None
+        if job['kind'] == 'RECOMPUTE':
+            return self.recompute(job)
         last_heartbeat = 0
 
         def cancelled():
@@ -198,6 +206,70 @@ class JobRunner:
                 if lost.code != 'JOB_LEASE_LOST':
                     raise
             return None
+
+    def recompute(self, job):
+        """Retain a review candidate only; never apply/publish on completion."""
+        from app.models.recompute import RecomputeRequest, RecomputeResponse
+        from app.services.project_service import ProjectService
+        from app.services.recompute import recompute, check_base
+        stopped, lost = Event(), Event()
+
+        def heartbeat():
+            while not stopped.wait(.5):
+                try:
+                    with transaction(self.db) as session:
+                        JobRepository(session).heartbeat(job['id'], self.owner, job['lease_token'], lease_seconds=30)
+                except Exception:
+                    lost.set()
+                    return
+
+        def cancelled():
+            return lost.is_set() or self.stopping.is_set()
+
+        def progress(stage, records):
+            if cancelled():
+                raise WorkerFailure('JOB_CANCELLED')
+
+        thread = Thread(target=heartbeat, daemon=True)
+        thread.start()
+        try:
+            if signature(job['inputs'], job['artifact_intent']) != job['input_signature']:
+                raise WorkerFailure('JOB_INPUT_MISMATCH')
+            request = RecomputeRequest.model_validate(job['inputs']['request'])
+            with transaction(self.db) as session:
+                source = DocumentRepository(session).load(ProjectRepository(session).row(str(job['project_id'])))
+                check_base(source, request)
+                if document_hash(source.document) != job['inputs']['document_sha256']:
+                    raise WorkerFailure('JOB_SUPERSEDED')
+            response = recompute(ProjectService(self.db), str(job['project_id']), request,
+                progress=progress, cancelled=cancelled,
+                execution_scope=f'{job["id"]}:{job["attempts"]}')
+            response = RecomputeResponse.model_validate(response).model_dump(mode='json')
+            if cancelled():
+                raise WorkerFailure('JOB_CANCELLED')
+            with transaction(self.db) as session:
+                project = ProjectRepository(session).row(str(job['project_id']), lock=True)
+                session.execute(select(m.design_documents.c.id).where(
+                    m.design_documents.c.id == job['document_id']).with_for_update()).one()
+                source = DocumentRepository(session).load(project)
+                check_base(source, request)
+                if document_hash(source.document) != job['inputs']['document_sha256']:
+                    raise WorkerFailure('JOB_SUPERSEDED')
+                return JobRepository(session).succeed(job['id'], self.owner, job['lease_token'],
+                    result={'current_stage': None, 'stage_executions': response['stage_executions'],
+                        'response': response})
+        except Exception as exc:
+            try:
+                with transaction(self.db) as session:
+                    JobRepository(session).fail(job['id'], self.owner, job['lease_token'],
+                        code=getattr(exc, 'code', 'RECOMPUTE_FAILED'))
+            except PersistenceError as error:
+                if error.code != 'JOB_LEASE_LOST':
+                    raise
+            return None
+        finally:
+            stopped.set()
+            thread.join()
 
     def fail(self, job, code):
         with transaction(self.db) as session:
