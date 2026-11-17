@@ -1,6 +1,7 @@
 """Project lifecycle integration against an isolated PostgreSQL database."""
+from tests.historical_publication import seed_historical_revision, historical_design
 from uuid import UUID
-from fastapi.testclient import TestClient
+from tests.local_client import LocalClient as TestClient
 from app.main import create_app
 
 
@@ -116,7 +117,7 @@ def test_versioned_recovery_has_independent_clock_and_retains_old_base(api, post
 
 def test_duplicate_and_import_preserve_generated_history(api):
     p = create(api)
-    design = ok(api.post(f"/api/projects/{p['id']}/revisions", json={'expected_version': p['lock_version'], 'requirements': {}}), 201)
+    design = historical_design(api, p['id'], expected_version=p['lock_version'])
     duplicate = ok(api.post(f"/api/projects/{p['id']}/duplicate", json={'expected_version': design['lock_version'], 'name': 'Engineered copy'}), 201)
     copied = ok(api.get(f"/api/projects/{duplicate['id']}/design"))
     assert copied['cem']['project_id'] == duplicate['id']
@@ -156,9 +157,9 @@ def test_restore_adds_one_revision_preserving_all_original_hashes(api, postgres_
 
     p = create(api)
     service = ProjectService(postgres_database)
-    first = service.generate(p['id'], {'num_feeders': 4}, p['lock_version'],
+    first = seed_historical_revision(service, p['id'], {'num_feeders': 4}, p['lock_version'],
                              configuration={'enclosure_id': None})
-    second = service.generate(p['id'], {'num_feeders': 5}, first['lock_version'])
+    second = seed_historical_revision(service, p['id'], {'num_feeders': 5}, first['lock_version'])
     root = '/api/projects/' + p['id']
     tables = [m.project_revisions, m.cem_snapshots, m.pdm_snapshots,
               m.revision_output_manifests, m.revision_output_snapshots, m.generated_artifacts]
@@ -197,7 +198,7 @@ def test_overlay_proposals_retain_workspace_recovery_and_history(api, postgres_d
     from tests.test_revision_reader import disable_generators
 
     p = create(api)
-    design = ProjectService(postgres_database).generate(p['id'], {}, p['lock_version'])
+    design = seed_historical_revision(ProjectService(postgres_database), p['id'], {}, p['lock_version'])
     root = '/api/projects/' + p['id']
     part = design['pdm']['components'][0]
     workspace = {'editorTransforms': {part['cem_component_id']:

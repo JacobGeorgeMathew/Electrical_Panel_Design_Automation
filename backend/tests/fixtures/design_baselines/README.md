@@ -102,3 +102,34 @@ snapshot, artifact-byte, restoration, import/duplication and tombstone checks.
 This separates approved P2 working acceptance from legacy publication without
 implementing a later Recompute/Publish workflow. Required profile results are
 recorded in the P2-T14 attempt report; human acceptance remains separate.
+
+## P3-T04 verification follow-up source-pin review
+
+The user requested correction of the previously reported source-pin failure and
+fresh execution of both full backend profiles. Exactly one source pin differed:
+`app/services/change_propagation.py`. Its old hash matches the parent of P3-T01
+commit `aec9df9`; its current bytes match the committed P3-T01 implementation.
+
+That change replaces the old hardcoded dependency names with the validated stage
+registry, maps legacy requirement names to qualified paths and reports affected
+stages in dependency order. It changes invalidation/diff metadata. It does not
+alter calculation, selection, placement, DuctRouter, physical validation, BOM or
+CAD generation algorithms. The full baseline tests continue comparing exact
+CEM/PDM/schematic/CAD/BOM outputs, GLB/script bytes and independent semantics
+against the existing observed fixtures.
+
+Only this reviewed source-hash entry was updated. Observed outputs, artifact
+hashes, catalogs, solver settings, dependency versions and engine/generator labels
+remain unchanged. Fresh verification evidence and final profile outcomes are
+recorded in the [P3-T04 verification follow-up](../../../../planning/task_reports/P3-T04/attempt-01-verification-followup.md).
+The original attempt report retains its actual failed-profile results. Updating
+this source pin and recording test outcomes does not grant human task acceptance.
+
+## P3-T11 diagnostic source-pin review
+
+Two source entries changed: `app/services/design_errors.py` now redacts public
+diagnostics and includes correlation, and `app/services/document_service.py` adds
+operation spans. Those hashes were updated after source review. Engineering
+algorithms, catalogs, solver settings, version labels and exact observed output
+and artifact fixtures are unchanged. Fresh test evidence belongs to
+[P3-T11 attempt 01](../../../../planning/task_reports/P3-T11/attempt-01.md).

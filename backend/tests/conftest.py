@@ -6,6 +6,12 @@ import pytest
 from sqlalchemy import create_engine
 
 
+@pytest.fixture(autouse=True)
+def private_diagnostic_directory(tmp_path, monkeypatch):
+    monkeypatch.setenv('PANEL_DATA_DIR', str(tmp_path/'runtime'))
+    monkeypatch.setenv('PANEL_LOCAL_MODE', 'development')
+
+
 def pytest_collection_modifyitems(items):
     # Persist fixture dependency in JUnit, including tests skipped before setup.
     # CI uses this to distinguish database coverage from ordinary unit results.
@@ -46,7 +52,7 @@ def postgres_database(tmp_path_factory):
 
 @pytest.fixture
 def api(postgres_database):
-    from fastapi.testclient import TestClient
+    from tests.local_client import LocalClient as TestClient
     from app.main import create_app
     with TestClient(create_app(postgres_database)) as client:
         yield client

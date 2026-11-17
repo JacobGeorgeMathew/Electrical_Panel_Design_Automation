@@ -4,10 +4,11 @@ import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {Questionnaire} from './Questionnaire';
 import {useProjectStore} from '../../stores/projectStore';
 import fixture from '../../types/fixtures/document-v1.json';
+import {authorizeTestSession} from '../../api/testLocalSession';
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
 let host:HTMLDivElement,root:Root;
 const initialActions={validateCurrentRequirements:useProjectStore.getState().validateCurrentRequirements,runDesignPipeline:useProjectStore.getState().runDesignPipeline};
-beforeEach(()=>{host=document.createElement('div');document.body.append(host);root=createRoot(host);useProjectStore.setState({...initialActions,document:null,viewedRevisionId:null,pendingRecovery:null,validationErrors:[],validationWarnings:[],projectId:'P1',archetypes:[],isGenerating:false,isSaving:false,isLoadingProject:false,errorMessage:null,requirementValues:{},projectConfiguration:{}});});
+beforeEach(async()=>{await authorizeTestSession();host=document.createElement('div');document.body.append(host);root=createRoot(host);useProjectStore.setState({...initialActions,document:null,viewedRevisionId:null,pendingRecovery:null,validationErrors:[],validationWarnings:[],projectId:'P1',archetypes:[],isGenerating:false,isSaving:false,isLoadingProject:false,errorMessage:null,requirementValues:{},projectConfiguration:{}});});
 afterEach(()=>{act(()=>root.unmount());host.remove();useProjectStore.setState(initialActions);vi.unstubAllGlobals();});
 
 it('renders server ranges and evaluates conditional questions against server defaults',async()=>{

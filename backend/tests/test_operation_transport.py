@@ -1,6 +1,6 @@
 """Thin command HTTP bindings delegate validation/persistence to the service."""
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
+from tests.local_client import LocalClient as TestClient
 
 from app.api.dependencies import get_document_service
 from app.api.routes_operations import router

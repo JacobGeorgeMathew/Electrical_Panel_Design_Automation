@@ -533,7 +533,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
   applyChangePropagation: async (field, newValue) => {
     if(get().viewedRevisionId)return;
-    if(get().document){set({errorMessage:'Single-field automatic publication is unavailable for working documents. Save preserves the draft; generation proposals require explicit review and acceptance through the API and do not publish.'});return;}
+    if(get().document){set({errorMessage:'Single-field automatic publication is unavailable for working documents. Save preserves the draft; use Recompute in the workspace, then explicitly review and apply its proposal. Acceptance does not publish.'});return;}
     const state = get();
     if(state.isSaving||state.isGenerating||state.pendingRecovery)return;
     const token=projectRequest;
@@ -544,11 +544,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
     set({ isGenerating: true, errorMessage: null, validationErrors: [], validationWarnings: [] });
     try {
-      const { new_design, diff_report } = await propagateChange(state.projectId, field, newValue, state.lockVersion);
-      const [project, revisions] = await Promise.all([fetchProject(state.projectId), fetchRevisions(state.projectId)]);
+      await propagateChange(state.projectId, field, newValue, state.lockVersion);
       if(token!==projectRequest)return;
-      const recovery=checkpointAfterGeneration(state,get());
-      set({ ...projectFields(project), ...designFields(new_design), revisions, diffReport: diff_report, isDiffModalOpen: true, isGenerating: false, ...recovery });
+      set({ isGenerating: false, errorMessage: 'Change preview is ready. Apply the requirement operation, then explicitly Recompute and accept its candidate. Publication is a separate action.' });
     } catch (error) {
       if(token===projectRequest)set({ isGenerating: false, errorMessage: error instanceof Error ? error.message : String(error) });
     }

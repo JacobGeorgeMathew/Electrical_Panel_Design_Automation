@@ -59,7 +59,8 @@ class CatalogRepository:
         row=dict(row)
         v_id=row['id']
         terminals=[]
-        for terminal in self.s.execute(select(m.component_terminals).where(m.component_terminals.c.component_version_id==v_id)).mappings():
+        for terminal in self.s.execute(select(m.component_terminals).where(m.component_terminals.c.component_version_id==v_id)
+                                      .order_by(m.component_terminals.c.code)).mappings():
             xyz=terminal['coordinate_mm'] or {}
             terminals.append({'id':terminal['code'],'label':terminal['code'],'type':terminal['electrical_role'] or 'POWER',
                               **xyz,'connection_type':terminal['connection_type'],
@@ -118,16 +119,17 @@ class CatalogRepository:
 
     def engine_catalog(self):
         rows=self.s.execute(self._query().where(or_(m.component_versions.c.specification['import_source'].astext=='legacy-json-v1',
-            m.component_versions.c.specification['engine_component'].as_boolean()==True))).mappings()
+            m.component_versions.c.specification['engine_component'].as_boolean()==True)).order_by(m.components.c.code)).mappings()
         return [{**self._component(r),'id':r['code']} for r in rows if r['category_code']!='ENCLOSURE']
 
     def hardware_catalog(self):
-        rows=self.s.execute(self._query().where(m.component_versions.c.specification['import_source'].astext=='panel-hardware-v1')).mappings()
+        rows=self.s.execute(self._query().where(m.component_versions.c.specification['import_source'].astext=='panel-hardware-v1')
+                            .order_by(m.components.c.code)).mappings()
         return [self._component(r) for r in rows]
 
     def enclosures(self):
         rows=self.s.execute(self._query().where(m.components.c.category_code=='ENCLOSURE',
-            m.component_versions.c.specification['import_source'].astext=='legacy-json-v1')).mappings()
+            m.component_versions.c.specification['import_source'].astext=='legacy-json-v1').order_by(m.components.c.code)).mappings()
         result=[]
         for row in rows:
             c=self._component(row)
@@ -151,8 +153,9 @@ class CatalogRepository:
         for row in self.s.execute(query).mappings():
             value=serial(dict(row))
             value['parameters']=serial([dict(p) for p in self.s.execute(select(m.cad_parameter_definitions).where(
-                m.cad_parameter_definitions.c.cad_model_version_id==row['id'])).mappings()])
-            value['assets']=[self.asset_dto(a) for a in self.s.execute(select(m.cad_assets).where(m.cad_assets.c.cad_model_version_id==row['id'])).mappings()]
+                m.cad_parameter_definitions.c.cad_model_version_id==row['id']).order_by(m.cad_parameter_definitions.c.id)).mappings()])
+            value['assets']=[self.asset_dto(a) for a in self.s.execute(select(m.cad_assets).where(m.cad_assets.c.cad_model_version_id==row['id'])
+                                                                   .order_by(m.cad_assets.c.id)).mappings()]
             result.append(value)
         return result
 

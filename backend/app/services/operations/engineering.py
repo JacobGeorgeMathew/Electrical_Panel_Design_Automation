@@ -31,6 +31,7 @@ class EngineeringChoices:
     components: dict[str, dict] = field(default_factory=dict)
     products: frozenset[tuple[str, str]] = frozenset()
     generation: ResolvedDocument | None = None
+    recompute: bool = False
 
 
 def load_choices(session, assets, base, request, archetype_version_id=None):

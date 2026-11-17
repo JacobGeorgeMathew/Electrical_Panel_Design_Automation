@@ -109,14 +109,14 @@ def test_disconnected_ducts_fail_instead_of_routing_through_free_air():
 
 
 def test_hardware_catalog_and_revision_projections_are_persisted(api,postgres_database):
+    from tests.historical_publication import historical_design
     from sqlalchemy import select,func
     from app.persistence import models as m
     from app.persistence.repositories import identifier
     from app.persistence.import_panel_hardware import import_panel_hardware
     p=api.post('/api/projects',json={'name':'Mechanical assembly'}).json()
-    response=api.post('/api/projects/'+p['id']+'/revisions',json={'expected_version':p['lock_version']})
-    assert response.status_code==201,response.text
-    design=response.json();rid=identifier(design['revision_id'])
+    design=historical_design(api,p['id'],expected_version=p['lock_version'])
+    rid=identifier(design['revision_id'])
     assert len(design['pdm']['accessories'])>=10
     assert all(a['component_version_id'] for a in design['pdm']['accessories'])
     with postgres_database.sessions() as s:

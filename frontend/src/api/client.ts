@@ -1,4 +1,5 @@
 import { API_BASE } from './config';
+import { forgetLocalSession, localApiBase, localCredential } from './localSession';
 import type { DocumentSave, DocumentView } from '../types/document';
 import type { PhysicalDesignModel } from '../types/pdm';
 import type { ProjectRecord, ProjectConfiguration, DesignPackage, RevisionSummary, Question, Archetype, CatalogPage, CatalogComponent, Enclosure, Artifact } from '../types/api';
@@ -14,10 +15,21 @@ export async function request<T>(path: string, options: RequestInit = {}, timeou
   if (options.signal?.aborted) controller.abort();
   const timer = setTimeout(abort, timeoutMs);
   try {
-    const response = await fetch(API_BASE.replace(/\/$/, '') + path, { ...options, signal: controller.signal,
-      headers: { ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...options.headers } });
+    const base = localApiBase();
+    const headers = new Headers(options.headers);
+    if (options.body) headers.set('Content-Type', 'application/json');
+    if (!['GET', 'HEAD', 'OPTIONS'].includes((options.method || 'GET').toUpperCase())) {
+      const credential = localCredential(controller.signal);
+      headers.set('X-Panel-Session', typeof credential === 'string' ? credential : await credential);
+    }
+    const response = await fetch(base + path, { ...options, signal: controller.signal,
+      credentials: 'omit', redirect: 'error', headers });
     const data = await response.json().catch(() => null);
     if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        forgetLocalSession();
+        throw new ApiError('Local application authorization failed. Reconnect and retry the action.', response.status, 'LOCAL_AUTHORIZATION_FAILED');
+      }
       const detail = data?.error || data?.detail;
       const errors = detail?.errors || detail?.details?.validation_errors;
       const message = Array.isArray(detail) ? detail.map((e: any) => e.msg).join(' ') :
@@ -87,8 +99,22 @@ export const fetchRevisions = (projectId: string) => request<RevisionSummary[]>(
 export const restoreRevision = (projectId: string, revisionId: string, version: number) =>
   request<DesignPackage>('/projects/' + id(projectId) + '/revisions/' + id(revisionId) + '/restore', json('POST', { expected_version: version }));
 export const propagateChange = (projectId: string, modifiedField: string, newValue: any, version?: number) =>
-  request<{ new_design: DesignPackage; diff_report: any }>('/projects/' + id(projectId) + '/design/propagate-change',
+  request<{ status: 'PREVIEW'; persisted: false; batch: import('../types/operations').OperationPreviewRequest;
+    preview: import('../types/operations').OperationPreview }>('/projects/' + id(projectId) + '/design/propagate-change',
     json('POST', { modified_field: modifiedField, new_value: newValue, expected_version: version }), 90000);
+export const recomputeDesign = (projectId: string, data: import('../types/operations').RecomputeRequest) =>
+  request<import('../types/operations').RecomputeResponse>('/projects/' + id(projectId) + '/design/recompute',
+    json('POST', data), 90000);
+const recomputeJobsPath = (projectId: string) => '/projects/' + id(projectId) + '/design/recompute/jobs';
+export const submitRecomputeJob = (projectId: string, data: import('../types/jobs').RecomputeJobRequest, key: string, signal?: AbortSignal) =>
+  request<import('../types/jobs').RecomputeJob>(recomputeJobsPath(projectId),
+    {...json('POST', data), headers: {'Idempotency-Key': key}, signal});
+export const listRecomputeJobs = (projectId: string, signal?: AbortSignal) =>
+  request<import('../types/jobs').RecomputeJob[]>(recomputeJobsPath(projectId), {signal});
+export const fetchRecomputeJob = (projectId: string, jobId: string, signal?: AbortSignal) =>
+  request<import('../types/jobs').RecomputeJob>(recomputeJobsPath(projectId) + '/' + id(jobId), {signal});
+export const cancelRecomputeJob = (projectId: string, jobId: string, signal?: AbortSignal) =>
+  request<import('../types/jobs').RecomputeJob>(recomputeJobsPath(projectId) + '/' + id(jobId) + '/cancel', {...json('POST', {}), signal});
 export const fetchFreeCADScript = (projectId: string) => request<{ script: string; revision_id: string }>('/projects/' + id(projectId) + '/cad/freecad-script');
 export const validatePlacement = (projectId: string, pdm: PhysicalDesignModel) =>
   request<{ pdm: PhysicalDesignModel; validation_results: any[]; is_valid: boolean }>('/projects/' + id(projectId) + '/design/reroute-placement', json('POST', pdm));

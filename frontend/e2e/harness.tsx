@@ -7,6 +7,8 @@ import {configureTextBuilder} from 'troika-three-text';
 import {Panel3DViewer} from '../src/components/threeD/Panel3DViewer';
 import {Layout2DViewer} from '../src/components/layout/Layout2DViewer';
 import {PropertiesInspector} from '../src/components/workspace/PropertiesInspector';
+import {WorkspaceBottomPanel} from '../src/components/workspace/WorkspaceBottomPanel';
+import {useJobStore} from '../src/stores/jobStore';
 import {useWorkspaceCommands} from '../src/components/workspace/useWorkspaceCommands';
 import {SchematicViewer} from '../src/components/schematic/SchematicViewer';
 import {CatalogBrowser} from '../src/components/catalog/CatalogBrowser';
@@ -64,6 +66,8 @@ const bridge = {
       transforms: project.editorTransforms, undoCount: project.editorUndoStack.length,
       proposal: command.proposal, preview: command.preview, receipt: command.receipt,
       projectError: project.errorMessage,
+      job: useJobStore.getState().jobs[project.projectId],
+      jobError: useJobStore.getState().errors[project.projectId],
       error: command.error && {code: command.error.code, status: command.error.status, message: command.error.message}};
   },
   propose: (proposal: CommandProposal) => useCommandStore.getState().propose(proposal),
@@ -144,6 +148,7 @@ function Harness() {
       {tab==='layout2d'?<Layout2DViewer/>:tab==='schematic'?<SchematicViewer/>:tab==='catalog'?<CatalogBrowser/>:<Panel3DViewer/>}
       <div style={{width:224,flexShrink:0,overflowY:'auto'}}><PropertiesInspector/></div>
     </div>
+    <WorkspaceBottomPanel/>
   </main>;
 }
 

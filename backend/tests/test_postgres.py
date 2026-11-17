@@ -1,4 +1,5 @@
 import copy
+from tests.historical_publication import historical_design
 import hashlib
 import json
 import struct
@@ -46,7 +47,7 @@ def test_workflow_reopens_snapshots_projections_and_artifacts(api,postgres_datab
     assert any(q['id']=='phases' for q in questions)
     p=checked(api.put(f'/api/projects/{key}/answers',json={'expected_version':p['lock_version'],'answers':VALUES}))
     assert checked(api.get(f'/api/projects/{key}/answers'))['answers']['incomer_rating']==250
-    design=checked(api.post(f'/api/projects/{key}/revisions',json={'expected_version':p['lock_version'],'requirements':{}}),201)
+    design=historical_design(api,key,expected_version=p['lock_version'])
     reopened=checked(api.get(f'/api/projects/{key}/design'))
     assert reopened['cem']==design['cem'] and reopened['pdm']==design['pdm']
     rid=design['revision_id']
@@ -72,14 +73,25 @@ def test_workflow_reopens_snapshots_projections_and_artifacts(api,postgres_datab
     invalid=api.patch(f'/api/projects/{key}',json={'expected_version':design['lock_version'],'requirements':{'num_feeders':100}})
     assert invalid.status_code==422
     assert checked(api.get(f'/api/projects/{key}'))['lock_version']==design['lock_version']
-    changed=checked(api.post(f'/api/projects/{key}/design/propagate-change',json={'modified_field':'spare_capacity_pct','new_value':25,'expected_version':design['lock_version']}))
-    assert changed['diff_report']['diffs'][0]['before']=='20'
-    assert changed['diff_report']['diffs'][0]['after']=='25'
-    restored=checked(api.post(f'/api/projects/{key}/revisions/{rid}/restore',json={'expected_version':changed['new_design']['lock_version']}),201)
+    # Legacy revision publication does not populate the working document. Save
+    # its input explicitly before previewing an operation over that document.
+    document=checked(api.get(f'/api/v1/projects/{key}/document'))
+    document=checked(api.put(f'/api/v1/projects/{key}/document',json={
+        'document_id':document['document']['document_id'],
+        'expected_document_sequence':document['document']['document_sequence'],
+        'expected_version':design['lock_version'],
+        'requirements':{'project_id':key,'archetype':'DB','items':design['cem']['requirements'],'is_valid':True}}))
+    version=document['document']['lock_version']
+    changed=checked(api.post(f'/api/projects/{key}/design/propagate-change',json={'modified_field':'spare_capacity_pct','new_value':25,'expected_version':version}))
+    assert changed['status']=='PREVIEW' and changed['persisted'] is False
+    requirement=next(r for r in changed['preview']['candidate']['snapshots']['requirements']['items'] if r['id']=='spare_capacity_pct')
+    assert requirement['value']==25
+    assert checked(api.get(f'/api/projects/{key}'))['lock_version']==version
+    restored=checked(api.post(f'/api/projects/{key}/revisions/{rid}/restore',json={'expected_version':version}),201)
     assert restored['cem']==design['cem'] and restored['pdm']==design['pdm']
-    assert restored['revision_no']==3
+    assert restored['revision_no']==2
     assert checked(api.get(f'/api/projects/{key}'))['requirements']['spare_capacity_pct']==20
-    assert len(checked(api.get(f'/api/projects/{key}/revisions')))==3
+    assert len(checked(api.get(f'/api/projects/{key}/revisions')))==2
     renamed=checked(api.patch(f'/api/projects/{key}',json={'expected_version':restored['lock_version'],'name':'Renamed panel'}))
     assert checked(api.get(f'/api/projects/{key}/design'))['is_stale'] is False
 
@@ -108,14 +120,14 @@ def test_atomic_revision_rollback(api,postgres_database,monkeypatch):
         raise RuntimeError('Injected failure after all projection writes')
     monkeypatch.setattr(project_service,'write_revision',broken)
     with pytest.raises(RuntimeError):
-        api.post('/api/projects/'+p['id']+'/design/generate',json={})
+        historical_design(api,p['id'])
     assert checked(api.get('/api/projects/'+p['id']+'/revisions'))==[]
     assert checked(api.get('/api/projects/'+p['id']))['lock_version']==p['lock_version']
 
 
 def test_background_cad_status_and_missing_assets(api,postgres_database):
     p=create(api)
-    design=checked(api.post('/api/projects/'+p['id']+'/design/generate',json={}))
+    design=historical_design(api,p['id'])
     job=checked(api.post('/api/projects/'+p['id']+'/cad-generation',json={'expected_version':design['lock_version'],'file_format':'GLB'}),202)
     for _ in range(40):
         status=checked(api.get(f'/api/projects/{p["id"]}/cad-generation/{job["id"]}'))
@@ -179,7 +191,7 @@ def test_parameter_units_fixed_values_and_dependency_cycles():
 
 
 def test_readiness_failure_is_safe():
-    from fastapi.testclient import TestClient
+    from tests.local_client import LocalClient as TestClient
     from app.main import create_app
     class BrokenDB:
         def ready(self): return False
@@ -195,7 +207,7 @@ def test_orm_metadata_matches_migrated_schema(postgres_database):
 
 def test_database_connection_errors_do_not_leak_configuration(postgres_database):
     from dataclasses import replace
-    from fastapi.testclient import TestClient
+    from tests.local_client import LocalClient as TestClient
     from app.main import create_app
     from app.persistence.database import Database
     broken=Database(replace(postgres_database.settings,url=postgres_database.settings.url.difference_update_query(['host','port']).set(host='127.0.0.1',port=1),connect_timeout=1))

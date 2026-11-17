@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
+from tests.local_client import LocalClient as TestClient
 from pydantic import ValidationError
 from sqlalchemy import func, select
 
@@ -57,7 +57,7 @@ def test_pure_reproducible_preview(kind):
     assert result.candidate.document.pins == base.document.pins
     assert result.candidate.snapshots.cem == base.snapshots.cem
     if kind == 'MoveComponent':
-        assert result.candidate.snapshots.pdm.components[0].terminals[0]['x'] == 149
+        assert result.candidate.snapshots.pdm.components[0].terminals == base.snapshots.pdm.components[0].terminals
         assert result.candidate.snapshots.pdm.routes == base.snapshots.pdm.routes
     else:
         assert result.candidate.snapshots.requirements.items[0].state == 'PROPOSED'

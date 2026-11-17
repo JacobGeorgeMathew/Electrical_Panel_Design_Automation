@@ -1,28 +1,23 @@
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Set
 
+from app.services.stages.contracts import STAGE_REGISTRY, InvalidationPlan, StageRegistry
+
 
 class ChangePropagationEngine:
-    """Manages design dependency DAG and evaluates affected downstream stages when requirements change."""
+    """Registry-backed invalidation and structural before/after diff reporting."""
 
-    DEPENDENCY_DAG = {
-        "supply_voltage": ["CALCULATIONS", "NETLIST", "SCHEMATIC", "ROUTING", "VALIDATION", "CAD"],
-        "frequency": ["REQUIREMENT_VALIDATION", "CALCULATIONS"],
-        "incomer_rating": ["CALC_001", "CALC_002", "CALC_003", "CALC_004", "CALC_005", "CALC_006", "CALC_007", "COMPONENT_SELECTION", "NETLIST", "PDM_PLACEMENT", "ROUTING", "VALIDATION", "BOM"],
-        "num_feeders": ["CALCULATIONS", "COMPONENT_SELECTION", "ELECTRICAL_GRAPH", "NETLIST", "SCHEMATIC", "ENCLOSURE", "PDM_PLACEMENT", "ROUTING", "VALIDATION", "BOM", "CAD"],
-        "phases": ["CALCULATIONS", "COMPONENT_SELECTION", "ELECTRICAL_GRAPH", "NETLIST", "SCHEMATIC", "ENCLOSURE", "PDM_PLACEMENT", "ROUTING", "VALIDATION", "BOM", "CAD"],
-        "ip_rating": ["ENCLOSURE", "PDM_PLACEMENT", "ROUTING", "VALIDATION", "CAD"],
-        "neutral_required": ["COMPONENT_SELECTION", "ELECTRICAL_GRAPH", "NETLIST", "SCHEMATIC", "PDM_PLACEMENT", "ROUTING", "VALIDATION", "BOM", "CAD"],
-        "spare_capacity_pct": ["CALCULATIONS"],
-    }
+    def __init__(self, registry: StageRegistry = STAGE_REGISTRY):
+        self.registry = registry
+
+    def plan_changes(self, changed_paths: List[str]) -> InvalidationPlan:
+        return self.registry.invalidate(changed_paths)
 
     def identify_dirty_nodes(self, modified_field: str) -> Set[str]:
-        dirty = set()
-        dirty.add(modified_field)
-        downstream = self.DEPENDENCY_DAG.get(modified_field, [])
-        for node in downstream:
-            dirty.add(node)
-        return dirty
+        # Preserve the legacy requirement-field entry point, but return only
+        # registered stage IDs, never field names, CALC IDs or uppercase aliases.
+        path = modified_field if '.' in modified_field else f'requirements.items.{modified_field}.value'
+        return set(self.plan_changes([path]).stages)
 
     def compute_diff(self, old_cem: Dict[str, Any], new_cem: Dict[str, Any], old_pdm: Dict[str, Any],
                      new_pdm: Dict[str, Any], modified_field: str = "",
@@ -40,6 +35,7 @@ class ChangePropagationEngine:
 
         old_values = old_values or {}
         new_values = new_values or {}
+        affected = self.identify_dirty_nodes(modified_field) if modified_field else set()
         diffs = [
             {
                 "property": f"Requirement: {modified_field}",
@@ -82,6 +78,6 @@ class ChangePropagationEngine:
         return {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "modified_field": modified_field,
-            "affected_stages": sorted(self.identify_dirty_nodes(modified_field)) if modified_field else [],
+            "affected_stages": [stage for stage in self.registry.ordered_ids() if stage in affected],
             "diffs": diffs
         }

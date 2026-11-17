@@ -296,10 +296,11 @@ python -m pip install -r requirements.txt
 # Configure DATABASE_URL or PANEL_DATABASE_URL locally before these commands.
 python -m app.persistence.manage initialize
 python -m app.persistence.manage import-legacy
+$env:PANEL_LOCAL_MODE='development'
 python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8731
 ```
 
-For macOS/Linux, activate with `source .venv/bin/activate` instead. Backend packages are pinned in requirements.txt. Keep this terminal running. Check `/health` for liveness and `/ready` for database/migration readiness; interactive API docs are at `http://127.0.0.1:8731/docs`. Connection values must stay outside source control.
+For macOS/Linux, activate with `source .venv/bin/activate` instead and run the backend with `PANEL_LOCAL_MODE=development .venv/bin/python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8731`. Backend packages are pinned in requirements.txt. Keep this terminal running. Check `/health` for liveness and `/ready` for database/migration readiness; interactive API docs are at `http://127.0.0.1:8731/docs`. Connection values must stay outside source control. See [local session authorization](docs/architecture/local-application-trust.md) for bootstrap, rotation and desktop behavior; development mode keeps mutation authorization enabled.
 
 ### Install and start the frontend
 

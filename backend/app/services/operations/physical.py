@@ -61,17 +61,14 @@ def move_component(candidate, op):
     component = physical_target(candidate, op)
     before = component.position.model_dump()
     after = op.parameters.position_mm.model_dump()
-    # Terminal dictionaries contain absolute enclosure coordinates; local solid
-    # geometry and catalog dimensions remain unchanged.
+    # Terminal dictionaries use catalog-local coordinates. Routing applies the
+    # component transform; translating these here would apply movement twice.
     terminals = [dict(terminal) for terminal in component.terminals]
     for terminal in terminals:
         for axis in ('x', 'y', 'z'):
             value = terminal.get(axis)
             if type(value) not in (int, float) or not isfinite(value):
                 reject(op, 'OPERATION_GEOMETRY', 'Physical terminal coordinates are required for movement.')
-            terminal[axis] = value + (after[axis] - before[axis])
-            if not isfinite(terminal[axis]):
-                reject(op, 'OPERATION_GEOMETRY', 'Moved terminal coordinates must remain finite.')
     # Validate the full candidate placement before installing even a single field.
     placement = candidate.snapshots.pdm.model_copy(deep=True)
     moved = next(c for c in placement.components if c.id == component.id)
@@ -82,7 +79,7 @@ def move_component(candidate, op):
         return []
     component.position = moved.position
     component.terminals = terminals
-    return ['position_mm', 'terminals_mm'] if terminals else ['position_mm']
+    return ['position_mm']
 
 
 def rotate_component(candidate, op):

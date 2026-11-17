@@ -5,6 +5,19 @@ import type {OperationPreviewRequest} from '../src/types/operations';
 import type {} from './harness';
 
 export const test = base.extend<{projectId: string}>({
+  request: async ({playwright, baseURL}, use) => {
+    const auth = await playwright.request.newContext({baseURL});
+    try {
+      const response = await auth.post('/api/local-session', {headers: {
+        Origin: baseURL!, 'X-Panel-Bootstrap': '1',
+      }});
+      expect(response.ok()).toBeTruthy();
+      const authorized = await playwright.request.newContext({baseURL, extraHTTPHeaders: {
+        Origin: baseURL!, 'X-Panel-Session': (await response.json()).token,
+      }});
+      try {await use(authorized);} finally {await authorized.dispose();}
+    } finally {await auth.dispose();}
+  },
   page: async ({page}, use) => {
     const errors: string[] = [];
     page.on('pageerror', error => errors.push(error.message));

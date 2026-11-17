@@ -245,7 +245,7 @@ export const Questionnaire: React.FC = () => {
                 <p className="mt-1 text-slate-400">You can choose any supported option above.</p>
               </div>}
               <div className="flex justify-end pt-1">
-                <button title={workingDocument?'Single-field automatic publication is unavailable for working documents. Save inputs, then review a generation proposal through the API. Acceptance does not publish.':undefined} onClick={() => handleApplyChange(q.id, val)} disabled={busy || !!workingDocument || !cem || invalidChoice}
+                <button title={workingDocument?'Single-field automatic publication is unavailable for working documents. Save inputs, then use Recompute and review its proposal in the workspace. Acceptance does not publish.':undefined} onClick={() => handleApplyChange(q.id, val)} disabled={busy || !!workingDocument || !cem || invalidChoice}
                   className="px-3 py-1.5 bg-blue-600/80 hover:bg-blue-500 disabled:opacity-40 text-white text-[11px] font-semibold rounded-lg">
                   {workingDocument?'Automatic change unavailable':'Generate & publish change (legacy)'}
                 </button>

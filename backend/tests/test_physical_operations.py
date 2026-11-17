@@ -78,7 +78,7 @@ def test_move_preserves_identity_and_server_geometry_without_computation(monkeyp
     old, moved = before.snapshots.pdm.components[0], candidate.snapshots.pdm.components[0]
     assert base == before
     assert moved.position.model_dump() == dict(x=140.125, y=210.5, z=45.25)
-    assert moved.terminals == [dict(id='OUT', x=149.125, y=290.5, z=80.25)]
+    assert moved.terminals == old.terminals
     assert moved.model_dump(exclude={'position', 'terminals'}) == old.model_dump(exclude={'position', 'terminals'})
     assert candidate.snapshots.cem == before.snapshots.cem
     assert candidate.snapshots.schematic == before.snapshots.schematic

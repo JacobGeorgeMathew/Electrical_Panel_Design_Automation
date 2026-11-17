@@ -3,6 +3,8 @@ import {useWorkspaceStore,type WorkspaceTool} from '../../stores/workspaceStore'
 import {useDocumentStore} from '../../stores/documentStore';
 import {useCommandStore} from '../../stores/commandStore';
 import {assetUrl,exportProject,fetchFreeCADScript} from '../../api/client';
+import {useJobStore, jobActive} from '../../stores/jobStore';
+import {recomputeAvailability} from '../../stores/documentStore';
 
 export function downloadFile(data:Blob,name:string){
   const url=URL.createObjectURL(data),anchor=document.createElement('a');
@@ -12,6 +14,8 @@ export function useWorkspaceCommands(openDialog:(dialog:'project'|'help')=>void)
   const state=useProjectStore(),ui=useWorkspaceStore();
   const docState=useDocumentStore();
   const command=useCommandStore();
+  const jobs=useJobStore();
+  const recompute=recomputeAvailability(state);
   const busy=command.pending||docState.readOnly||state.isGenerating||state.isSaving||state.isLoadingProject||!!state.pendingRecovery;
   const tool=(value:WorkspaceTool)=>{
     ui.setTool(value);state.setEditorMode(value==='measure'?'select':value);
@@ -21,6 +25,9 @@ export function useWorkspaceCommands(openDialog:(dialog:'project'|'help')=>void)
   const run=async(action:()=>Promise<unknown>)=>{try{await action();}catch(error){reportError(error);}};
   const preview=state.artifacts.find(a=>a.file_format==='GLB'&&a.status==='READY');
   const commands={
+    recompute:{label:'Recompute saved document',explanation:recompute.reason,run:()=>{ui.setBottomTab('output');void jobs.submit();},
+      disabled:busy||!!command.proposal||recompute.unavailable||!!jobs.pending[state.projectId]||jobActive(jobs.jobs[state.projectId])||
+        (!!jobs.tracking[state.projectId]&&!jobs.jobs[state.projectId])},
     previewCommand:{label:'Preview proposal',run:()=>void command.previewProposal(),disabled:busy||command.proposal?.kind!=='operations'},
     commitCommand:{label:'Apply proposal',run:()=>void command.commitProposal(),disabled:busy||!command.proposal},
     cancelCommand:{label:'Cancel command request',run:command.cancel,disabled:!command.pending},

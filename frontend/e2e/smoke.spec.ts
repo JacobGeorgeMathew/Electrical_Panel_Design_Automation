@@ -48,7 +48,7 @@ test('viewport renders WebGL, picks a component, commits a gizmo drag and resize
   expect(await originalCanvas!.evaluate(element => element === document.querySelector('canvas'))).toBe(true);
 });
 
-test('command client previews without writes, commits, exact-retries and saves/reopens', async ({page, projectId}) => {
+test('command client previews without writes, commits, exact-retries and saves/reopens', async ({page, projectId, request: authorizedRequest}) => {
   await openHarness(page, projectId);
   const before = await readDocument(page);
   const request = moveRequest(before);
@@ -69,7 +69,7 @@ test('command client previews without writes, commits, exact-retries and saves/r
   expect(committed.snapshots.cem).toEqual(before.snapshots.cem);
   expect(committed.snapshots.pdm!.routes).toEqual(before.snapshots.pdm!.routes);
   // Durable exact retry is tested via HTTP after the client consumed its proposal.
-  const retry = await page.request.post(`/api/v1/projects/${projectId}/document/operations/commit`, {
+  const retry = await authorizedRequest.post(`/api/v1/projects/${projectId}/document/operations/commit`, {
     data: request, headers: {'Idempotency-Key': proposal.key}});
   expect(retry.status()).toBe(200);
   expect(await retry.json()).toEqual(await page.evaluate(() => window.panelE2E.state().receipt));

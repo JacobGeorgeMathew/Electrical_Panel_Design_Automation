@@ -20,6 +20,7 @@ from sqlalchemy.engine import URL
 import uvicorn
 
 from app.main import create_app
+from app.security.local_session import LocalSession
 from app.persistence.config import Settings
 from app.persistence.database import Database
 from app.persistence.import_legacy import import_legacy
@@ -65,7 +66,14 @@ def main():
             with db.engine.begin() as conn:
                 conn.exec_driver_sql(sql)
             import_legacy(db)
-            app = create_app(db)
+            origin = os.environ['PANEL_E2E_ORIGIN']
+            if not re.fullmatch(r'http://127\.0\.0\.1:[0-9]{1,5}', origin):
+                raise ValueError('Invalid private browser harness origin.')
+            session = LocalSession(mode='development')
+            # Only this private harness accepts its exact owned ephemeral origin.
+            session.origins = frozenset({origin})
+            os.environ['PANEL_DATA_DIR'] = storage
+            app = create_app(db, local_session=session)
 
             @app.post('/__e2e__/projects')
             def seed(electrical: bool = False):

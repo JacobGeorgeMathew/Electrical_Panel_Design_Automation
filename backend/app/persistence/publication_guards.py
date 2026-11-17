@@ -12,10 +12,13 @@ from app.persistence.repositories import PersistenceError
 # Every other mapped table is append-only through this engine, including catalog
 # children, projections and referenced working-document snapshots.
 MUTABLE_TABLES = frozenset({'projects', 'design_documents', 'project_requirements',
-                            'requirement_sources', 'generated_artifacts'})
+                            'requirement_sources', 'generated_artifacts', 'document_stage_states', 'jobs'})
 IMMUTABLE_TABLES = frozenset(m.metadata.tables) - MUTABLE_TABLES
 JOB_FIELDS = frozenset({'storage_backend', 'storage_key', 'sha256', 'byte_size',
                        'generation_status', 'completed_at', 'error'})
+EXECUTION_FIELDS = frozenset({'state', 'attempts', 'lease_owner', 'lease_token',
+                             'lease_expires_at', 'result', 'error', 'updated_at',
+                             'started_at', 'completed_at'})
 
 
 def immutable():
@@ -37,7 +40,12 @@ def guard_publications(conn, statement, multiparams, params, execution_options):
     if table.name in IMMUTABLE_TABLES or (
             isinstance(statement, Delete) and table.name not in {'project_requirements', 'requirement_sources'}):
         raise immutable()
-    if table.name in {'projects', 'design_documents'}:
+    if table.name in {'projects', 'design_documents', 'document_stage_states'}:
+        return
+    if table.name == 'jobs':
+        keys = {getattr(key, 'name', key) for key in (statement._values or {})}
+        if not keys or not keys <= EXECUTION_FIELDS:
+            raise immutable()
         return
     if table.name == 'generated_artifacts':
         keys = {getattr(key, 'name', key) for key in (statement._values or {})}

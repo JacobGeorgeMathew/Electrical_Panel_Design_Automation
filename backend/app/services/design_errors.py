@@ -1,4 +1,5 @@
 from typing import Any, Dict, List, Optional
+from app.observability import public, correlation, safe_code
 
 
 class DesignError(Exception):
@@ -13,5 +14,6 @@ class DesignError(Exception):
         self.errors = errors or []
 
     def as_dict(self) -> Dict[str, Any]:
-        return {"error": {"code": self.code, "message": self.message,
-                           "details": self.details, "errors": self.errors}}
+        return {"error": {"code": safe_code(self.code), "message": public(self.message),
+                           "details": public(self.details), "errors": public(self.errors),
+                           "correlation": correlation()}}

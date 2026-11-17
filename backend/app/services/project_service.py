@@ -103,13 +103,13 @@ class ProjectService:
                 raise PersistenceError('INVALID_CONFIGURATION','Configured enclosure cannot contain its mounting plate.')
         return rows,selected
 
-    def _inputs(self,key):
+    def _inputs(self,key,*,resolve_capabilities=True):
         # All DB reads end here, before optimization or geometry generation begins.
         with self.db.sessions() as s:
             project=ProjectRepository(s).get(key)
             project['_source_document']=DocumentRepository(s).load(ProjectRepository(s).row(key)).model_dump(mode='json')
             catalog=CatalogRepository(s,self.assets)
-            template=catalog.template(project['archetype'],project['archetype_version_id'])
+            template=catalog.template(project['archetype'],project['archetype_version_id'],resolve_capabilities=resolve_capabilities)
             rows=catalog.engine_catalog()
             enclosures=catalog.enclosures()
             templates=catalog.electrical_templates(template['archetype_version_id'])
@@ -136,6 +136,11 @@ class ProjectService:
         return project,template,rows,enclosures,component_models,templates,rules,str(rs),layout,hardware
 
     def generate(self,key,overrides=None,expected_version=None,configuration=None,*,propose=False):
+        if not propose:
+            with self.db.sessions() as session:
+                ProjectRepository(session).row(key)
+            raise PersistenceError('GENERATION_PROPOSAL_REQUIRED',
+                'Use Recompute, explicit acceptance and fenced Publish. Legacy generation cannot publish.',409)
         project,template,rows,enclosures,models,templates,rules,rsv,layout,hardware=self._inputs(key)
         source_document=project['_source_document']['document']
         if not propose and (source_document['document_sequence'] > 0
@@ -241,15 +246,8 @@ class ProjectService:
         return self.load_revision(key,saved['revision_id'])
 
     def propagate(self,key,field,value,expected_version=None):
-        with self.db.sessions() as s:
-            project=ProjectRepository(s).get(key)
-        old=self.load_revision(key)
-        if field not in {q['id'] for q in self._inputs(key)[1]['questions']}:
-            raise DesignError('INVALID_CHANGE','Unknown DB requirement.')
-        version=project['lock_version'] if expected_version is None else expected_version
-        new=self.generate(key,{field:value},version)
-        return {'new_design':new,'diff_report':ChangePropagationEngine().compute_diff(old['cem'],new['cem'],old['pdm'],new['pdm'],field,
-            old_values=project['requirements'],new_values={**project['requirements'],field:value})}
+        from app.services.recompute import preview_change
+        return preview_change(self,key,field,value,expected_version)
 
     def list_artifacts(self,key):
         with self.db.sessions() as s:
@@ -260,30 +258,34 @@ class ProjectService:
             return [catalog.asset_dto(a,True) for a in rows]
 
     def queue_artifact(self,key,file_format,expected_version):
+        file_format='PY' if file_format=='FREECAD_SCRIPT' else file_format
         result=self.load_revision(key)
         if result['manifest'].get('generator')!={'name':'panelstudio-primitives','version':'3'} or result['manifest'].get('engine_version')!=ENGINE_VERSION:
             raise PersistenceError('GENERATOR_VERSION_UNAVAILABLE','This saved revision requires a different CAD generator version.',409)
         if result['is_stale'] or result['lock_version']!=expected_version:
             raise PersistenceError('REVISION_CONFLICT','Generate a revision from the current requirements before exporting.',409)
         if self.executor is None: raise PersistenceError('GENERATOR_UNAVAILABLE','CAD worker is unavailable.',503)
-        job=uuid4()
+        if file_format not in {'GLB','PY'}:
+            raise PersistenceError('INVALID_JOB_INPUT','Unsupported export format.')
+        from app.jobs.runner import KIND, signature
+        from app.persistence.jobs import JobRepository
+        from app.persistence.documents import document_hash
         with self.db.sessions.begin() as s:
-            ProjectRepository(s).check_version(key,expected_version)
-            s.execute(insert(m.generated_artifacts).values(id=job,project_revision_id=identifier(result['revision_id']),artifact_type='CAD_PREVIEW' if file_format=='GLB' else 'FREECAD_SCRIPT',
+            project=ProjectRepository(s).check_version(key,expected_version)
+            source=DocumentRepository(s).load(project)
+            if str(project['current_revision_id'])!=result['revision_id']:
+                raise PersistenceError('REVISION_CONFLICT','Current revision changed.',409)
+            inputs=dict(cad=result['cad'],pdm=result['pdm'],format=file_format,
+                document_sha256=document_hash(source.document),lock_version=expected_version)
+            intent=dict(format=file_format,generator_version='3' if file_format=='GLB' else ENGINE_VERSION)
+            digest=signature(inputs,intent)
+            job=JobRepository(s).enqueue(execution_key='cad:'+str(project['id'])+':'+digest,
+                project_id=project['id'],document_id=source.document.document_id,
+                base_sequence=source.document.document_sequence,kind=KIND,
+                input_signature=digest,inputs=inputs,artifact_intent=intent,revision_id=result['revision_id'])
+            from sqlalchemy.dialects.postgresql import insert as pg_insert
+            s.execute(pg_insert(m.generated_artifacts).values(id=job['id'],project_revision_id=identifier(result['revision_id']),artifact_type='CAD_PREVIEW' if file_format=='GLB' else 'FREECAD_SCRIPT',
                 file_format='GLB' if file_format=='GLB' else 'PY',generator_name='panelstudio-primitives' if file_format=='GLB' else 'existing-freecad-script',generator_version='3' if file_format=='GLB' else ENGINE_VERSION,
-                source_model_kind='PDM',source_model_sha256=content_hash(result['pdm']),generation_status='PENDING'))
-        self.executor.submit(self._artifact_worker,key,result['revision_id'],str(job),file_format)
-        return {'id':str(job),'status':'PENDING','project_revision_id':result['revision_id']}
-
-    def _artifact_worker(self,key,rid,job,file_format):
-        try:
-            result=self.load_revision(key,rid)
-            data=primitive_glb(result['cad']['primitives'],generator_version='3') if file_format=='GLB' else CADEngine().export_freecad_script(PhysicalDesignModel(**result['pdm'])).encode()
-            file=self.assets.put(data,'glb' if file_format=='GLB' else 'py')
-            with self.db.sessions.begin() as s:
-                s.execute(update(m.generated_artifacts).where(m.generated_artifacts.c.id==identifier(job),m.generated_artifacts.c.generation_status=='PENDING')
-                    .values(**file,generation_status='READY',completed_at=datetime.now(timezone.utc)))
-        except Exception:
-            with self.db.sessions.begin() as s:
-                s.execute(update(m.generated_artifacts).where(m.generated_artifacts.c.id==identifier(job),m.generated_artifacts.c.generation_status=='PENDING').values(
-                    generation_status='FAILED',error={'code':'GENERATION_FAILED','message':'Generation failed; regenerate this saved revision.'},completed_at=datetime.now(timezone.utc)))
+                source_model_kind='PDM',source_model_sha256=content_hash(result['pdm']),generation_status='PENDING').on_conflict_do_nothing(index_elements=[m.generated_artifacts.c.id]))
+        status={'QUEUED':'PENDING','RUNNING':'PENDING','SUCCEEDED':'READY'}.get(job['state'],'FAILED')
+        return {'id':str(job['id']),'status':status,'project_revision_id':result['revision_id']}

@@ -1,4 +1,5 @@
 """Historical reads are independent of installed generators and model defaults."""
+from tests.historical_publication import seed_historical_revision
 from copy import deepcopy
 
 import pytest
@@ -36,8 +37,8 @@ def disable_generators(monkeypatch):
 def test_historical_reads_use_exact_snapshots_and_original_artifacts(api, postgres_database, monkeypatch):
     service = ProjectService(postgres_database)
     project = create(api)
-    first = service.generate(project['id'], {'num_feeders': 4}, project['lock_version'])
-    second = service.generate(project['id'], {'num_feeders': 5}, first['lock_version'])
+    first = seed_historical_revision(service, project['id'], {'num_feeders': 4}, project['lock_version'])
+    second = seed_historical_revision(service, project['id'], {'num_feeders': 5}, first['lock_version'])
     assert not any(second[k] for k in ('is_non_current', 'is_input_stale', 'is_version_incompatible'))
     root = '/api/projects/'+project['id']
     originals = {a['id']: api.get(a['url']).content for a in first['artifacts']}
@@ -89,7 +90,7 @@ def make_legacy(db, rid):
 def test_legacy_reads_never_invent_outputs_and_conversion_is_explicit(api, postgres_database, monkeypatch):
     service = ProjectService(postgres_database)
     project = create(api)
-    first = service.generate(project['id'], {'num_feeders': 4}, project['lock_version'])
+    first = seed_historical_revision(service, project['id'], {'num_feeders': 4}, project['lock_version'])
     make_legacy(postgres_database, first['revision_id'])
     root = '/api/projects/'+project['id']
     with monkeypatch.context() as context:
@@ -119,7 +120,7 @@ def test_legacy_reads_never_invent_outputs_and_conversion_is_explicit(api, postg
 def test_missing_anchored_manifest_is_corruption(api, postgres_database):
     service = ProjectService(postgres_database)
     project = create(api)
-    design = service.generate(project['id'], {'num_feeders': 4}, project['lock_version'])
+    design = seed_historical_revision(service, project['id'], {'num_feeders': 4}, project['lock_version'])
     with privileged_connection(postgres_database) as session:
         session.execute(delete(m.revision_output_snapshots).where(
             m.revision_output_snapshots.c.project_revision_id == identifier(design['revision_id'])))

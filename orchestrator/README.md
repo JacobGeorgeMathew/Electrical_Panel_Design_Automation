@@ -181,6 +181,7 @@ After Codex exits, the entire report is displayed, including acceptance results,
 9. **Record human gate approval**: supply a named authorized approver and signed-decision evidence.
 10. **Confirm human input**: record required external input without storing secrets.
 11. **Mark partial task completed (human override)**: review the latest partial report and outstanding checks, supply your name, evidence and rationale, then explicitly accept responsibility for completing the task with those exceptions. Unlocks dependent tasks.
+12. **Mark any task completed (bypass all acceptance checks)**: select any task ID (blank selects the current task), optionally enter a developer name/note, and confirm. Works from every status, including tasks with no attempts. No report, successful exit, passing checks, completed dependencies, human input or gate approval is required.
 
 Ordinary acceptance (option 1) requires exit code zero, a complete unchanged `COMPLETED` report, PASS evidence for every required criterion/profile, unchanged verified prerequisites, and explicit human acceptance. Human-gate tasks additionally require approval for that attempt from a named approver. Required human inputs must be recorded.
 
@@ -197,6 +198,51 @@ Python saves `status: VERIFIED` so the existing scheduler treats the task as com
 The override requires a valid unchanged latest partial report with exit code zero and current lifecycle context. It does not accept missing/malformed reports, failed processes, stale or incomplete prerequisites, missing explicit human-gate approval or missing required human input. Use options 9/10 for the latter approvals/input; retry/recover when execution evidence is invalid. Tasks already skipped/blocked/paused must be retried to produce a current partial attempt before using option 11. The override records your choice to accept outstanding work; it does not convert a failed test into a passing test. Reopening the task preserves the override decision and invalidates dependent acceptances as usual.
 
 The software records your assertion of authority and review; it cannot verify professional qualifications, physical measurements or whether evidence is truthful. Those remain human responsibilities.
+
+### Unrestricted manual completion
+
+Use option **12** from the decision menu. To open that menu for any task, including
+one that has never run:
+
+```sh
+python -m orchestrator.main review TASK-ID
+```
+
+Or go directly to the same manual-completion action:
+
+```sh
+python -m orchestrator.main complete TASK-ID
+```
+
+Replace `TASK-ID` with an actual lifecycle task ID. Name and note are optional;
+press Enter to use defaults, then confirm completion. The direct command and
+review menu do not require a configured Codex model or launch a Codex process.
+
+This action deliberately bypasses all task acceptance checks: status/transition
+restrictions, dependencies and prerequisite hashes, required approvals/inputs,
+report existence/format/hash, report assessment, test/profile results, process
+exit code and the previous attempt's lifecycle fingerprint. Forward ordering
+conflicts do not block this manual action. It can mark an already accepted task
+again and retains the previous acceptance in its decision history.
+
+Completion is stored as `VERIFIED` for compatibility with dependency scheduling,
+with `mode: MANUAL_COMPLETION`, `human_assessment: COMPLETED`,
+`checks_bypassed: true`, and `evidence_reviewed: false`. The human decision and
+`TASK_COMPLETED_MANUALLY` event record the prior status and optional note. Status
+output labels these completions explicitly. Original attempts/reports/results
+are preserved; no attempts or passing test results are invented. A deferred or
+manually blocked target is cleared, and its dependent tasks can proceed when
+their other prerequisites and declared execution order allow it. Its own
+unfinished prerequisites remain unfinished.
+
+For an interrupted `RESERVED`/`IN_PROGRESS` target, manual completion clears its
+current-task pointer while preserving the attempt metadata. It does not terminate
+any running external Codex process. Normal file locking, valid state/history and
+lifecycle loading, and atomic writes still protect persistence; malformed files,
+a pending state transaction or a lifecycle/state mismatch must be repaired or
+reconciled through the existing recovery workflow. These are storage-integrity
+requirements, not acceptance checks. Option 1 and option 11 retain their existing
+verification rules; option 12 is the unrestricted manual decision.
 
 ## Reports, retries and reopening
 

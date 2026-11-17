@@ -1,5 +1,6 @@
 """Independent P1 lifecycle acceptance across working and published state."""
 from copy import deepcopy
+from tests.historical_publication import historical_design
 from hashlib import sha256
 
 from app.persistence.repositories import identifier
@@ -20,8 +21,7 @@ def test_document_lifecycle_keeps_current_and_historical_outputs_frozen(
     assert project['current_revision_id'] is None
     assert ok(api.get(root + '/revisions')) == []
 
-    first = ok(api.post(root + '/revisions', json={
-        'expected_version': project['lock_version'], 'requirements': {'num_feeders': 4}}), 201)
+    first = historical_design(api, project['id'], {'num_feeders': 4}, project['lock_version'])
     base = ok(api.get(document_path))
     draft = {'schema_version': 2,
              'baseDocument': {k: base['document'][k] for k in
@@ -91,8 +91,7 @@ def test_untouched_legacy_publications_keep_distinct_history_frozen(
     root = '/api/projects/' + project['id']
     document_path = '/api/v1/projects/' + project['id'] + '/document'
     initial = ok(api.get(document_path))
-    first = ok(api.post(root + '/revisions', json={
-        'expected_version': project['lock_version'], 'requirements': {'num_feeders': 4}}), 201)
+    first = historical_design(api, project['id'], {'num_feeders': 4}, project['lock_version'])
     source = ok(api.get(document_path))
     assert source['document']['document_sequence'] == 0
     assert source['snapshots']['cem'] is None
@@ -100,9 +99,7 @@ def test_untouched_legacy_publications_keep_distinct_history_frozen(
     # Publish with a changed installed engine pin, then make every computation
     # entry point unavailable before reading either publication.
     monkeypatch.setattr(project_service, 'ENGINE_VERSION', 'p1-acceptance-engine-change')
-    second = ok(api.post(root + '/revisions', json={
-        'expected_version': first['lock_version'],
-        'requirements': {'num_feeders': 5}}), 201)
+    second = historical_design(api, project['id'], {'num_feeders': 5}, first['lock_version'])
     assert second['manifest']['engine_version'] != first['manifest']['engine_version']
     assert second['revision_id'] != first['revision_id']
     assert second['revision_no'] == first['revision_no'] + 1

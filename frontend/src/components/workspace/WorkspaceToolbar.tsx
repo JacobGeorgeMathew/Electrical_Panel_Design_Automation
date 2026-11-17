@@ -12,7 +12,7 @@ export function WorkspaceToolbar({commands}:{commands:WorkspaceCommands}){
   };
   return <div role="toolbar" aria-label="Design tools" className="workspace-toolbar">
     <div className="toolbar-group">{button('projects',FolderOpen)}{button('save',Save)}{button('undo',Undo2)}{button('redo',Redo2)}</div>
-    <div className="toolbar-group">{button('generate',Play,isGenerating?'Generating & publishing…':commands.generate.label)}</div>
+    <div className="toolbar-group">{button('recompute',Play,'Recompute')}{button('generate',Play,isGenerating?'Generating & publishing…':commands.generate.label)}</div>
     <div className="toolbar-group">{button('select',MousePointer2,'Select',tool==='select')}{button('move',Move3D,'Move',tool==='translate')}{button('rotate',Rotate3D,undefined,tool==='rotate')}{button('catalog',PackagePlus,'Components')}{button('measure',Ruler,undefined,tool==='measure')}</div>
     <div className="toolbar-group">{button('wires',Layers,undefined,wireVisibility)}{button('explode',Box,undefined,explodedView)}{button('snap',Scan,undefined,editorSnapEnabled)}<label className="toolbar-grid">Grid<input aria-label="Workspace snap grid" type="number" value={editorGridMm} min={1} max={100} onChange={e=>setEditorGridMm(Number(e.target.value))}/>mm</label></div>
     <div className="toolbar-group">{button('validate',ShieldCheck,'Validate')}</div>

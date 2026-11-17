@@ -1,4 +1,5 @@
 """Mutation guards, hostile persisted content and non-destructive audits."""
+from tests.historical_publication import seed_historical_revision
 from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
 import json
@@ -196,7 +197,7 @@ def test_runtime_guards_preserve_publications_and_allow_tombstones(api, postgres
     db = postgres_database
     project = create(api)
     service = ProjectService(db)
-    design = service.generate(project['id'], {'num_feeders': 4}, project['lock_version'])
+    design = seed_historical_revision(service, project['id'], {'num_feeders': 4}, project['lock_version'])
     rid = identifier(design['revision_id'])
     with db.sessions() as session:
         requirement = session.scalar(select(m.project_requirements.c.id).where(
@@ -215,7 +216,7 @@ def test_runtime_guards_preserve_publications_and_allow_tombstones(api, postgres
         assert caught.value.code == 'IMMUTABLE_PUBLICATION'
     assert service.load_revision(project['id'])['snapshot_sha256'] == design['snapshot_sha256']
     # Existing save/recompute lifecycle remains supported after guard rejections.
-    second = service.generate(project['id'], {'num_feeders': 5}, design['lock_version'])
+    second = seed_historical_revision(service, project['id'], {'num_feeders': 5}, design['lock_version'])
     response = api.request('DELETE', '/api/projects/'+project['id'], json={'expected_version': second['lock_version']})
     assert response.status_code == 204, response.text
     with db.sessions() as session:
@@ -227,7 +228,7 @@ def test_runtime_guards_preserve_publications_and_allow_tombstones(api, postgres
 def test_jobs_can_finish_once_but_cannot_change_ready_content(api, postgres_database):
     db = postgres_database
     project = create(api)
-    design = ProjectService(db).generate(project['id'], {'num_feeders': 4}, project['lock_version'])
+    design = seed_historical_revision(ProjectService(db), project['id'], {'num_feeders': 4}, project['lock_version'])
     job = uuid4()
     with db.sessions.begin() as session:
         session.execute(insert(m.generated_artifacts).values(id=job,
@@ -271,7 +272,7 @@ def test_read_and_audit_reject_tampering_without_deleting(api, postgres_database
     db = postgres_database
     project = create(api)
     service = ProjectService(db)
-    design = service.generate(project['id'], {'num_feeders': 4}, project['lock_version'])
+    design = seed_historical_revision(service, project['id'], {'num_feeders': 4}, project['lock_version'])
     rid = identifier(design['revision_id'])
     baseline = audit_revisions(db)
     with db.sessions() as session:
@@ -323,6 +324,8 @@ def test_read_and_audit_reject_tampering_without_deleting(api, postgres_database
 
 @pytest.mark.parametrize('tamper', ['schema', 'models'])
 def test_audits_check_document_compatibility_and_only_read(api, postgres_database, tamper):
+    # Observe only audit SQL, not the independent durable queue consumer.
+    api.app.state.cad_executor.shutdown()
     db = postgres_database
     project = create(api)
     baseline = audit_revisions(db)

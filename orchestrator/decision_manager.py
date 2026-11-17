@@ -137,6 +137,35 @@ class DecisionManager:
         self.tracker.refresh()
         self.tracker.commit("TASK_REOPENED" if reopen else "TASK_RETRIED", tid, {"reason": reason})
 
+    def complete_manually(self, tid, reviewer="", reason=""):
+        """Explicit human completion from any status, without acceptance gates."""
+        task = self.tracker.lifecycle.tasks[tid]
+        record = self.tracker.state["tasks"][tid]
+        previous_status = record["status"]
+        previous_acceptance = record["acceptance"]
+        attempt = record["attempts"][-1] if record["attempts"] else {}
+        acceptance = {
+            "timestamp": now(), "reviewer": reviewer.strip() or "Human developer",
+            "evidence": reason.strip() or "Manually marked completed by the developer",
+            "evidence_reviewed": False, "definition_hash": digest(task),
+            "attempt": record["attempt_count"], "report_sha256": attempt.get("report_sha256"),
+            "mode": "MANUAL_COMPLETION", "human_assessment": "COMPLETED",
+            "previous_status": previous_status, "checks_bypassed": True,
+        }
+        self.record(tid, "MANUAL_COMPLETION", acceptance["evidence"], acceptance=acceptance,
+                    previous_acceptance=previous_acceptance,
+                    previous_manual_blocker=record["manual_blocker"], previously_deferred=record["deferred"])
+        record["acceptance"] = acceptance
+        # Deliberately bypass ordinary transition/acceptance rules. Attempts and
+        # their original outcomes remain untouched, including interrupted ones.
+        record["status"] = "VERIFIED"
+        record["manual_blocker"] = None
+        record["deferred"] = False
+        if self.tracker.state["current_task_id"] == tid:
+            self.tracker.state["current_task_id"] = None
+        self.tracker.refresh()
+        self.tracker.commit("TASK_COMPLETED_MANUALLY", tid, acceptance)
+
     def mark(self, tid, status, reason):
         if status not in {"BLOCKED", "SKIPPED", "PAUSED"}:
             raise OrchestratorError("Unsupported human status action.")

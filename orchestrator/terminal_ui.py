@@ -35,6 +35,10 @@ def show_status(scheduler):
                  if record["status"] == "VERIFIED" and (record.get("acceptance") or {}).get("mode") == "HUMAN_OVERRIDE"]
     if overrides:
         display("Completed by human override (original evidence retained): " + ", ".join(overrides))
+    manual = [tid for tid, record in scheduler.tracker.state["tasks"].items()
+              if record["status"] == "VERIFIED" and (record.get("acceptance") or {}).get("mode") == "MANUAL_COMPLETION"]
+    if manual:
+        display("Completed manually (acceptance checks bypassed): " + ", ".join(manual))
     next_task = scheduler.get_next_task()
     pending = scheduler.first_pending()
     display("Next eligible task: " + (next_task["id"] if next_task else "None"))
