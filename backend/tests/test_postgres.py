@@ -191,7 +191,7 @@ def test_parameter_units_fixed_values_and_dependency_cycles():
 
 
 def test_readiness_failure_is_safe():
-    from fastapi.testclient import TestClient
+    from tests.local_client import LocalClient as TestClient
     from app.main import create_app
     class BrokenDB:
         def ready(self): return False
@@ -207,7 +207,7 @@ def test_orm_metadata_matches_migrated_schema(postgres_database):
 
 def test_database_connection_errors_do_not_leak_configuration(postgres_database):
     from dataclasses import replace
-    from fastapi.testclient import TestClient
+    from tests.local_client import LocalClient as TestClient
     from app.main import create_app
     from app.persistence.database import Database
     broken=Database(replace(postgres_database.settings,url=postgres_database.settings.url.difference_update_query(['host','port']).set(host='127.0.0.1',port=1),connect_timeout=1))

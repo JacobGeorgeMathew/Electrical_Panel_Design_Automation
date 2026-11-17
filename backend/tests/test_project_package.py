@@ -9,7 +9,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi import Request
-from fastapi.testclient import TestClient
+from tests.local_client import LocalClient as TestClient
 from sqlalchemy import event, func, select
 
 from app.main import create_app

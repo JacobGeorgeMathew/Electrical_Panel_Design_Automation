@@ -5,7 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from fastapi.testclient import TestClient
+from tests.local_client import LocalClient as TestClient
 from pydantic import ValidationError
 
 from app.api.dependencies import get_service, get_session

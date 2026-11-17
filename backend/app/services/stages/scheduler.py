@@ -18,6 +18,7 @@ from app.services.design_errors import DesignError
 from app.services.stages import artifacts as a, electrical as e, physical as p
 from app.services.stages.cache import ADAPTERS, make_signature
 from app.services.stages.contracts import FrozenContract, STAGE_REGISTRY
+from app.observability import traced, emit
 
 
 def snapshot(value):
@@ -78,6 +79,10 @@ class IncrementalScheduler:
 
     def record(self, execution):
         self.records.append(execution)
+        emit('stage', stage_id=execution.stage_id, status={
+            'EXECUTED': 'succeeded', 'CACHED': 'cached', 'FAILED': 'failed',
+            'RETAINED': 'retained'}[execution.status], elapsed_ms=execution.elapsed_ms,
+            code=execution.failure_code)
         if self.progress:
             self.progress(None, self.records)
 
@@ -98,6 +103,8 @@ class IncrementalScheduler:
             project_id=doc.project_id, panel_id=doc.panel_id, panel_type='DB')
         policy = snapshots.pdm.validation_policy if snapshots.pdm else None
 
+        @traced('stage', lambda name, value: dict(project_id=doc.project_id,
+            document_id=doc.document_id, stage_id=ADAPTERS[name].stage_id))
         def execute(name, value):
             if self.progress:
                 self.progress(name, self.records)

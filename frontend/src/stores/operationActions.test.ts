@@ -5,8 +5,10 @@ import {documentFields} from './documentStore';
 import {commitPlacement} from './operationActions';
 import fixture from '../types/fixtures/document-v1.json';
 import type {DocumentView} from '../types/document';
+import {authorizeTestSession} from '../api/testLocalSession';
 
-beforeEach(()=>{
+beforeEach(async()=>{
+  await authorizeTestSession();
   useCommandStore.getState().clear();
   const view={...structuredClone(fixture),content_sha256:'a'.repeat(64)} as DocumentView;
   useProjectStore.setState({...documentFields(view),projectId:view.document.project_id,

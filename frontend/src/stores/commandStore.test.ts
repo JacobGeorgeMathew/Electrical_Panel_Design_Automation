@@ -5,11 +5,13 @@ import {useWorkspaceStore} from './workspaceStore';
 import documentFixture from '../types/fixtures/document-v1.json';
 import requestFixture from '../types/fixtures/operation-preview-v1.json';
 import type {DocumentView} from '../types/document';
+import {authorizeTestSession} from '../api/testLocalSession';
 
 const base = () => ({...structuredClone(documentFixture), content_sha256: 'a'.repeat(64)}) as DocumentView;
 const proposal = (): CommandProposal => ({projectId:'project-1',key:'retry-key',kind:'operations',request:structuredClone(requestFixture) as any});
 const reply = (value: unknown, status=200) => new Response(JSON.stringify(value), {status});
-beforeEach(()=>{
+beforeEach(async()=>{
+  await authorizeTestSession();
   useCommandStore.getState().clear();
   useProjectStore.setState({projectId:'project-1',document:base(),lockVersion:3,editSequence:0,
     viewedRevisionId:null,isLoadingProject:false,isSaving:false,isGenerating:false,pendingRecovery:null});
@@ -63,12 +65,13 @@ describe('shared command client',()=>{
     const pending=useCommandStore.getState().commitProposal();
     useCommandStore.getState().cancel(); await pending;
     expect(useCommandStore.getState().proposal?.key).toBe('retry-key');
-    expect(fetch.mock.calls[0][1].headers).toMatchObject({'Idempotency-Key':'retry-key'});
-    const retry=vi.fn(async()=>reply({error:{code:'DOCUMENT_CONFLICT',message:'Changed'}},409));
+    expect(new Headers(fetch.mock.calls[0][1].headers).get('Idempotency-Key')).toBe('retry-key');
+    const retry=vi.fn(async(_url:string,_options:RequestInit)=>reply({error:{code:'DOCUMENT_CONFLICT',message:'Changed'}},409));
     vi.stubGlobal('fetch',retry);
     await useCommandStore.getState().commitProposal();
     expect(retry).toHaveBeenCalledWith(expect.stringContaining('/operations/commit'),expect.objectContaining({
-      headers:expect.objectContaining({'Idempotency-Key':'retry-key'}),body:JSON.stringify(requestFixture)}));
+      body:JSON.stringify(requestFixture)}));
+    expect(new Headers(retry.mock.calls[0]?.[1]?.headers).get('Idempotency-Key')).toBe('retry-key');
   });
   it('ignores a late commit receipt after the loaded document changes',async()=>{
     let resolve!: (response:Response)=>void;

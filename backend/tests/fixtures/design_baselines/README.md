@@ -124,3 +124,12 @@ remain unchanged. Fresh verification evidence and final profile outcomes are
 recorded in the [P3-T04 verification follow-up](../../../../planning/task_reports/P3-T04/attempt-01-verification-followup.md).
 The original attempt report retains its actual failed-profile results. Updating
 this source pin and recording test outcomes does not grant human task acceptance.
+
+## P3-T11 diagnostic source-pin review
+
+Two source entries changed: `app/services/design_errors.py` now redacts public
+diagnostics and includes correlation, and `app/services/document_service.py` adds
+operation spans. Those hashes were updated after source review. Engineering
+algorithms, catalogs, solver settings, version labels and exact observed output
+and artifact fixtures are unchanged. Fresh test evidence belongs to
+[P3-T11 attempt 01](../../../../planning/task_reports/P3-T11/attempt-01.md).

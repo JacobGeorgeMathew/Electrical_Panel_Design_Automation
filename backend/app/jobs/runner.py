@@ -19,6 +19,7 @@ from app.persistence.assets import AssetStore, content_hash
 from app.persistence.documents import DocumentRepository, document_hash
 from app.persistence.jobs import JobRepository
 from app.persistence.repositories import PersistenceError, ProjectRepository
+from app.observability import traced, emit, correlation
 
 KIND = 'CAD_EXPORT'
 
@@ -49,6 +50,8 @@ class StageExecutor:
         self.parent_cancelled = cancelled or (lambda: False)
         self.execution_scope = execution_scope or 'sync'
 
+    @traced('stage', lambda self, name, *args: dict(stage_id=name,
+        project_id=self.source.document.project_id, document_id=self.source.document.document_id))
     def __call__(self, name, value, stage_signature):
         if self.parent_cancelled():
             raise WorkerFailure('JOB_CANCELLED')
@@ -95,7 +98,7 @@ class StageExecutor:
             return False
 
         try:
-            output = run_bounded(execute_stage, name, inputs['value'], budget=self.budget, cancelled=cancelled)
+            output = self.execute_job(job, execute_stage, name, inputs['value'], cancelled=cancelled)
             typed = ADAPTERS[name].outputs.model_validate(output)
             with transaction(self.db) as session:
                 project = ProjectRepository(session).row(doc.project_id, lock=True)
@@ -124,6 +127,11 @@ class StageExecutor:
                     raise
             raise
 
+    @traced('job', lambda self, job, *args, **kwargs: dict(job_id=job['id'],
+        parent_job_id=correlation().get('job_id')))
+    def execute_job(self, job, call, *args, cancelled):
+        return run_bounded(call, *args, budget=self.budget, cancelled=cancelled)
+
 
 class JobRunner:
     def __init__(self, database, *, budget=None):
@@ -150,7 +158,7 @@ class JobRunner:
             except Exception:
                 # Database outages leave the durable lease recoverable. Do not
                 # log driver messages, inputs, credentials or internal paths.
-                pass
+                emit('runner_unavailable', status='failed', code='RUNNER_UNAVAILABLE')
             self.stopping.wait(.1)
 
     def claim(self):
@@ -177,6 +185,11 @@ class JobRunner:
         job = self.claim()
         if job is None:
             return None
+        return self.execute_job(job)
+
+    @traced('job', lambda self, job: dict(job_id=job['id'],
+        project_id=job['project_id'], document_id=job['document_id']))
+    def execute_job(self, job):
         if job['kind'] == 'RECOMPUTE':
             return self.recompute(job)
         last_heartbeat = 0

@@ -1,7 +1,7 @@
 """Project lifecycle integration against an isolated PostgreSQL database."""
 from tests.historical_publication import seed_historical_revision, historical_design
 from uuid import UUID
-from fastapi.testclient import TestClient
+from tests.local_client import LocalClient as TestClient
 from app.main import create_app
 
 

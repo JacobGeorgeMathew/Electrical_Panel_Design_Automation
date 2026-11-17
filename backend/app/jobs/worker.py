@@ -14,6 +14,7 @@ from threading import BoundedSemaphore
 import time
 
 from app.services.design_errors import DesignError
+from app.observability import CONTEXT, correlation, traced
 
 
 class WorkerFailure(DesignError):
@@ -38,7 +39,8 @@ class Budget:
 _slots = BoundedSemaphore(2)
 
 
-def _child(call, args, path, budget):
+def _child(call, args, path, budget, context):
+    CONTEXT.set(context)
     try:
         # Spawn avoids inheriting database sessions, locks and request threads.
         # Unsupported platforms fail closed rather than run without limits.
@@ -61,6 +63,7 @@ def _child(call, args, path, budget):
         os._exit(1)
 
 
+@traced('worker', lambda *args, **kwargs: {})
 def run_bounded(call, *args, budget=None, cancelled=lambda: False):
     """No database transaction may surround this call; callbacks use short ones.
 
@@ -79,7 +82,7 @@ def run_bounded(call, *args, budget=None, cancelled=lambda: False):
         with tempfile.TemporaryDirectory(prefix='panel-worker-') as directory:
             path = Path(directory) / 'result'
             process = multiprocessing.get_context('spawn').Process(
-                target=_child, args=(call, args, str(path), budget))
+                target=_child, args=(call, args, str(path), budget, correlation()))
             started = time.monotonic()
             process.start()
             while process.is_alive():

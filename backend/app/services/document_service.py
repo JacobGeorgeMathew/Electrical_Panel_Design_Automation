@@ -7,6 +7,7 @@ from app.models.requirements import RequirementSet
 from app.persistence.assets import content_hash
 from app.persistence.documents import DocumentRepository
 from app.persistence.repositories import ProjectRepository, PersistenceError
+from app.observability import traced, operation_fields
 
 DIRTY_STAGES = ['requirements', 'calculations', 'selection', 'connectivity', 'schematic',
                 'placement', 'routes', 'physical_validation', 'bom', 'cad']
@@ -41,6 +42,7 @@ class DocumentService:
         with self.db.sessions() as session:
             return DocumentRepository(session).load(ProjectRepository(session).row(key))
 
+    @traced('operation', operation_fields)
     def preview_operations(self, key, request):
         from app.persistence.assets import AssetStore
         from app.services.operations.engineering import load_choices
@@ -62,10 +64,12 @@ class DocumentService:
             rows = verified_rows(session, project['id'], base.document.document_id)
         return history_view(base, rows)
 
+    @traced('operation', operation_fields)
     def commit_operations(self, key, request, idempotency_key):
         from app.persistence.operations import OperationBatchRepository
         return OperationBatchRepository(self.db).commit(key, request, idempotency_key)
 
+    @traced('operation', operation_fields)
     def apply_history(self, key, request, idempotency_key):
         from app.persistence.operations import OperationBatchRepository
         return OperationBatchRepository(self.db).apply_history(key, request, idempotency_key)

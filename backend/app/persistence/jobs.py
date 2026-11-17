@@ -16,6 +16,7 @@ from sqlalchemy.dialects.postgresql import insert
 
 from app.persistence import models as m
 from app.persistence.repositories import PersistenceError, identifier
+from app.observability import emit
 
 
 class JobRepository:
@@ -58,6 +59,8 @@ class JobRepository:
         if any(row[key] != value for key, value in intent.items()):
             raise PersistenceError('JOB_EXECUTION_CONFLICT',
                 'This execution key already identifies different job intent.', 409)
+        emit('job_enqueued', job_id=row['id'], project_id=project_id, document_id=document_id,
+             stage_id=inputs.get('adapter') if kind == 'STAGE' else None)
         return deepcopy(row)
 
     @staticmethod
@@ -116,16 +119,22 @@ class JobRepository:
     def succeed(self, job_id, owner, token, *, result):
         if not isinstance(result, dict):
             raise PersistenceError('INVALID_JOB_RESULT', 'Job result must be an object.')
-        return self._leased_update(job_id, owner, token, state='SUCCEEDED', result=deepcopy(result),
+        row = self._leased_update(job_id, owner, token, state='SUCCEEDED', result=deepcopy(result),
             lease_owner=None, lease_token=None, lease_expires_at=None, completed_at=func.clock_timestamp())
+        emit('job_succeeded', job_id=job_id, project_id=row['project_id'], document_id=row['document_id'])
+        return row
 
     def fail(self, job_id, owner, token, *, code='JOB_FAILED'):
         # Public records store controlled codes, never worker exception text/paths.
         if not isinstance(code, str) or not re.fullmatch(r'[A-Z][A-Z0-9_]{0,63}', code):
             raise PersistenceError('INVALID_JOB_ERROR', 'Job failure requires a structured error code.')
-        return self._leased_update(job_id, owner, token, state='FAILED',
+        row = self._leased_update(job_id, owner, token, state='FAILED',
             error={'code': code, 'message': 'Job execution failed.'}, lease_owner=None,
             lease_token=None, lease_expires_at=None, completed_at=func.clock_timestamp())
+        emit('job_failed', status='failed', code=code, job_id=job_id,
+             project_id=row['project_id'], document_id=row['document_id'],
+             stage_id=row['inputs'].get('adapter') if row['kind'] == 'STAGE' else None)
+        return row
 
     def cancel(self, job_id):
         """Persist cancellation and revoke any running token; terminal jobs stay terminal."""

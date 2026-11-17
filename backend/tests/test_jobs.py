@@ -4,7 +4,7 @@ from datetime import timedelta
 from threading import Barrier
 from uuid import uuid4
 
-from fastapi.testclient import TestClient
+from tests.local_client import LocalClient as TestClient
 import pytest
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError

@@ -7,6 +7,7 @@ import { useProjectStore } from '../../stores/projectStore';
 import {documentFields} from '../../stores/documentStore';
 import fixture from '../../types/fixtures/document-v1.json';
 import type {DocumentView} from '../../types/document';
+import {authorizeTestSession} from '../../api/testLocalSession';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -14,7 +15,8 @@ describe('2D layout viewport fit', () => {
   let host: HTMLDivElement;
   let root: Root;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    await authorizeTestSession();
     host = document.createElement('div');
     document.body.append(host);
     root = createRoot(host);

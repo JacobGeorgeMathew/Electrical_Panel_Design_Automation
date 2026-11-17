@@ -20,6 +20,7 @@ from app.persistence.repositories import PersistenceError
 from app.services.design_errors import DesignError
 from app.services.generation_proposals import apply_generation
 from app.services.stages.contracts import STAGE_REGISTRY
+from app.observability import span
 
 
 def reject(operation, code, message):
@@ -103,8 +104,10 @@ def preview_operations(resolved: ResolvedDocument, request: OperationPreviewRequ
             raise PersistenceError('OPERATION_PRECONDITION', 'Every affected model requires its current snapshot precondition.', 409)
         if op.type == 'RemoveComponent':
             consequences[str(op.operation_id)] = removal_consequences(candidate, op)
-        fields = (definition.handler(candidate, op) if op.type in ('MoveComponent', 'RotateComponent')
-                  else definition.handler(candidate, op, choices or EngineeringChoices()))
+        with span('operation', project_id=doc.project_id, document_id=doc.document_id,
+                  batch_id=request.batch_id, operation_id=op.operation_id):
+            fields = (definition.handler(candidate, op) if op.type in ('MoveComponent', 'RotateComponent')
+                      else definition.handler(candidate, op, choices or EngineeringChoices()))
         changed_models = []
         for kind in definition.models:
             value = getattr(candidate.snapshots, kind)

@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
+from tests.local_client import LocalClient as TestClient
 from pydantic import ValidationError
 from sqlalchemy import func, select
 

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
+from tests.local_client import LocalClient as TestClient
 from pydantic import ValidationError
 
 from app.models.document import DocumentSnapshots, ResolvedDocument, snapshot_sha256

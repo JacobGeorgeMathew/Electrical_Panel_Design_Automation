@@ -2,7 +2,7 @@ import {spawn} from 'node:child_process';
 import {access} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {createInterface} from 'node:readline';
-import {createServer, type ViteDevServer} from 'vite';
+import {createServer, type ProxyOptions} from 'vite';
 import react from '@vitejs/plugin-react';
 
 /** Own both servers for one run. No fixed ports, existing-server reuse or state
@@ -12,15 +12,31 @@ export default async function setup() {
   const backend = fileURLToPath(new URL('../../backend/', import.meta.url));
   const python = backend + '.venv/bin/python';
   await access(python); // Never silently use the orchestrator interpreter.
+  const retarget: Array<(target: string) => void> = [];
+  const proxy: ProxyOptions = {target: 'http://127.0.0.1:1', configure(server) {
+    const live = server as typeof server & {options: {target: string}};
+    retarget.push(target => {live.options.target = target;});
+  }};
+  const vite = await createServer({
+    configFile: false, root: frontend, plugins: [react()],
+    resolve: {alias: {'@': frontend + 'src'}},
+    define: {'import.meta.env.VITE_API_BASE': JSON.stringify('/api')},
+    server: {host: '127.0.0.1', port: 0, strictPort: true,
+      proxy: {'/api': {...proxy}, '/__e2e__': {...proxy}}},
+  });
+  await vite.listen();
+  const address = vite.httpServer!.address();
+  if (!address || typeof address === 'string') {await vite.close(); throw new Error('Missing E2E frontend address.');}
+  const origin = `http://127.0.0.1:${address.port}`;
+  process.env.PANEL_E2E_BASE_URL = origin;
   const child = spawn(python, ['-u', '../frontend/e2e/backend.py'], {
     cwd: backend, stdio: ['pipe', 'pipe', 'inherit'],
-    env: {...process.env, PYTHONPATH: backend},
+    env: {...process.env, PYTHONPATH: backend, PANEL_E2E_ORIGIN: origin},
   });
   const closed = new Promise<number | null>(resolve => child.once('close', resolve));
-  let vite: ViteDevServer | undefined;
   const stop = async () => {
     try {
-      await vite?.close();
+      await vite.close();
     } finally {
       child.stdin.end();
       const timer = setTimeout(() => child.kill('SIGTERM'), 15_000);
@@ -44,17 +60,7 @@ export default async function setup() {
       child.once('error', error => {clearTimeout(timer); reject(error);});
       child.once('close', () => {clearTimeout(timer); reject(new Error('E2E backend exited before startup.'));});
     });
-    vite = await createServer({
-      configFile: false, root: frontend, plugins: [react()],
-      resolve: {alias: {'@': frontend + 'src'}},
-      define: {'import.meta.env.VITE_API_BASE': JSON.stringify('/api')},
-      server: {host: '127.0.0.1', port: 0, strictPort: true,
-        proxy: {'/api': `http://127.0.0.1:${port}`, '/__e2e__': `http://127.0.0.1:${port}`}},
-    });
-    await vite.listen();
-    const address = vite.httpServer!.address();
-    if (!address || typeof address === 'string') throw new Error('Missing E2E frontend address.');
-    process.env.PANEL_E2E_BASE_URL = `http://127.0.0.1:${address.port}`;
+    for (const setTarget of retarget) setTarget(`http://127.0.0.1:${port}`);
     // Ready is checked against the owned process, never the developer backend.
     const ready = await fetch(`http://127.0.0.1:${port}/ready`);
     if (!ready.ok) throw new Error('Isolated E2E database is not ready.');
