@@ -1,0 +1,50 @@
+{
+  "schema_version": "aggregate-validation/1",
+  "project_id": "project-1",
+  "panel_id": "panel-1",
+  "revision_id": null,
+  "checks": [
+    {
+      "rule": {
+        "id": "check-preview", "object_id": "route-1", "object_kind": "ROUTE",
+        "domain": "GEOMETRY", "purpose": "PROTOTYPE", "rule_id": "ENVELOPE",
+        "rule_version": "synthetic/1", "severity": "CRITICAL", "required": true,
+        "applicability": "APPLICABLE", "applicability_rationale": null
+      },
+      "status": "PASS", "message": "Synthetic preview envelope only.", "evidence": [],
+      "current": true, "actual_value": 4.5, "required_value": 4, "unit": "mm"
+    },
+    {
+      "rule": {
+        "id": "check-bend", "object_id": "route-1", "object_kind": "ROUTE",
+        "domain": "ELECTRICAL", "purpose": "ENGINEERING", "rule_id": "BEND",
+        "rule_version": "synthetic/1", "severity": "WARNING", "required": true,
+        "applicability": "UNKNOWN", "applicability_rationale": null
+      },
+      "status": "UNRESOLVED", "message": "No reviewed bend criterion.", "evidence": [],
+      "current": true, "actual_value": null, "required_value": null, "unit": null
+    }
+  ],
+  "physical_evaluated": true,
+  "physical_violation_count": 0,
+  "engineering_policy_review_reference": null,
+  "groups": [
+    {
+      "object_id": "route-1", "object_kind": "ROUTE", "domain": "ELECTRICAL",
+      "rule_id": "BEND", "rule_version": "synthetic/1", "severity": "WARNING",
+      "applicability": "UNKNOWN", "check_ids": ["check-bend"], "status": "UNRESOLVED"
+    },
+    {
+      "object_id": "route-1", "object_kind": "ROUTE", "domain": "GEOMETRY",
+      "rule_id": "ENVELOPE", "rule_version": "synthetic/1", "severity": "CRITICAL",
+      "applicability": "APPLICABLE", "check_ids": ["check-preview"], "status": "PASS"
+    }
+  ],
+  "required_status": "UNRESOLVED",
+  "engineering_status": "UNRESOLVED",
+  "geometric_feasible": true,
+  "physical_generation_eligible": true,
+  "prototype_preview_available": true,
+  "engineering_release_eligible": false,
+  "blocking_check_ids": ["check-bend"]
+}
