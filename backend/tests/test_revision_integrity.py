@@ -323,6 +323,8 @@ def test_read_and_audit_reject_tampering_without_deleting(api, postgres_database
 
 @pytest.mark.parametrize('tamper', ['schema', 'models'])
 def test_audits_check_document_compatibility_and_only_read(api, postgres_database, tamper):
+    # Observe only audit SQL, not the independent durable queue consumer.
+    api.app.state.cad_executor.shutdown()
     db = postgres_database
     project = create(api)
     baseline = audit_revisions(db)

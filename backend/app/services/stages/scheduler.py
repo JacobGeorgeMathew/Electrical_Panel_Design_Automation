@@ -70,8 +70,9 @@ def dirty_closure(document):
 
 
 class IncrementalScheduler:
-    def __init__(self, cache=None):
+    def __init__(self, cache=None, execute_adapter=None):
         self.cache = cache
+        self.execute_adapter = execute_adapter
         self.records = []
 
     def run(self, base: ResolvedDocument, inputs: SchedulerInputs, *, force_full=False):
@@ -105,7 +106,8 @@ class IncrementalScheduler:
                             status='CACHED', executions=0, elapsed_ms=(perf_counter()-started)*1000,
                             input_signature=signature.key))
                         return hit.output
-                output = binding.execute(value)
+                output = (self.execute_adapter(name, value, signature) if self.execute_adapter
+                          else binding.execute(value))
             except DesignError as exc:
                 if self.cache:
                     self.cache.record_failure(doc.document_id, doc.document_sequence, signature, exc.code)

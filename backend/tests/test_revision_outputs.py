@@ -115,6 +115,8 @@ def read_bundle(db, rid):
 
 
 def test_each_database_write_rolls_back_and_publication_has_no_engine_work(api, postgres_database, monkeypatch, request):
+    # Failure injection observes this publisher, without a concurrent consumer.
+    api.app.state.cad_executor.shutdown()
     db = postgres_database
     service = ProjectService(db)
     p = create(api)
@@ -238,6 +240,7 @@ def test_project_and_document_fences_reject_prepared_outputs(api, postgres_datab
 
 
 def test_generate_restore_and_import_prepare_before_database_writes(api, postgres_database, monkeypatch):
+    api.app.state.cad_executor.shutdown()
     from app.models.api import ProjectImport
     from app.services.project_lifecycle import ProjectLifecycle
     from app.services.cad_engine import CADEngine

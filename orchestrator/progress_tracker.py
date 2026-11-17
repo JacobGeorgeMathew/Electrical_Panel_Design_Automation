@@ -116,6 +116,15 @@ class ProgressTracker:
                     assert isinstance(attempt["verification_results"], dict)
                     assert isinstance(attempt["git"], dict)
                 if record["status"] == "VERIFIED":
+                    if (record["acceptance"] or {}).get("mode") == "MANUAL_COMPLETION":
+                        acceptance = record["acceptance"]
+                        assert acceptance["human_assessment"] == "COMPLETED"
+                        assert acceptance["checks_bypassed"] is True
+                        assert acceptance["definition_hash"] == record["definition_hash"]
+                        assert acceptance["attempt"] == record["attempt_count"]
+                        assert any(d.get("action") == "MANUAL_COMPLETION" and d.get("acceptance") == acceptance
+                                   for d in record["human_decisions"])
+                        continue
                     assert record["acceptance"] and record["acceptance"]["evidence_reviewed"]
                     assert record["acceptance"]["definition_hash"] == record["definition_hash"]
                     assert record["attempts"][-1]["exit_code"] == 0

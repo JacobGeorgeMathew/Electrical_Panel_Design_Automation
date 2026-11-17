@@ -1,11 +1,9 @@
 from contextlib import asynccontextmanager
-from concurrent.futures import ThreadPoolExecutor
+from app.jobs.runner import JobRunner
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError,IntegrityError
-from sqlalchemy import update
-from datetime import datetime, timezone
 from app.api import routes_projects,routes_requirements,routes_design,routes_schematic,routes_layout,routes_cad,routes_validation,routes_catalog,routes_assets
 from app.persistence.config import Settings,ConfigurationError
 from app.persistence.database import Database
@@ -21,15 +19,13 @@ def create_app(database=None):
             try: db=Database(Settings.load())
             except ConfigurationError: pass
         app.state.database=db
-        app.state.cad_executor=ThreadPoolExecutor(max_workers=1,thread_name_prefix='panel-cad')
+        app.state.cad_executor=None
         if db is not None and db.ready():
-            # The desktop backend uses one process; interrupted local jobs are explicit failures.
-            from app.persistence import models as m
-            with db.sessions.begin() as session:
-                session.execute(update(m.generated_artifacts).where(m.generated_artifacts.c.generation_status=='PENDING').values(
-                    generation_status='FAILED',completed_at=datetime.now(timezone.utc),error={'code':'INTERRUPTED','message':'The backend restarted before this export completed. Regenerate the saved revision.'}))
+            app.state.cad_executor=JobRunner(db)
+            app.state.cad_executor.start()
         yield
-        app.state.cad_executor.shutdown(wait=True,cancel_futures=True)
+        if app.state.cad_executor is not None:
+            app.state.cad_executor.shutdown()
         if db is not None: db.close()
 
     app=FastAPI(title='Automated Electrical Panel Design Platform API',version='1.1.0',lifespan=lifespan)

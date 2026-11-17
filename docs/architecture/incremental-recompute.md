@@ -64,8 +64,9 @@ batch, preview}` for one `UpdateRequirement`. Commit the ordinary operation thro
 the document operations API, explicitly Recompute, then accept its result. The old
 `new_design`/`diff_report` automatic-publication response is removed; the TypeScript
 client and legacy consumer use the new contract. No revision is produced by preview,
-operation acceptance or Recompute. A dedicated Recompute button and durable worker
-leases/retries remain later UI/execution work.
+operation acceptance or Recompute. P3-T07 adds bounded, durable stage attempts;
+see [bounded workers](bounded-workers.md). A dedicated Recompute button and
+asynchronous progress/cancel/retry UI remain separate work.
 
 The unchanged full `DesignOrchestrator` remains the independent oracle for
 automatic generation. Tests compare both frozen DB examples and a changed feeder

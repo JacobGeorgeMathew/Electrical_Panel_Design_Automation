@@ -87,7 +87,9 @@ def recompute(service, key, request):
     source = DocumentService(service.db).load(key)
     check_base(source, request)
     base, inputs = materialize(service, source)
-    scheduler = IncrementalScheduler(StageCache(service.db))
+    from app.jobs.runner import StageExecutor
+    scheduler = IncrementalScheduler(StageCache(service.db),
+                                     execute_adapter=StageExecutor(service.db, source))
     try:
         result = scheduler.run(base, inputs)
     except Exception as exc:

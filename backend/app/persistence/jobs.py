@@ -66,7 +66,7 @@ class JobRepository:
             raise PersistenceError('INVALID_JOB_LEASE', 'Lease duration must be 1 to 86400 seconds.')
         return timedelta(seconds=lease_seconds)
 
-    def claim(self, owner, *, lease_seconds=60, kinds=None):
+    def claim(self, owner, *, lease_seconds=60, kinds=None, job_id=None):
         """Claim one queued job without waiting for another worker's row locks.
 
         Expired RUNNING jobs require explicit recover_expired(), which a runner
@@ -79,6 +79,8 @@ class JobRepository:
             m.jobs.c.attempts < m.jobs.c.max_attempts)
         if kinds is not None:
             query = query.where(m.jobs.c.kind.in_(kinds))
+        if job_id is not None:
+            query = query.where(m.jobs.c.id == identifier(job_id))
         job_id = self.s.scalar(query.order_by(m.jobs.c.created_at, m.jobs.c.id)
             .limit(1).with_for_update(skip_locked=True))
         if job_id is None:
@@ -134,7 +136,7 @@ class JobRepository:
             .returning(m.jobs)).mappings().first()
         return deepcopy(dict(row)) if row else self.get(job_id)
 
-    def recover_expired(self, *, limit=100):
+    def recover_expired(self, *, limit=100, kinds=None):
         """Requeue expired attempts, or fail exhausted ones, in a bounded batch.
 
         Concurrent recoverers skip locked rows. The token is cleared before any
@@ -143,8 +145,11 @@ class JobRepository:
         """
         if type(limit) is not int or not 1 <= limit <= 1000:
             raise PersistenceError('INVALID_JOB_RECOVERY', 'Recovery limit must be 1 to 1000 jobs.')
-        expired = self.s.execute(select(m.jobs).where(m.jobs.c.state == 'RUNNING',
+        query = select(m.jobs).where(m.jobs.c.state == 'RUNNING',
             m.jobs.c.lease_expires_at <= func.clock_timestamp())
+        if kinds is not None:
+            query = query.where(m.jobs.c.kind.in_(kinds))
+        expired = self.s.execute(query
             .order_by(m.jobs.c.lease_expires_at, m.jobs.c.id).limit(limit)
             .with_for_update(skip_locked=True)).mappings().all()
         recovered = []

@@ -32,7 +32,7 @@ def parser():
     validate = sub.add_parser("validate")
     validate.add_argument("--require-models", action="store_true")
     validate.add_argument("--lifecycle-only", action="store_true", help="Validate a revised plan before migrating saved progress")
-    for name in ("reports", "retry", "reopen", "review"):
+    for name in ("reports", "retry", "reopen", "review", "complete"):
         command = sub.add_parser(name)
         command.add_argument("task_id")
     model = sub.add_parser("set-model")
@@ -56,7 +56,7 @@ def decision_menu(task, tracker, reports, decisions):
     """Return retry instructions only after explicit human action; never launch here."""
     tid = task["id"]
     while True:
-        ui.display("\n1 ACCEPT TASK  2 REVIEW REPORT  3 RETRY  4 RETRY WITH INSTRUCTIONS\n5 REOPEN  6 SKIP  7 MARK BLOCKED  8 PAUSE / EXIT\n9 RECORD HUMAN GATE APPROVAL  10 CONFIRM HUMAN INPUT\n11 MARK PARTIAL TASK COMPLETED (HUMAN OVERRIDE)")
+        ui.display("\n1 ACCEPT TASK  2 REVIEW REPORT  3 RETRY  4 RETRY WITH INSTRUCTIONS\n5 REOPEN  6 SKIP  7 MARK BLOCKED  8 PAUSE / EXIT\n9 RECORD HUMAN GATE APPROVAL  10 CONFIRM HUMAN INPUT\n11 MARK PARTIAL TASK COMPLETED (HUMAN OVERRIDE)\n12 MARK ANY TASK COMPLETED (BYPASS ALL ACCEPTANCE CHECKS)")
         action = ui.ask("Action: ")
         try:
             if action == "1":
@@ -108,10 +108,27 @@ def decision_menu(task, tracker, reports, decisions):
                     decisions.accept_partial(tid, reviewer, evidence, rationale, responsibility_acknowledged=True)
                     ui.display(f"{tid}: COMPLETED by human override (saved as VERIFIED for dependency scheduling).")
                     return None
+            elif action == "12":
+                target = ui.ask(f"Task ID (blank selects {tid}): ") or tid
+                target_task = tracker.lifecycle.tasks.get(target)
+                if target_task is None:
+                    raise OrchestratorError(f"Unknown task: {target}")
+                manual_completion(target_task, tracker, decisions)
+                return None
             else:
                 ui.display("Choose a number from the menu.")
         except OrchestratorError as exc:
             ui.display(f"Cannot apply decision: {exc}")
+
+
+def manual_completion(task, tracker, decisions):
+    tid = task["id"]
+    ui.display(f"Mark {tid} COMPLETED from {tracker.state['tasks'][tid]['status']}. Acceptance checks, reports, dependencies and approval gates will be bypassed.")
+    reviewer = ui.ask("Developer name (optional): ")
+    reason = ui.ask("Note (optional): ")
+    if ui.confirm(f"Mark {tid} COMPLETED now?"):
+        decisions.complete_manually(tid, reviewer, reason)
+        ui.display(f"{tid}: COMPLETED manually (saved as VERIFIED for dependency scheduling).")
 
 
 def protected_hashes(paths):
@@ -187,7 +204,7 @@ def run(args):
     scheduler = TaskScheduler(lifecycle, tracker)
     decisions = DecisionManager(tracker, reports)
     command = args.command
-    if lifecycle.forward_dependencies and command not in {"validate", "status", "reports", "reconcile", "recover"} and not args.dry_run:
+    if lifecycle.forward_dependencies and command not in {"validate", "status", "reports", "reconcile", "recover", "complete", "review"} and not args.dry_run:
         raise OrchestratorError(f"Strict-order plan cannot execute forward dependencies: {lifecycle.forward_dependencies}. Correct the plan and reconcile before launching tasks.")
     readonly = args.dry_run or command in {"status", "validate", "reports"}
     if readonly:
@@ -260,7 +277,10 @@ def run(args):
             tracker.state["current_task_id"] = None
             tracker.commit("INTERRUPTION_RECOVERED")
             return 0
-        models = ModelSelector(config["model_config_path"], lifecycle)
+        if command == "complete":
+            manual_completion(scheduler.get_task_by_id(args.task_id), tracker, decisions)
+            return 0
+        models = None if command == "review" else ModelSelector(config["model_config_path"], lifecycle)
         if command in {"setup-models", "set-model"}:
             ui.display("In a separate Codex TUI, use /model then /status to inspect available models and supported efforts. Names/access cannot be validated offline.")
             if command == "set-model":
@@ -282,8 +302,11 @@ def run(args):
         if command in {"retry", "reopen", "review"}:
             task = scheduler.get_task_by_id(args.task_id)
             if command == "review":
-                attempt, report = report_for(task, tracker, reports)
-                ui.show_report(report, attempt)
+                if tracker.state["tasks"][task["id"]]["attempts"]:
+                    attempt, report = report_for(task, tracker, reports)
+                    ui.show_report(report, attempt)
+                else:
+                    ui.display("No execution attempts. Manual completion is available as option 12.")
                 extra = decision_menu(task, tracker, reports, decisions)
                 if extra is None:
                     return 0
@@ -304,6 +327,8 @@ def run(args):
                 if extra is None or task is None:
                     return 0
         # Only an explicit RETRY menu action permits another attempt, always with a new launch confirmation.
+        if models is None:
+            models = ModelSelector(config["model_config_path"], lifecycle)
         while True:
             extra = launch(task, tracker, scheduler, models, reports, decisions, config, lock_fd, extra)
             if extra is None:
