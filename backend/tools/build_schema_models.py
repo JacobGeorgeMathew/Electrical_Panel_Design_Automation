@@ -16,19 +16,19 @@ from app.persistence.schema_tools import signature
 
 root = Path(__file__).resolve().parents[1]
 settings = Settings.load()
-name = "panel_schema_build_" + uuid4().hex
+database_name = "panel_schema_build_" + uuid4().hex
 admin = create_engine(settings.url.set(database="postgres"), isolation_level="AUTOCOMMIT", hide_parameters=True)
 engine = None
 try:
     with admin.connect() as conn:
-        conn.exec_driver_sql(f'CREATE DATABASE "{name}"')
-    engine = create_engine(settings.url.set(database=name), hide_parameters=True)
+        conn.exec_driver_sql(f'CREATE DATABASE "{database_name}"')
+    engine = create_engine(settings.url.set(database=database_name), hide_parameters=True)
     with engine.begin() as conn:
         conn.exec_driver_sql((root / "migrations/versions/0001_baseline.sql").read_text(encoding="utf-8"))
     (root / "app/persistence/baseline_manifest.json").write_text(
         json.dumps(signature(engine), indent=2, sort_keys=True) + "\n", encoding="utf-8")
     cfg = Config(str(root / "alembic.ini"))
-    cfg.attributes["database_url"] = settings.url.set(database=name)
+    cfg.attributes["database_url"] = settings.url.set(database=database_name)
     command.stamp(cfg, "0001_baseline")
     command.upgrade(cfg, "head")
     metadata = MetaData()
@@ -89,5 +89,5 @@ finally:
     if engine is not None:
         engine.dispose()
     with admin.connect() as conn:
-        conn.exec_driver_sql(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
+        conn.exec_driver_sql(f'DROP DATABASE IF EXISTS "{database_name}" WITH (FORCE)')
     admin.dispose()

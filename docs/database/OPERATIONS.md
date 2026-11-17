@@ -1,6 +1,6 @@
 # PostgreSQL runtime integration
 
-Current migration head is `0007_stage_results`, following `0006_operations` and `0005_design_documents`. Existing installations require an intended forward upgrade with `manage initialize`, `manage import-legacy`, then `manage seed-constraints`. See [document storage](DESIGN_DOCUMENT_STORAGE.md), [stage cache contracts](../architecture/stage-dependencies.md#content-signatures-and-stage-cache-p3-t04), [publication integrity and roles](REVISION_INTEGRITY.md), and [strict-constraint rollout](../CONSTRAINT_POLICY_UPDATE.md). Back up valuable data before upgrading; audits do not require migration or import writes.
+Current migration head is `0008_jobs`, following `0007_stage_results`, `0006_operations` and `0005_design_documents`. Existing installations require an intended forward upgrade with `manage initialize`, `manage import-legacy`, then `manage seed-constraints`. See [document storage](DESIGN_DOCUMENT_STORAGE.md), [stage cache contracts](../architecture/stage-dependencies.md#content-signatures-and-stage-cache-p3-t04), [publication integrity and roles](REVISION_INTEGRITY.md), and [strict-constraint rollout](../CONSTRAINT_POLICY_UPDATE.md). Back up valuable data before upgrading; audits do not require migration or import writes.
 
 The FastAPI application now uses PostgreSQL repositories. The original JSON files remain import sources and explicit unit-test fixtures; HTTP requests do not fall back to them. React continues to call FastAPI and never receives database connection settings.
 
@@ -85,6 +85,39 @@ Asset/content endpoints resolve UUIDs through database records, restrict resolve
 The existing primitive exporter produces GLB previews and FreeCAD Python scripts. GLB has node metadata linking the CEM/PDM IDs; GLB vertices are in metres while PDM coordinates remain millimetres. Component preview meshes have their origin at their centre. The current viewer's world unit is 100 mm, so GLB metre coordinates use a scale of 10 when placed in that viewer. Scene nodes are cloned per component and the cached source meshes/materials are not mutated. The saved assembly GLB is available as an optional preview and download; editor state continues to derive from PDM.
 
 POST cad-generation registers a PENDING artifact and returns 202, then the local worker builds from a saved revision, verifies/stores its output, and updates status to READY or FAILED. Polling is bounded in React. Restarted desktop backends mark interrupted pending jobs FAILED so they can be explicitly retried. This worker is intended for one backend process. A shared multi-worker deployment needs a durable job-claim/worker design before enabling multiple processes. No PostgreSQL server or background distributed service is bundled here.
+
+`0008_jobs` adds the durable queue repository in `app/persistence/jobs.py` for
+the subsequent worker integration. It does not switch the CAD routes above to
+durable execution. The legacy restart handling remains until that integration;
+it never updates the new `jobs` table. No startup recovery or runner is installed
+by this migration.
+
+Durable jobs freeze an execution key, project/document ownership, base document
+sequence, optional revision, input signature/input values and artifact intent.
+An exact enqueue retry returns the existing job; changed intent under the same
+key conflicts. Terminal jobs keep their keys. Queue state is independent of
+revision, document and recovery clocks; enqueuing does not change those models.
+
+Use `JobRepository` inside short `db.sessions.begin()` transactions. Commit a
+`claim(owner, lease_seconds=60)` before executing work. Concurrent claims use
+`FOR UPDATE SKIP LOCKED`; each successful claim increments attempts and receives
+a fresh lease token. `heartbeat`, `succeed` and `fail` require the job ID, owner
+and token and check expiry against PostgreSQL's clock after obtaining the row
+lock. Cancellation revokes a queued/running job's token. The repository records
+outcomes only: it does not attach artifacts or mark engineering stages valid.
+The runner must fence those writes by document base/signatures and the live job
+token in the same completion transaction.
+
+The runner should periodically call `recover_expired(limit=100)`. It locks only
+expired RUNNING jobs in bounded batches, clears their tokens and requeues them
+while attempts remain. At the configured limit (default 3, permitted 1–100),
+expiry becomes FAILED with `JOB_ATTEMPTS_EXHAUSTED`. Healthy leases, queued jobs
+and terminal records survive restart unchanged. Explicit worker failure is
+terminal; a fresh user execution needs a fresh execution key. Worker scheduling,
+native execution/resource limits and HTTP progress/cancel contracts are outside
+this storage change. Input/intent immutability and deletion protection use the
+existing application engine guards; deployment roles still require independent
+SQL permissions as described in the publication-integrity guide.
 
 Generated native FreeCAD/STEP solids have not been exercised by this integration. FreeCAD/OpenCascade execution and richer source assets require their own installed adapters. STEP and GLB do not preserve a native parametric feature tree. Historical export regeneration is rejected when its required generator version is unavailable; preserved artifacts can still be downloaded when their files pass integrity checks.
 

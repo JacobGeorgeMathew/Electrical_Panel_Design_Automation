@@ -17,10 +17,10 @@ from app.persistence.database import Database
 from app.persistence.manage import alembic_config, initialize
 from app.persistence.schema_tools import signature, verify_baseline
 
-HEAD = '0007_stage_results'
+HEAD = '0008_jobs'
 NEW_TABLES = {'design_documents', 'design_document_snapshots',
               'revision_output_manifests', 'revision_output_snapshots',
-              'operation_batches', 'document_operations', 'stage_results', 'document_stage_states'}
+              'operation_batches', 'document_operations', 'stage_results', 'document_stage_states', 'jobs'}
 FIXTURE = Path(__file__).resolve().parents[2] / 'frontend/src/types/fixtures/document-v1.json'
 
 

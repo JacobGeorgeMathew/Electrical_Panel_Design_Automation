@@ -557,6 +557,53 @@ generated_artifacts = Table('generated_artifacts', metadata,
     CheckConstraint("source_model_sha256 IS NULL OR source_model_sha256 ~ '^[0-9a-f]{64}$'::text", name='generated_artifacts_source_model_sha256_check'),
 )
 
+jobs = Table('jobs', metadata,
+    Column('id', UUID(), primary_key=True, nullable=False),
+    Column('execution_key', TEXT(), nullable=False),
+    Column('project_id', UUID(), nullable=False),
+    Column('document_id', TEXT(), nullable=False),
+    Column('base_sequence', BIGINT(), nullable=False),
+    Column('revision_id', UUID(), nullable=True),
+    Column('kind', TEXT(), nullable=False),
+    Column('input_signature', CHAR(length=64), nullable=False),
+    Column('inputs', JSONB(astext_type=Text()), nullable=False),
+    Column('artifact_intent', JSONB(astext_type=Text()), nullable=False),
+    Column('state', TEXT(), nullable=False, server_default=text("'QUEUED'::text")),
+    Column('attempts', INTEGER(), nullable=False, server_default=text('0')),
+    Column('max_attempts', INTEGER(), nullable=False, server_default=text('3')),
+    Column('lease_owner', TEXT(), nullable=True),
+    Column('lease_token', UUID(), nullable=True),
+    Column('lease_expires_at', TIMESTAMP(timezone=True), nullable=True),
+    Column('result', JSONB(astext_type=Text()), nullable=True),
+    Column('error', JSONB(astext_type=Text()), nullable=True),
+    Column('created_at', TIMESTAMP(timezone=True), nullable=False, server_default=text('clock_timestamp()')),
+    Column('updated_at', TIMESTAMP(timezone=True), nullable=False, server_default=text('clock_timestamp()')),
+    Column('started_at', TIMESTAMP(timezone=True), nullable=True),
+    Column('completed_at', TIMESTAMP(timezone=True), nullable=True),
+    ForeignKeyConstraint(['project_id', 'document_id'], ['design_documents.project_id', 'design_documents.id'], name='fk_jobs_document', **{'ondelete': 'RESTRICT'}),
+    ForeignKeyConstraint(['project_id', 'revision_id'], ['project_revisions.project_id', 'project_revisions.id'], name='fk_jobs_revision', **{'ondelete': 'RESTRICT'}),
+    ForeignKeyConstraint(['project_id'], ['projects.id'], name='jobs_project_id_fkey', **{'ondelete': 'RESTRICT'}),
+    UniqueConstraint(*['execution_key'], name='jobs_execution_key_key'),
+    UniqueConstraint(*['lease_token'], name='jobs_lease_token_key'),
+    CheckConstraint('attempts >= 0 AND attempts <= max_attempts', name='ck_jobs_attempts'),
+    CheckConstraint("(state = ANY (ARRAY['SUCCEEDED'::text, 'FAILED'::text, 'CANCELLED'::text])) = (completed_at IS NOT NULL)", name='ck_jobs_completed'),
+    CheckConstraint("(state = 'FAILED'::text) = (error IS NOT NULL)", name='ck_jobs_error'),
+    CheckConstraint("state = 'RUNNING'::text AND lease_owner IS NOT NULL AND length(lease_owner) > 0 AND lease_token IS NOT NULL AND lease_expires_at IS NOT NULL OR state <> 'RUNNING'::text AND lease_owner IS NULL AND lease_token IS NULL AND lease_expires_at IS NULL", name='ck_jobs_lease'),
+    CheckConstraint("state <> 'QUEUED'::text OR attempts < max_attempts", name='ck_jobs_queued'),
+    CheckConstraint("result IS NULL OR state = 'SUCCEEDED'::text", name='ck_jobs_result'),
+    CheckConstraint("(attempts = 0) = (started_at IS NULL) AND ((state <> ALL (ARRAY['RUNNING'::text, 'SUCCEEDED'::text])) OR attempts > 0)", name='ck_jobs_started'),
+    CheckConstraint("jsonb_typeof(artifact_intent) = 'object'::text", name='jobs_artifact_intent_check'),
+    CheckConstraint('base_sequence >= 0', name='jobs_base_sequence_check'),
+    CheckConstraint("jsonb_typeof(error) = 'object'::text", name='jobs_error_check'),
+    CheckConstraint('length(execution_key) > 0', name='jobs_execution_key_check'),
+    CheckConstraint("input_signature ~ '^[0-9a-f]{64}$'::text", name='jobs_input_signature_check'),
+    CheckConstraint("jsonb_typeof(inputs) = 'object'::text", name='jobs_inputs_check'),
+    CheckConstraint('length(kind) > 0', name='jobs_kind_check'),
+    CheckConstraint('max_attempts >= 1 AND max_attempts <= 100', name='jobs_max_attempts_check'),
+    CheckConstraint("jsonb_typeof(result) = 'object'::text", name='jobs_result_check'),
+    CheckConstraint("state = ANY (ARRAY['QUEUED'::text, 'RUNNING'::text, 'SUCCEEDED'::text, 'FAILED'::text, 'CANCELLED'::text])", name='jobs_state_check'),
+)
+
 manufacturers = Table('manufacturers', metadata,
     Column('id', UUID(), primary_key=True, nullable=False, server_default=text('gen_random_uuid()')),
     Column('code', TEXT(), nullable=False),
@@ -1246,6 +1293,9 @@ Index('ix_terminal_component_role', component_terminals.c['component_version_id'
 Index('ix_component_version_rating', component_versions.c['rated_current_a'], component_versions.c['rated_voltage_v'], component_versions.c['breaking_capacity_ka'], unique=False, postgresql_include=[])
 Index('ix_component_catalog_category', components.c['category_code'], components.c['component_kind'], unique=False, postgresql_include=[])
 Index('ix_generated_artifact_revision_type', generated_artifacts.c['project_revision_id'], generated_artifacts.c['artifact_type'], generated_artifacts.c['created_at'].desc(), unique=False, postgresql_include=[])
+Index('ix_jobs_document', jobs.c['document_id'], jobs.c['created_at'].desc(), unique=False, postgresql_include=[])
+Index('ix_jobs_expiry', jobs.c['lease_expires_at'], jobs.c['id'], unique=False, postgresql_where=text("(state = 'RUNNING'::text)"), postgresql_include=[])
+Index('ix_jobs_queue', jobs.c['created_at'], jobs.c['id'], unique=False, postgresql_where=text("(state = 'QUEUED'::text)"), postgresql_include=[])
 Index('ix_pdm_component_cem', pdm_component_instances.c['cem_component_instance_id'], unique=False, postgresql_include=[])
 Index('ix_product_versions_component', product_versions.c['component_version_id'], product_versions.c['status'], unique=False, postgresql_include=[])
 Index('uq_project_current_requirement', project_requirements.c['project_id'], project_requirements.c['code'], unique=True, postgresql_where=text('(project_revision_id IS NULL)'), postgresql_include=[])
@@ -1370,6 +1420,9 @@ class FunctionalModules(Base):
 
 class GeneratedArtifacts(Base):
     __table__ = generated_artifacts
+
+class Jobs(Base):
+    __table__ = jobs
 
 class Manufacturers(Base):
     __table__ = manufacturers
