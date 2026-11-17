@@ -462,6 +462,38 @@ document_operations = Table('document_operations', metadata,
     CheckConstraint('sequence > 0', name='document_operations_sequence_check'),
 )
 
+document_stage_states = Table('document_stage_states', metadata,
+    Column('document_id', TEXT(), primary_key=True, nullable=False),
+    Column('adapter', TEXT(), primary_key=True, nullable=False),
+    Column('stage_id', TEXT(), nullable=False),
+    Column('document_sequence', BIGINT(), nullable=False),
+    Column('input_version', BIGINT(), nullable=False),
+    Column('output_version', BIGINT(), nullable=False, server_default=text('0')),
+    Column('input_signature', CHAR(length=64), nullable=False),
+    Column('output_signature', CHAR(length=64), nullable=True),
+    Column('result_id', UUID(), nullable=True),
+    Column('status', TEXT(), nullable=False),
+    Column('integrity', TEXT(), nullable=False),
+    Column('blocked_by', JSONB(astext_type=Text()), nullable=False, server_default=text("'[]'::jsonb")),
+    Column('failure_code', TEXT(), nullable=True),
+    Column('updated_at', TIMESTAMP(timezone=True), nullable=False, server_default=text('now()')),
+    ForeignKeyConstraint(['document_id'], ['design_documents.id'], name='document_stage_states_document_id_fkey', **{'ondelete': 'RESTRICT'}),
+    ForeignKeyConstraint(['result_id', 'adapter', 'output_signature'], ['stage_results.id', 'stage_results.adapter', 'stage_results.input_signature'], name='fk_document_stage_result', **{'ondelete': 'RESTRICT'}),
+    CheckConstraint("(status = 'BLOCKED'::text) = (jsonb_array_length(blocked_by) > 0)", name='ck_document_stage_blocked'),
+    CheckConstraint("(status = 'FAILED'::text) = (failure_code IS NOT NULL)", name='ck_document_stage_failed'),
+    CheckConstraint('result_id IS NULL AND output_signature IS NULL AND output_version = 0 OR result_id IS NOT NULL AND output_signature IS NOT NULL AND output_version > 0', name='ck_document_stage_output'),
+    CheckConstraint("status <> 'VALID'::text OR integrity = 'VALID'::text AND result_id IS NOT NULL AND output_signature = input_signature", name='ck_document_stage_valid'),
+    CheckConstraint("jsonb_typeof(blocked_by) = 'array'::text", name='document_stage_states_blocked_by_check'),
+    CheckConstraint('document_sequence >= 0', name='document_stage_states_document_sequence_check'),
+    CheckConstraint("input_signature ~ '^[0-9a-f]{64}$'::text", name='document_stage_states_input_signature_check'),
+    CheckConstraint('input_version > 0', name='document_stage_states_input_version_check'),
+    CheckConstraint("integrity = ANY (ARRAY['MISSING'::text, 'VALID'::text, 'CORRUPT'::text])", name='document_stage_states_integrity_check'),
+    CheckConstraint("output_signature ~ '^[0-9a-f]{64}$'::text", name='document_stage_states_output_signature_check'),
+    CheckConstraint('output_version >= 0', name='document_stage_states_output_version_check'),
+    CheckConstraint("stage_id = ANY (ARRAY['requirements'::text, 'calculations'::text, 'selection'::text, 'connectivity'::text, 'schematic'::text, 'placement'::text, 'routes'::text, 'physical_validation'::text, 'bom'::text, 'cad'::text])", name='document_stage_states_stage_id_check'),
+    CheckConstraint("status = ANY (ARRAY['DIRTY'::text, 'BLOCKED'::text, 'FAILED'::text, 'VALID'::text])", name='document_stage_states_status_check'),
+)
+
 electrical_template_versions = Table('electrical_template_versions', metadata,
     Column('id', UUID(), primary_key=True, nullable=False, server_default=text('gen_random_uuid()')),
     Column('template_id', UUID(), nullable=False),
@@ -1120,6 +1152,27 @@ rule_sets = Table('rule_sets', metadata,
     UniqueConstraint(*['code'], name='rule_sets_code_key'),
 )
 
+stage_results = Table('stage_results', metadata,
+    Column('id', UUID(), primary_key=True, nullable=False),
+    Column('stage_id', TEXT(), nullable=False),
+    Column('adapter', TEXT(), nullable=False),
+    Column('input_signature', CHAR(length=64), nullable=False),
+    Column('signature', JSONB(astext_type=Text()), nullable=False),
+    Column('result', JSONB(astext_type=Text()), nullable=False),
+    Column('assets', JSONB(astext_type=Text()), nullable=False, server_default=text("'[]'::jsonb")),
+    Column('result_sha256', CHAR(length=64), nullable=False),
+    Column('created_at', TIMESTAMP(timezone=True), nullable=False, server_default=text('now()')),
+    UniqueConstraint(*['id', 'adapter', 'input_signature'], name='uq_stage_results_reference'),
+    CheckConstraint("signature @> jsonb_build_object('adapter', adapter, 'stage_id', stage_id)", name='ck_stage_results_identity'),
+    CheckConstraint('length(adapter) > 0', name='stage_results_adapter_check'),
+    CheckConstraint("jsonb_typeof(assets) = 'array'::text", name='stage_results_assets_check'),
+    CheckConstraint("input_signature ~ '^[0-9a-f]{64}$'::text", name='stage_results_input_signature_check'),
+    CheckConstraint("jsonb_typeof(result) = 'object'::text", name='stage_results_result_check'),
+    CheckConstraint("result_sha256 ~ '^[0-9a-f]{64}$'::text", name='stage_results_result_sha256_check'),
+    CheckConstraint("jsonb_typeof(signature) = 'object'::text", name='stage_results_signature_check'),
+    CheckConstraint("stage_id = ANY (ARRAY['requirements'::text, 'calculations'::text, 'selection'::text, 'connectivity'::text, 'schematic'::text, 'placement'::text, 'routes'::text, 'physical_validation'::text, 'bom'::text, 'cad'::text])", name='stage_results_stage_id_check'),
+)
+
 template_component_roles = Table('template_component_roles', metadata,
     Column('id', UUID(), primary_key=True, nullable=False, server_default=text('gen_random_uuid()')),
     Column('template_version_id', UUID(), nullable=False),
@@ -1200,6 +1253,7 @@ Index('ix_project_revision_latest', project_revisions.c['project_id'], project_r
 Index('ix_projects_recent', projects.c['last_opened_at'].desc(), unique=False, postgresql_where=text('(deleted_at IS NULL)'), postgresql_include=[])
 Index('ix_provenance_subject', provenance.c['subject_kind'], provenance.c['subject_key'], unique=False, postgresql_include=[])
 Index('ix_revision_dependency_target', revision_dependencies.c['project_revision_id'], revision_dependencies.c['target_kind'], revision_dependencies.c['target_key'], unique=False, postgresql_include=[])
+Index('ix_stage_results_signature', stage_results.c['input_signature'], stage_results.c['created_at'].desc(), stage_results.c['id'].desc(), unique=False, postgresql_include=[])
 Index('ix_validation_results_run_status', validation_results.c['validation_run_id'], validation_results.c['result_status'], unique=False, postgresql_include=[])
 Base = declarative_base(metadata=metadata)
 
@@ -1298,6 +1352,9 @@ class DesignRules(Base):
 
 class DocumentOperations(Base):
     __table__ = document_operations
+
+class DocumentStageStates(Base):
+    __table__ = document_stage_states
 
 class ElectricalTemplateVersions(Base):
     __table__ = electrical_template_versions
@@ -1439,6 +1496,9 @@ class RuleSetVersions(Base):
 
 class RuleSets(Base):
     __table__ = rule_sets
+
+class StageResults(Base):
+    __table__ = stage_results
 
 class TemplateComponentRoles(Base):
     __table__ = template_component_roles

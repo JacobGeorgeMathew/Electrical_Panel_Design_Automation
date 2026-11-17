@@ -13,10 +13,14 @@ def audit_assets(database):
     with database.sessions() as session:
         rows = [dict(r) for table in (m.cad_assets, m.generated_artifacts)
                 for r in session.execute(select(table).where(table.c.generation_status == 'READY')).mappings()]
-    referenced = {r['storage_key'] for r in rows if r['storage_key']}
+        # Cache references retain shared content too, including superseded entries.
+        # Malformed metadata is a finding rather than a failed audit command.
+        rows.extend(asset if isinstance(asset, dict) else {}
+                    for manifest in session.scalars(select(m.stage_results.c.assets)) for asset in manifest)
+    referenced = {r['storage_key'] for r in rows if isinstance(r.get('storage_key'), str)}
     stored = {p.relative_to(assets.root).as_posix() for p in assets.root.glob('sha256/*/*/*') if p.is_file()}
     return {'referenced': len(referenced),
-            'missing_or_corrupt': sum(r['storage_backend'] != 'LOCAL' or assets.availability(r) != 'READY' for r in rows),
+            'missing_or_corrupt': sum(r.get('storage_backend') != 'LOCAL' or assets.availability(r) != 'READY' for r in rows),
             'unreferenced_files': len(stored - referenced), 'automatic_deletion': False}
 
 

@@ -1,6 +1,6 @@
 # PostgreSQL runtime integration
 
-Current migration head is `0005_design_documents`, following `0004_projects` and `0003_constraints`. Existing installations require an intended forward upgrade with `manage initialize`, `manage import-legacy`, then `manage seed-constraints`. See [document storage](DESIGN_DOCUMENT_STORAGE.md), [publication integrity and roles](REVISION_INTEGRITY.md), and [strict-constraint rollout](../CONSTRAINT_POLICY_UPDATE.md). Back up valuable data before upgrading; audits do not require migration or import writes.
+Current migration head is `0007_stage_results`, following `0006_operations` and `0005_design_documents`. Existing installations require an intended forward upgrade with `manage initialize`, `manage import-legacy`, then `manage seed-constraints`. See [document storage](DESIGN_DOCUMENT_STORAGE.md), [stage cache contracts](../architecture/stage-dependencies.md#content-signatures-and-stage-cache-p3-t04), [publication integrity and roles](REVISION_INTEGRITY.md), and [strict-constraint rollout](../CONSTRAINT_POLICY_UPDATE.md). Back up valuable data before upgrading; audits do not require migration or import writes.
 
 The FastAPI application now uses PostgreSQL repositories. The original JSON files remain import sources and explicit unit-test fixtures; HTTP requests do not fall back to them. React continues to call FastAPI and never receives database connection settings.
 

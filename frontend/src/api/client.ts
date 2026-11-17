@@ -87,8 +87,12 @@ export const fetchRevisions = (projectId: string) => request<RevisionSummary[]>(
 export const restoreRevision = (projectId: string, revisionId: string, version: number) =>
   request<DesignPackage>('/projects/' + id(projectId) + '/revisions/' + id(revisionId) + '/restore', json('POST', { expected_version: version }));
 export const propagateChange = (projectId: string, modifiedField: string, newValue: any, version?: number) =>
-  request<{ new_design: DesignPackage; diff_report: any }>('/projects/' + id(projectId) + '/design/propagate-change',
+  request<{ status: 'PREVIEW'; persisted: false; batch: import('../types/operations').OperationPreviewRequest;
+    preview: import('../types/operations').OperationPreview }>('/projects/' + id(projectId) + '/design/propagate-change',
     json('POST', { modified_field: modifiedField, new_value: newValue, expected_version: version }), 90000);
+export const recomputeDesign = (projectId: string, data: import('../types/operations').RecomputeRequest) =>
+  request<import('../types/operations').RecomputeResponse>('/projects/' + id(projectId) + '/design/recompute',
+    json('POST', data), 90000);
 export const fetchFreeCADScript = (projectId: string) => request<{ script: string; revision_id: string }>('/projects/' + id(projectId) + '/cad/freecad-script');
 export const validatePlacement = (projectId: string, pdm: PhysicalDesignModel) =>
   request<{ pdm: PhysicalDesignModel; validation_results: any[]; is_valid: boolean }>('/projects/' + id(projectId) + '/design/reroute-placement', json('POST', pdm));

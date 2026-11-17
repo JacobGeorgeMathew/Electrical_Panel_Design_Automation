@@ -4,10 +4,17 @@ from app.api.dependencies import get_service
 from app.models.api import ChangeInput, DesignPackage
 from app.models.pdm import PhysicalDesignModel
 from app.models.operations import OperationPreviewRequest, GenerationProposal
+from app.models.recompute import RecomputeRequest, RecomputeResponse
 from app.services.validation_engine import ValidationEngine
 from app.services.design_errors import DesignError
 
 router=APIRouter(prefix='/api/projects/{project_id}/design',tags=['design'])
+
+
+@router.post('/recompute', response_model=RecomputeResponse)
+def recompute_design(project_id: str, data: RecomputeRequest, service=Depends(get_service)):
+    from app.services.recompute import recompute
+    return recompute(service, project_id, data)
 
 
 @router.post('/generation-proposal', response_model=GenerationProposal)

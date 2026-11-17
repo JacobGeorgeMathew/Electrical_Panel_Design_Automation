@@ -103,13 +103,13 @@ class ProjectService:
                 raise PersistenceError('INVALID_CONFIGURATION','Configured enclosure cannot contain its mounting plate.')
         return rows,selected
 
-    def _inputs(self,key):
+    def _inputs(self,key,*,resolve_capabilities=True):
         # All DB reads end here, before optimization or geometry generation begins.
         with self.db.sessions() as s:
             project=ProjectRepository(s).get(key)
             project['_source_document']=DocumentRepository(s).load(ProjectRepository(s).row(key)).model_dump(mode='json')
             catalog=CatalogRepository(s,self.assets)
-            template=catalog.template(project['archetype'],project['archetype_version_id'])
+            template=catalog.template(project['archetype'],project['archetype_version_id'],resolve_capabilities=resolve_capabilities)
             rows=catalog.engine_catalog()
             enclosures=catalog.enclosures()
             templates=catalog.electrical_templates(template['archetype_version_id'])
@@ -241,15 +241,8 @@ class ProjectService:
         return self.load_revision(key,saved['revision_id'])
 
     def propagate(self,key,field,value,expected_version=None):
-        with self.db.sessions() as s:
-            project=ProjectRepository(s).get(key)
-        old=self.load_revision(key)
-        if field not in {q['id'] for q in self._inputs(key)[1]['questions']}:
-            raise DesignError('INVALID_CHANGE','Unknown DB requirement.')
-        version=project['lock_version'] if expected_version is None else expected_version
-        new=self.generate(key,{field:value},version)
-        return {'new_design':new,'diff_report':ChangePropagationEngine().compute_diff(old['cem'],new['cem'],old['pdm'],new['pdm'],field,
-            old_values=project['requirements'],new_values={**project['requirements'],field:value})}
+        from app.services.recompute import preview_change
+        return preview_change(self,key,field,value,expected_version)
 
     def list_artifacts(self,key):
         with self.db.sessions() as s:

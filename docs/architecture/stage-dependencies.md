@@ -11,9 +11,11 @@ This is the contract boundary for adapters and execution work. Detached electric
 and physical/documentation adapters are described below. The
 [full generator](../../backend/app/services/orchestrator.py) still runs its existing
 pipeline, including its enclosure candidate/retry loop. The registry and adapters
-do not implement a cache/scheduler or replace propagation's current full
-generation/publication behavior. Incremental scheduling/full semantic equivalence
-remain separate P3 work. The planning lifecycle remains read only.
+do not themselves implement execution scheduling. P3-T05 now provides the
+[incremental scheduler and explicit Recompute boundary](incremental-recompute.md),
+including verified cache reuse and preview/operation acceptance in place of
+propagation's immediate publication. The full generator remains the independent
+automatic-generation oracle. The planning lifecycle remains read only.
 
 ## Registry invariants
 
@@ -333,3 +335,85 @@ terminal endpoints, opaque identities, locks, schema round trips and immutable
 inputs; poison file/repository/database access after materializing inputs; and
 reject invalid physical data before CAD serialization. Verification commands and
 limits are recorded in the [attempt report](../../planning/task_reports/P3-T03/attempt-01.md).
+
+## Content signatures and stage cache (P3-T04)
+
+[cache.py](../../backend/app/services/stages/cache.py) registers the typed adapters
+above and provides content signatures and PostgreSQL cache/state storage.
+`0007_stage_results` adds two empty tables without converting existing documents
+or rewriting any revision. Readiness requires that migration; apply it only during
+an intended upgrade. Generated mappings come from `tools.build_schema_models`.
+
+`make_signature(adapter, inputs, pins, policy, context)` captures the complete
+detached input DTO as canonical JSON, including supplied catalog/template content,
+opaque identity bindings and significant array order. Dictionary order does not
+affect the signature. Adapter names distinguish the four placement substeps and
+local geometry from whole-network routing. Input/output JSON schema fingerprints,
+the registry schema and relevant contracts/algorithm versions are part of the key.
+Mismatched input types, ownership, engine/catalog pins, CAD pins and saved PDM
+policy are rejected. Context must be supplied for zoning/ducts, which lack their
+own electrical context field.
+
+Exact version dependencies follow each stage and its registry prerequisites:
+
+| Pin/content change | Signature consumers |
+| --- | --- |
+| Rules or archetype | All adapters |
+| Component catalog | Selection and downstream adapters |
+| Enclosure/hardware catalog or saved policy content/version | Placement substeps, routes, physical validation, BOM and CAD |
+| Generator or model versions | CAD |
+| Engine version or unknown catalog key | All adapters |
+| Algorithm/contract change | That stage and downstream adapters |
+
+Policy content is hashed independently of its version label. Whole catalog
+manifest hashes are deliberately excluded: exact consumed pins and materialized
+content determine eligibility, so publishing an unrelated catalog does not evict
+an otherwise eligible result. Unknown catalog keys are conservative. Callers must
+resolve published immutable versions before constructing inputs. A version ID is
+not proof of publication or approval. Signatures conservatively include the whole
+typed adapter input, rather than guessing which attributes its implementation
+might ignore. Document sequence, provenance and transient display state are outside
+that boundary. Supplying changed typed input content produces a different key.
+
+`StageCache.lookup(signature)` reads the newest matching entry, closes the read
+transaction, validates the complete signature, typed output and result/asset
+envelope hash, and verifies every managed file's key, size and SHA-256. It returns
+`MISSING`, `VALID` or `CORRUPT`; it performs no engineering, repair or writes and
+never falls back behind a corrupt newest entry. Asset audits include all cache
+asset references, including superseded entries, without deleting shared content.
+
+The caller explicitly registers desired inputs with `observe(document_id,
+sequence, signature, blocked_by=...)`. It updates document-local input/output
+versions and `DIRTY`, `BLOCKED`, `FAILED` or `VALID` metadata, preserving the prior
+accepted output reference. Input versions advance only when the desired signature
+changes; output versions advance only when accepted output/asset content changes.
+`VALID` describes this adapter's accepted cache result, not whole-document
+engineering validity or publication eligibility. Dependency blockers are supplied
+by the caller's plan; cache inspection never executes prerequisites.
+
+After explicitly executing `ADAPTERS[name].execute(inputs)` outside transactions,
+the caller uses `record_success`, or explicitly uses `accept_cached` for a verified
+hit. Both fence completion by current document sequence and registered input
+signature and refuse blocked state. `record_failure` stores only a structured code
+and retains prior output. `observe` retains same-input failure until explicit
+success. Hashing/assets run outside transactions; cache publication and its state
+update share a short transaction with project/document locks. Changed document
+sequence or desired input signature prevents an old result from becoming current.
+These fences do not implement durable worker leases, cancellation or job retries.
+
+Stage results are append-only through the runtime engine. Explicit recomputation
+may append a replacement for a corrupt entry; it does not overwrite that entry,
+an accepted historical output, a shared asset or a revision. Cache adoption changes
+cache metadata only. Working snapshots, revision output manifests, project locks
+and recovery checkpoints remain unchanged. No Save/load/generate/propagation route
+is wired to execute this cache. P3-T05's explicit Recompute endpoint now uses it;
+see [execution and acceptance](incremental-recompute.md). Publication and strict
+engineering checks retain their
+existing responsibilities and prototype limitations.
+
+[Cache tests](../../backend/tests/test_stage_cache.py) cover the pin matrix, policy
+content, schemas, canonical ordering, detached results, corrupt envelopes/typed
+payloads/assets, explicit replacement, metadata clocks, completion fences, atomic
+rollback and historical row preservation. The
+[attempt report](../../planning/task_reports/P3-T04/attempt-01.md) records actual
+commands, profile outcomes and remaining verification limits.

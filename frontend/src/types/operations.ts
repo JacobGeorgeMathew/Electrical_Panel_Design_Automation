@@ -18,6 +18,21 @@ export interface GenerationProposal {
   preview: OperationPreview | null;
 }
 
+export interface RecomputeRequest {
+  document_id: string;
+  expected_document_sequence: number;
+  expected_version: number;
+}
+
+export interface RecomputeResponse extends GenerationProposal {
+  scheduled_stages: DirtyStage[];
+  stage_executions: {
+    stage_id: DirtyStage; adapter: string;
+    status: 'EXECUTED' | 'CACHED' | 'FAILED' | 'RETAINED';
+    executions: number; elapsed_ms: number; input_signature: string | null; failure_code: string | null;
+  }[];
+}
+
 export interface OperationOrigin {
   kind: DocumentProvenance['origin'];
   actor_id: string;

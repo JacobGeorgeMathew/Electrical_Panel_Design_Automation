@@ -26,13 +26,13 @@ PROPOSAL_TTL_SECONDS = 900
 MAX_PROPOSALS = 32
 
 
-def remember_proposal(database, base, request, candidate):
+def remember_proposal(database, base, request, candidate, *, recompute=False):
     """Bounded, process-local review state; restart/expiry requires new preview."""
     with _proposal_lock:
         entries = _proposals.setdefault(database, OrderedDict())
         entries[str(request.batch_id)] = (monotonic() + PROPOSAL_TTL_SECONDS,
             content_hash(request.model_dump(mode='json')), document_hash(base.document),
-            candidate.model_dump(mode='json', include={'document', 'snapshots'}))
+            candidate.model_dump(mode='json', include={'document', 'snapshots'}), recompute)
         while len(entries) > MAX_PROPOSALS:
             entries.popitem(last=False)
 
@@ -88,25 +88,7 @@ def generated_document(base, requirements, result, manifest):
     requirements.items = [old_requirements[r.id].model_copy(deep=True)
         if r.id in old_requirements and old_requirements[r.id].value == r.value else r for r in requirements.items]
     cem['requirements'] = [r.model_dump(mode='json') for r in requirements.items]
-    legacy = result['schematic']
-    previous = base.snapshots.schematic
-    old_symbols = {s.component_id: s for s in previous.symbols} if previous else {}
-    symbols = []
-    for s in legacy['symbols']:
-        old = old_symbols.get(s['id'])
-        pins = {p.terminal_id: p for p in old.pins} if old else {}
-        symbols.append(SchematicSymbol(id=old.id if old else 'symbol:' + s['id'], component_id=s['id'],
-            position=dict(x=s['x'], y=s['y']), width_mm=s['width'], height_mm=s['height'], label=s['label'],
-            pins=[SchematicPin(id=pins[t['id']].id if t['id'] in pins else 'pin:' + t['port_id'],
-                terminal_id=t['id'], position=dict(x=t['x'], y=t['y']), direction=t['direction']) for t in s['terminals']]))
-    pins = {(s.component_id, p.terminal_id): p.id for s in symbols for p in s.pins}
-    old_wires = {w.conductor_id: w.id for w in previous.wires} if previous else {}
-    page = SchematicPresentation(id=previous.id if previous else 'schematic:' + doc.panel_id,
-        project_id=doc.project_id, panel_id=doc.panel_id, page_id=previous.page_id if previous else 'page:' + doc.panel_id,
-        width_mm=legacy['width'], height_mm=legacy['height'], symbols=symbols,
-        wires=[SchematicWire(id=old_wires.get(w['id'], 'wire:' + w['id']), conductor_id=w['id'],
-            source_pin_id=pins[w['from'], w['from_terminal']], target_pin_id=pins[w['to'], w['to_terminal']],
-            waypoints=w['waypoints']) for w in legacy['wires']])
+    page = schematic_presentation(doc, base.snapshots.schematic, result['schematic'])
     root = next((i for i in doc.enclosure_interfaces if i.component_id == 'PANEL_ROOT'), None)
     if root is None:
         doc.enclosure_interfaces.append(EnclosureInterface(component_id='PANEL_ROOT', terminal_ids=['EARTH_STUD']))
@@ -122,6 +104,27 @@ def generated_document(base, requirements, result, manifest):
     # Derived data is computed, but publication/artifact generation is separate.
     doc.dirty_stages = ['cad']
     return ResolvedDocument.model_validate(candidate.model_dump(mode='json'))
+
+
+def schematic_presentation(doc, previous, legacy):
+    """Project legacy generated layout while preserving document-owned IDs."""
+    old_symbols = {s.component_id: s for s in previous.symbols} if previous else {}
+    symbols = []
+    for s in legacy['symbols']:
+        old = old_symbols.get(s['id'])
+        pins = {p.terminal_id: p for p in old.pins} if old else {}
+        symbols.append(SchematicSymbol(id=old.id if old else 'symbol:' + s['id'], component_id=s['id'],
+            position=dict(x=s['x'], y=s['y']), width_mm=s['width'], height_mm=s['height'], label=s['label'],
+            pins=[SchematicPin(id=pins[t['id']].id if t['id'] in pins else 'pin:' + t['port_id'],
+                terminal_id=t['id'], position=dict(x=t['x'], y=t['y']), direction=t['direction']) for t in s['terminals']]))
+    pins = {(s.component_id, p.terminal_id): p.id for s in symbols for p in s.pins}
+    old_wires = {w.conductor_id: w.id for w in previous.wires} if previous else {}
+    return SchematicPresentation(id=previous.id if previous else 'schematic:' + doc.panel_id,
+        project_id=doc.project_id, panel_id=doc.panel_id, page_id=previous.page_id if previous else 'page:' + doc.panel_id,
+        width_mm=legacy['width'], height_mm=legacy['height'], symbols=symbols,
+        wires=[SchematicWire(id=old_wires.get(w['id'], 'wire:' + w['id']), conductor_id=w['id'],
+            source_pin_id=pins[w['from'], w['from_terminal']], target_pin_id=pins[w['to'], w['to_terminal']],
+            waypoints=w['waypoints']) for w in legacy['wires']])
 
 
 def resolve_generation(database, key, base, overrides):
@@ -140,7 +143,9 @@ def apply_generation(candidate, op, choices):
     if (op.origin.kind != 'AUTOMATIC' or op.proposal_status != 'PROPOSED'
             or digest(generated) != op.parameters.candidate_sha256):
         raise PersistenceError('GENERATION_PROPOSAL_CHANGED', 'Generation differs from the reviewed proposal. Preview again.', 409)
-    blocked = conflicts(candidate, generated)
+    # Recompute candidates are retained server results produced with manual
+    # intent as an input. Clients cannot opt into this through request fields.
+    blocked = [] if choices.recompute else conflicts(candidate, generated)
     if blocked:
         raise PersistenceError('GENERATION_INTENT_CONFLICT', 'Generation would replace manual intent. Review conflicts.', 409)
     candidate.snapshots = generated.snapshots.model_copy(deep=True)
@@ -166,18 +171,22 @@ def generation_choices(database, key, base, request, choices):
         if stored[1] != content_hash(request.model_dump(mode='json')) or stored[2] != document_hash(base.document):
             raise PersistenceError('GENERATION_PROPOSAL_CHANGED', 'Proposal or document base changed. Preview again.', 409)
         generated = ResolvedDocument.model_validate(stored[3])
-    return replace(choices, generation=generated)
+    return replace(choices, generation=generated, recompute=stored[4])
 
 
 def propose_generation(database, key, overrides=None):
     from app.services.document_service import DocumentService
-    from app.services.operations.engineering import EngineeringChoices
-    from app.services.operations.registry import preview_operations
     base = DocumentService(database).load(key)
     generated = resolve_generation(database, key, base, overrides or {})
     blocked = conflicts(base, generated)
     if blocked:
         return dict(status='CONFLICT', persisted=False, conflicts=blocked, batch=None)
+    return propose_candidate(database, base, generated, overrides=overrides)
+
+
+def propose_candidate(database, base, generated, *, overrides=None, recompute=False):
+    from app.services.operations.engineering import EngineeringChoices
+    from app.services.operations.registry import preview_operations
     doc = base.document
     proposal_id = str(uuid4())
     batch = OperationPreviewRequest.model_validate(dict(batch_id=proposal_id, document_id=doc.document_id,
@@ -187,6 +196,6 @@ def propose_generation(database, key, overrides=None):
             target=dict(panel_id=doc.panel_id), parameters=dict(overrides=overrides or {}, candidate_sha256=digest(generated)),
             preconditions=dict(snapshot_sha256=doc.models.requirements.sha256,
                 model_sha256={k: getattr(doc.models, k).sha256 if getattr(doc.models, k) else None for k in KINDS}))]))
-    preview = preview_operations(base, batch, EngineeringChoices(generation=generated))
-    remember_proposal(database, base, batch, generated)
+    preview = preview_operations(base, batch, EngineeringChoices(generation=generated, recompute=recompute))
+    remember_proposal(database, base, batch, generated, recompute=recompute)
     return dict(status='REVIEW_REQUIRED', persisted=False, conflicts=[], batch=batch, preview=preview)

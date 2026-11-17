@@ -1,7 +1,7 @@
 # Project lifecycle
 
 Apply the additive migrations during an intended database setup or upgrade before
-starting the application. The current head is `0006_operations`, following
+starting the application. The current head is `0007_stage_results`, following `0006_operations`,
 `0004_projects` and `0005_design_documents`:
 
 ```sh
