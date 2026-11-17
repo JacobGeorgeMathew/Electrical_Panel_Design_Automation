@@ -72,8 +72,9 @@ def test_cancellation_kills_work_and_slot_is_reusable():
 
 
 def queued(db, api):
+    from tests.historical_publication import historical_design
     project = create(api)
-    revision = checked(api.post(f'/api/projects/{project["id"]}/design/generate', json={}))
+    revision = historical_design(api, project['id'])
     service = ProjectService(db, executor=object())
     artifact = service.queue_artifact(project['id'], 'GLB', revision['lock_version'])
     runner = JobRunner(db)

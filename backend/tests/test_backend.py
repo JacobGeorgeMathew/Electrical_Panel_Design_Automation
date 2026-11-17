@@ -263,7 +263,7 @@ def test_change_diff_reports_actual_field_values_and_stages():
 # Database-backed HTTP lifecycle/propagation tests live in test_postgres.py.
 
 
-def test_validate_placement_endpoint_checks_the_submitted_pdm_and_project_identity():
+def test_validate_placement_endpoint_checks_server_resolved_geometry(monkeypatch):
     from app.api import routes_design
     from app.models.pdm import PhysicalComponent, PhysicalDesignModel, Position3D
 
@@ -275,10 +275,10 @@ def test_validate_placement_endpoint_checks_the_submitted_pdm_and_project_identi
             category="MCCB", position=Position3D(x=-10, y=40, z=10), width=40, height=60, depth=40,
             zone_name="POWER", heat_loss_watts=1, cad_model="demo")],
     )
-    result = routes_design.validate_placement("PROJECT-01", pdm)
+    from app.models.cem import CanonicalEngineeringModel
+    monkeypatch.setattr(routes_design, 'placement_inputs', lambda service, key, submitted:
+        (pdm.model_copy(deep=True), CanonicalEngineeringModel(project_id='PROJECT-01', panel_id='DB-01', panel_type='DB')))
+    result = routes_design.validate_placement("PROJECT-01", pdm, object())
     assert result["pdm"]["components"][0]["position"]["x"] == -10
     assert any(item["type"] == "BOUNDARY" and item["severity"] == "CRITICAL"
                for item in result["validation_results"])
-    with pytest.raises(DesignError) as mismatch:
-        routes_design.validate_placement("OTHER-PROJECT", pdm)
-    assert mismatch.value.code == "PROJECT_MISMATCH"

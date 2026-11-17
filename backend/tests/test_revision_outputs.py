@@ -1,4 +1,5 @@
 """Complete output hashing and per-statement publication rollback evidence."""
+from tests.historical_publication import seed_historical_revision
 from copy import deepcopy
 from dataclasses import replace
 from uuid import uuid4
@@ -122,7 +123,7 @@ def test_each_database_write_rolls_back_and_publication_has_no_engine_work(api, 
     p = create(api)
     # Use a bounded real DB engineering design, including terminals, nets, routes,
     # validation, mechanical hardware and both generated file formats.
-    design = service.generate(p['id'], {'num_feeders': 4}, p['lock_version'])
+    design = seed_historical_revision(service, p['id'], {'num_feeders': 4}, p['lock_version'])
     project, template, *_ = service._inputs(p['id'])
     reqs = service.validate(template, project['id'], project['requirements'])
     manifest, snapshots, files = read_bundle(db, identifier(design['revision_id']))
@@ -218,7 +219,7 @@ def test_each_database_write_rolls_back_and_publication_has_no_engine_work(api, 
 def test_project_and_document_fences_reject_prepared_outputs(api, postgres_database):
     service = ProjectService(postgres_database)
     p = create(api)
-    design = service.generate(p['id'], {'num_feeders': 4}, p['lock_version'])
+    design = seed_historical_revision(service, p['id'], {'num_feeders': 4}, p['lock_version'])
     project, template, *_ = service._inputs(p['id'])
     reqs = service.validate(template, project['id'], project['requirements'])
     files = service.generate_files(design)
@@ -276,7 +277,7 @@ def test_generate_restore_and_import_prepare_before_database_writes(api, postgre
     event.listen(postgres_database.engine, 'commit', clear)
     event.listen(postgres_database.engine, 'rollback', clear)
     try:
-        design = service.generate(p['id'], {'num_feeders': 4}, p['lock_version'])
+        design = seed_historical_revision(service, p['id'], {'num_feeders': 4}, p['lock_version'])
         restored = service.restore(p['id'], design['revision_id'], design['lock_version'])
         assert restored['revision_no'] == 2
         lifecycle = ProjectLifecycle(service)

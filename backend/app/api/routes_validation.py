@@ -8,6 +8,15 @@ from app.models.pdm import PhysicalDesignModel
 from app.models.validation import ProjectValidationResponse
 from app.services.validation_report import build_validation_report
 router=APIRouter(prefix='/api/projects/{project_id}/validation',tags=['validation'])
+
+
+@router.get('/working')
+def get_working_validation(project_id:str,service=Depends(get_service)):
+    from app.services.document_service import DocumentService
+    from app.services.publish_service import validation_evidence
+    return validation_evidence(DocumentService(service.db).load(project_id))
+
+
 @router.get('', response_model=ProjectValidationResponse)
 def get_validation_report(project_id:str,service=Depends(get_service),session=Depends(get_session)):
     design=service.load_revision(project_id)

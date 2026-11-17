@@ -1,4 +1,5 @@
 """Portable publications: isolated installation, hostile inputs and atomicity."""
+from tests.historical_publication import seed_historical_revision
 import asyncio
 import base64
 from copy import deepcopy
@@ -101,7 +102,7 @@ def test_request_stream_is_bounded_before_json_parsing(monkeypatch):
 def publication(api, postgres_database):
     project = create(api, 'Portable source')
     service = ProjectService(postgres_database)
-    first = service.generate(project['id'], {'num_feeders': 4}, project['lock_version'])
+    first = seed_historical_revision(service, project['id'], {'num_feeders': 4}, project['lock_version'])
     second = service.restore(project['id'], first['revision_id'], first['lock_version'])
     return service, project, first, second
 

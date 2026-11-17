@@ -136,6 +136,11 @@ class ProjectService:
         return project,template,rows,enclosures,component_models,templates,rules,str(rs),layout,hardware
 
     def generate(self,key,overrides=None,expected_version=None,configuration=None,*,propose=False):
+        if not propose:
+            with self.db.sessions() as session:
+                ProjectRepository(session).row(key)
+            raise PersistenceError('GENERATION_PROPOSAL_REQUIRED',
+                'Use Recompute, explicit acceptance and fenced Publish. Legacy generation cannot publish.',409)
         project,template,rows,enclosures,models,templates,rules,rsv,layout,hardware=self._inputs(key)
         source_document=project['_source_document']['document']
         if not propose and (source_document['document_sequence'] > 0

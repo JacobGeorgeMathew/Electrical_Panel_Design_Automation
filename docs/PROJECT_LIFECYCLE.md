@@ -130,11 +130,16 @@ durable asynchronous job; Activity & errors polls stage status and exposes cance
 retry, effect review and explicit proposal acceptance. Completion does not install
 outputs. Saved document clocks, hashes and local drafts fence acceptance, including
 after reload. See [workspace behavior](CAD_WORKSPACE.md).
-`Generate & publish revision (legacy)` names the combined compute/publication
-endpoint accurately. It can initialize an untouched, input-only document. After
+P3-T10 now rejects legacy generation publication on the server, including untouched
+documents. The fenced [Publish API](architecture/protected-publication.md) requires
+current stage evidence and a matching report; unresolved prototype engineering
+checks remain blocking. Draft Save and generation proposals remain available.
+The frontend's existing `Generate & publish revision (legacy)` label refers to the
+former combined compute/publication endpoint; requests now return a structured
+conflict. After
 any changed-input Save, existing CEM snapshot or generation intent, every frontend
 entry point shows disabled `Publish unavailable` with an explanation that Recompute
-and Publish remain separate; edited-document publication is pending. The store
+and Publish remain separate. The store
 independently blocks those requests;
 the server retains `GENERATION_PROPOSAL_REQUIRED`. Saving input drafts cannot make
 that legacy action eligible again. Questionnaire single-field generation also shows
@@ -151,7 +156,7 @@ the returned `ApplyGeneration` batch to change the working document as one undo
 group. Exact retries are idempotent; changed bases, protected manual models and
 locked placements cannot be overwritten. Acceptance leaves CAD dirty and creates
 no revision or artifact. The workspace reviews proposals produced by Recompute;
-the final Publish step for edited documents remains unavailable.
+the final Publish step remains blocked by unresolved required evidence.
 
 The input-only Save remains the explicit P1 compatibility boundary in
 [working-document-api.md](architecture/working-document-api.md). It advances project

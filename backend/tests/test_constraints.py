@@ -70,6 +70,7 @@ def test_even_warning_violations_cannot_be_published(monkeypatch):
 
 
 def test_seed_is_idempotent_and_failed_fixed_generation_preserves_project(api,postgres_database):
+    from tests.historical_publication import historical_design
     from app.persistence.seed_constraints import seed_constraints
     from app.persistence import models as m
     with postgres_database.sessions() as s:
@@ -79,14 +80,13 @@ def test_seed_is_idempotent_and_failed_fixed_generation_preserves_project(api,po
         assert s.scalar(select(func.count()).select_from(m.design_rule_versions))==before
         assert s.scalar(text('SELECT version_num FROM alembic_version'))=='0008_jobs'
     p=api.post('/api/projects',json={'name':'Strict constraints'}).json();key=p['id']
-    design=api.post('/api/projects/'+key+'/revisions',json={'expected_version':p['lock_version']})
-    assert design.status_code==201,design.text
-    saved=design.json()
+    saved=historical_design(api,key,expected_version=p['lock_version'])
     assert saved['pdm']['validation_policy']['din_clearance_mm']==4
     assert saved['validation_errors']==[] and api.get('/api/projects/'+key+'/design').json()['is_stale'] is False
     rejected=api.post('/api/projects/'+key+'/revisions',json={'expected_version':saved['lock_version'],
         'configuration':{'enclosure_id':'ENC_800_1000_300'}})
-    assert rejected.status_code==422
+    assert rejected.status_code==409
+    assert rejected.json()['error']['code']=='GENERATION_PROPOSAL_REQUIRED'
     current=api.get('/api/projects/'+key).json()
     assert current['current_revision_id']==saved['revision_id'] and current['lock_version']==saved['lock_version']
 

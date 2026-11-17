@@ -1,4 +1,5 @@
 import copy
+from tests.historical_publication import historical_design
 import hashlib
 import json
 import struct
@@ -46,7 +47,7 @@ def test_workflow_reopens_snapshots_projections_and_artifacts(api,postgres_datab
     assert any(q['id']=='phases' for q in questions)
     p=checked(api.put(f'/api/projects/{key}/answers',json={'expected_version':p['lock_version'],'answers':VALUES}))
     assert checked(api.get(f'/api/projects/{key}/answers'))['answers']['incomer_rating']==250
-    design=checked(api.post(f'/api/projects/{key}/revisions',json={'expected_version':p['lock_version'],'requirements':{}}),201)
+    design=historical_design(api,key,expected_version=p['lock_version'])
     reopened=checked(api.get(f'/api/projects/{key}/design'))
     assert reopened['cem']==design['cem'] and reopened['pdm']==design['pdm']
     rid=design['revision_id']
@@ -119,14 +120,14 @@ def test_atomic_revision_rollback(api,postgres_database,monkeypatch):
         raise RuntimeError('Injected failure after all projection writes')
     monkeypatch.setattr(project_service,'write_revision',broken)
     with pytest.raises(RuntimeError):
-        api.post('/api/projects/'+p['id']+'/design/generate',json={})
+        historical_design(api,p['id'])
     assert checked(api.get('/api/projects/'+p['id']+'/revisions'))==[]
     assert checked(api.get('/api/projects/'+p['id']))['lock_version']==p['lock_version']
 
 
 def test_background_cad_status_and_missing_assets(api,postgres_database):
     p=create(api)
-    design=checked(api.post('/api/projects/'+p['id']+'/design/generate',json={}))
+    design=historical_design(api,p['id'])
     job=checked(api.post('/api/projects/'+p['id']+'/cad-generation',json={'expected_version':design['lock_version'],'file_format':'GLB'}),202)
     for _ in range(40):
         status=checked(api.get(f'/api/projects/{p["id"]}/cad-generation/{job["id"]}'))
