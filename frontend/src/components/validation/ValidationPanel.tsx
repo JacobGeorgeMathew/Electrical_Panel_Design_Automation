@@ -38,6 +38,9 @@ export const ValidationPanel: React.FC = () => {
           <p className="text-xs text-slate-400">
             Simplified geometry, identity, and thermal-density checks for this prototype design
           </p>
+          <p className="text-xs text-amber-300">
+            Required engineering checks may remain unresolved. This report does not authorize publication or establish manufacturing or standards certification.
+          </p>
         </div>
 
         <div className="flex items-center space-x-4">
@@ -67,7 +70,7 @@ export const ValidationPanel: React.FC = () => {
           <div className="p-8 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center space-x-3 text-emerald-300">
             <CheckCircle2 className="w-6 h-6 flex-shrink-0" />
             <div>
-              <div className="font-semibold text-sm">All Design Constraints Passed Cleanly!</div>
+              <div className="font-semibold text-sm">No violations reported by the implemented physical checks.</div>
               <div className="text-xs text-emerald-400/80">
                 No critical component overlap or boundary issues were reported by the implemented checks.
               </div>

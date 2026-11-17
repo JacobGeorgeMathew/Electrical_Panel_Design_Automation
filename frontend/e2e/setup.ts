@@ -2,7 +2,7 @@ import {spawn} from 'node:child_process';
 import {access} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {createInterface} from 'node:readline';
-import {createServer, type ProxyOptions} from 'vite';
+import {createServer, preview, type InlineConfig, type ProxyOptions} from 'vite';
 import react from '@vitejs/plugin-react';
 
 /** Own both servers for one run. No fixed ports, existing-server reuse or state
@@ -17,16 +17,21 @@ export default async function setup() {
     const live = server as typeof server & {options: {target: string}};
     retarget.push(target => {live.options.target = target;});
   }};
-  const vite = await createServer({
+  const production = process.env.PANEL_E2E_PRODUCTION === '1';
+  const options: InlineConfig = {
     configFile: false, root: frontend, plugins: [react()],
     resolve: {alias: {'@': frontend + 'src'}},
     define: {'import.meta.env.VITE_API_BASE': JSON.stringify('/api')},
     server: {host: '127.0.0.1', port: 0, strictPort: true,
-      proxy: {'/api': {...proxy}, '/__e2e__': {...proxy}}},
-  });
-  await vite.listen();
+      proxy: {'/api': {...proxy}, '/__e2e__': {...proxy}, '/ready': {...proxy}, '/health': {...proxy}}},
+    preview: {host: '127.0.0.1', port: 0, strictPort: true,
+      proxy: {'/api': {...proxy}, '/__e2e__': {...proxy}, '/ready': {...proxy}, '/health': {...proxy}}},
+  };
+  const vite = production ? await preview(options) : await createServer(options);
+  if ('listen' in vite) await vite.listen();
+  const closeFrontend = () => vite.close();
   const address = vite.httpServer!.address();
-  if (!address || typeof address === 'string') {await vite.close(); throw new Error('Missing E2E frontend address.');}
+  if (!address || typeof address === 'string') {await closeFrontend(); throw new Error('Missing E2E frontend address.');}
   const origin = `http://127.0.0.1:${address.port}`;
   process.env.PANEL_E2E_BASE_URL = origin;
   const child = spawn(python, ['-u', '../frontend/e2e/backend.py'], {
@@ -36,7 +41,7 @@ export default async function setup() {
   const closed = new Promise<number | null>(resolve => child.once('close', resolve));
   const stop = async () => {
     try {
-      await vite.close();
+      await closeFrontend();
     } finally {
       child.stdin.end();
       const timer = setTimeout(() => child.kill('SIGTERM'), 15_000);
